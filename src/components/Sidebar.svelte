@@ -1,0 +1,160 @@
+<script lang="ts">
+  import { go, isActive, type View } from "$lib/nav.svelte";
+  import { openDialog } from "$lib/dialogs.svelte";
+  import { instances, social } from "$lib/stores";
+  import type { InstanceSummary } from "$lib/types";
+  import BlockArt from "./BlockArt.svelte";
+  import Head from "./Head.svelte";
+  import Icon from "./Icon.svelte";
+
+  let signingIn = $state(false);
+
+  const links: { view: View; label: string; icon: string }[] = [
+    { view: { page: "home" }, label: "Home", icon: "home" },
+    { view: { page: "shared" }, label: "Shared", icon: "inbox" },
+    { view: { page: "friends" }, label: "Friends", icon: "users" },
+  ];
+
+  /** Something waiting on the user: an update to review or changes to publish. */
+  const needsYou = (i: InstanceSummary) =>
+    instances.needingAttention.includes(i);
+
+  async function signIn() {
+    signingIn = true;
+    try {
+      await social.signIn("minecraft");
+    } finally {
+      signingIn = false;
+    }
+  }
+</script>
+
+<aside class="flex min-h-0 flex-col border-r border-white/2.5 bg-(--bg-side)">
+  <nav aria-label="Main" class="grid gap-px px-2.5 pt-3 pb-1.5">
+    {#each links as link (link.label)}
+      {@const active = isActive(link.view)}
+      <button
+        onclick={() => go(link.view)}
+        aria-current={active ? "page" : undefined}
+        class="flex h-8.5 w-full items-center gap-2.5 rounded-md px-2.5 text-left transition-colors
+          {active
+          ? 'bg-(--bg-raise-2) text-(--text-primary)'
+          : 'text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)'}"
+      >
+        <Icon name={link.icon} />
+        {link.label}
+        {#if link.view.page === "shared" && social.inboxCount}
+          <span
+            class="ml-auto rounded-full bg-(--accent) px-1.5 text-[11px] leading-4.25 font-semibold text-(--accent-ink) tabular-nums"
+          >
+            {social.inboxCount}
+          </span>
+        {/if}
+      </button>
+    {/each}
+  </nav>
+
+  <div
+    class="flex items-center justify-between px-5 pt-4 pb-1.5 text-[11.5px] font-semibold text-(--text-faint)"
+  >
+    <span>Instances</span>
+    <button
+      onclick={() => openDialog({ kind: "track" })}
+      aria-label="Track an instance"
+      title="Track an instance"
+      class="grid rounded p-0.5 hover:bg-(--bg-hover) hover:text-(--text-primary)"
+    >
+      <Icon name="plus" class="size-3.5" />
+    </button>
+  </div>
+
+  <div
+    class="grid min-h-0 flex-1 content-start gap-px overflow-y-auto px-2.5 pb-2.5"
+  >
+    {#each instances.list as inst (inst.id)}
+      {@const view = { page: "instance", id: inst.id } as const}
+      {@const active = isActive(view)}
+      <button
+        onclick={() => go(view)}
+        aria-current={active ? "page" : undefined}
+        class="flex min-h-10 w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left transition-colors
+          {active
+          ? 'bg-(--bg-raise-2) text-(--text-primary)'
+          : 'text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)'}"
+      >
+        <BlockArt
+          seed={inst.id}
+          class="size-6 rounded {inst.status === 'missing'
+            ? 'opacity-40 grayscale'
+            : ''}"
+        />
+        <span class="min-w-0 flex-1">
+          <b class="block truncate text-[13px] font-medium">{inst.name}</b>
+          <small
+            class="block truncate text-[11px] {inst.status === 'missing'
+              ? 'text-(--warn)'
+              : 'text-(--text-faint)'}"
+          >
+            {inst.status === "missing"
+              ? "Folder missing"
+              : inst.status === "syncing"
+                ? "Updating…"
+                : inst.launcher.name}
+          </small>
+        </span>
+        {#if needsYou(inst)}
+          <span
+            class="size-1.75 shrink-0 rounded-full bg-(--warn)"
+            title="Needs your attention"
+          ></span>
+        {/if}
+      </button>
+    {:else}
+      {#if instances.loaded}
+        <p class="px-2.5 py-1.5 text-xs text-(--text-faint)">
+          Nothing tracked yet.
+        </p>
+      {/if}
+    {/each}
+  </div>
+
+  {#if social.session?.user}
+    <button
+      onclick={() => openDialog({ kind: "account" })}
+      aria-label="Account and settings"
+      class="mx-2.5 mb-2.5 flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left hover:bg-(--bg-hover)"
+    >
+      <Head
+        user={social.session.user}
+        size={30}
+        presence={social.session.online && !social.session.user.appearOffline
+          ? "online"
+          : null}
+        ring="var(--bg-side)"
+      />
+      <span class="min-w-0 flex-1">
+        <b class="block truncate text-[13px] font-medium"
+          >{social.session.user.displayName}</b
+        >
+        <small class="block text-[11px] text-(--text-faint)"
+          >{!social.session.online
+            ? "Offline"
+            : social.session.user.appearOffline
+              ? "Appearing offline"
+              : "Online"}</small
+        >
+      </span>
+      <Icon name="more" class="size-4 text-(--text-faint)" />
+    </button>
+  {:else if social.loaded}
+    <div class="px-5 pt-3 pb-4">
+      <button
+        onclick={signIn}
+        disabled={signingIn}
+        class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg-raise-2) font-medium hover:bg-[#252b33] disabled:opacity-50"
+      >
+        {signingIn ? "Signing in…" : "Sign in to share"}
+      </button>
+    </div>
+  {/if}
+</aside>

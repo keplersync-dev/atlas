@@ -1,0 +1,19 @@
+<!-- <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+  <path d="M4 4h16l2 12v4H2v-4L4 4Zm-2 12h6l2 3h4l2-3h6M12 5v8m-3-3 3 3 3-3"/>
+</svg> -->
+
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.6"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="18" cy="5" r="2.5" />
+  <circle cx="6" cy="12" r="2.5" />
+  <circle cx="18" cy="19" r="2.5" />
+  <path d="M8.2 10.8 15.8 6.2" />
+  <path d="m8.2 13.2 7.6 4.6" />
+</svg>
