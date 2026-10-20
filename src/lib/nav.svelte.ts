@@ -24,6 +24,13 @@ export const nav = {
   get canGoBack() {
     return state.history.length > 0;
   },
+  /** The page back() would return to (for labels like "← Shared"), or null. */
+  get previous(): View | null {
+    for (let i = state.history.length - 1; i >= 0; i--) {
+      if (!same(state.history[i], state.view)) return state.history[i];
+    }
+    return null;
+  },
 };
 
 const idOf = (v: View) => ("id" in v ? v.id : null);

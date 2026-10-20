@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from "$lib/api";
-  import { forgetInstance, go } from "$lib/nav.svelte";
+  import { back, forgetInstance, go, nav } from "$lib/nav.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
   import { plural, versionLabel } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
@@ -41,6 +41,17 @@
     const status = summary?.status;
     if (lastStatus === "syncing" && status === "ready") detail.reload();
     lastStatus = status;
+  });
+
+  // Where the back link goes, named so it's clear ("← Home", "← Shared"…).
+  const backLabel = $derived.by(() => {
+    const p = nav.previous;
+    if (!p) return null;
+    if (p.page === "home") return "Home";
+    if (p.page === "shared") return "Shared";
+    if (p.page === "friends") return "Friends";
+    if (p.page === "review") return "Review update";
+    return instances.byId(p.id)?.name ?? "Back";
   });
 
   // Why changing files is blocked right now, if it is.
@@ -143,6 +154,16 @@
     </div>
   {/if}
 {:else}
+  {#if backLabel}
+    <button
+      onclick={back}
+      class="mb-4.5 inline-flex items-center gap-1.5 text-[12.5px] text-(--text-muted) hover:text-(--text-primary)"
+    >
+      <span class="rotate-180"><Icon name="chev" class="size-3.5" /></span
+      >{backLabel}
+    </button>
+  {/if}
+
   <!-- ── Header ─────────────────────────────────────────────────────── -->
   <div class="flex items-start gap-5">
     <BlockArt

@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { dialogs } from "$lib/dialogs.svelte";
-  import { back, nav } from "$lib/nav.svelte";
+  import { back } from "$lib/nav.svelte";
   import Icon from "./Icon.svelte";
 
   // Outside Tauri (plain `pnpm dev` in a browser) there is no window to control.
@@ -63,19 +63,8 @@
 
 <header
   data-tauri-drag-region
-  class="flex h-9 shrink-0 items-center gap-1.5 border-b border-white/3 bg-(--bg-side) pl-1.5 select-none"
+  class="flex h-9 shrink-0 items-center border-b border-white/3 bg-(--bg-side) pl-3.5 select-none"
 >
-  <button
-    onclick={back}
-    disabled={!nav.canGoBack}
-    aria-label="Back"
-    title="Back (Alt+←)"
-    class="grid size-7 place-items-center rounded-md text-(--text-muted) transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)
-      disabled:pointer-events-none disabled:opacity-30"
-  >
-    <span class="rotate-180"><Icon name="chev" class="size-3.5" /></span>
-  </button>
-
   <div
     data-tauri-drag-region
     class="flex items-center gap-2 text-[12.5px] font-semibold text-(--text-muted)"

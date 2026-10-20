@@ -30,8 +30,9 @@
         <!-- Home uses the full width and lays out its own columns. -->
         <Home />
       {:else}
-        <!-- Other pages keep a comfortable reading width. -->
-        <div class="max-w-295 px-9 pt-7 pb-16">
+        <!-- Other pages use the full width too; a page that reads better narrow
+             (like Review) sets its own max width. -->
+        <div class="px-9 pt-7 pb-16">
           {#if nav.view.page === "shared"}
             <Shared />
           {:else if nav.view.page === "friends"}
