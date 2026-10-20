@@ -3,49 +3,59 @@
   import { plural } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
   import { instances } from "$lib/stores";
-  import type { Id } from "$lib/types";
+  import type { Id, ShareMode } from "$lib/types";
   import BlockArt from "../BlockArt.svelte";
   import Button from "../Button.svelte";
   import Dialog from "../Dialog.svelte";
-  import UploadPicker, { uploadBytes } from "./UploadPicker.svelte";
+  import SharePicker, {
+    differences,
+    uploadBytes,
+    uploadsOf,
+  } from "./SharePicker.svelte";
 
   let { instanceId, onclose }: { instanceId: Id; onclose: () => void } =
     $props();
 
   const instance = $derived(instances.byId(instanceId));
-  // What would be published: resolved changes plus files that need an upload decision.
+  // Every file with its setting, plus what disappears (disabled/deleted shared files).
   const plan = resource(() => api.preparePublish(instanceId));
 
-  let changelog = $state("");
-  let uploadIds = $state<Id[]>([]);
+  let modes = $state<Record<Id, ShareMode>>({}); // only what the user changes here
   let rights = $state(false);
+  let changelog = $state("");
   let submitting = $state(false);
   let error = $state<string | null>(null);
 
-  const changeCount = $derived(
+  const diff = $derived(
     plan.data
-      ? plan.data.changes.added.length +
-          plan.data.changes.updated.length +
-          plan.data.changes.removed.length
-      : 0,
+      ? differences(plan.data.items, modes)
+      : { added: [], changed: [] },
+  );
+  const removedCount = $derived(plan.data?.removed.length ?? 0);
+  const total = $derived(
+    diff.added.length + diff.changed.length + removedCount,
+  );
+  const needsRights = $derived(
+    !!plan.data && uploadsOf(plan.data.items, modes).length > 0,
   );
   const overQuota = $derived(
-    plan.data
-      ? plan.data.storage.usedBytes +
-          uploadBytes(plan.data.unknownFiles, uploadIds) >
-          plan.data.storage.quotaBytes
-      : false,
+    !!plan.data &&
+      plan.data.storage.usedBytes + uploadBytes(plan.data.items, modes) >
+        plan.data.storage.quotaBytes,
   );
-  // Something has to actually change: a resolved change, or at least one file to upload.
-  const nothingToPublish = $derived(
-    !!plan.data && changeCount === 0 && uploadIds.length === 0,
+  const tooBig = $derived(
+    !!plan.data &&
+      uploadsOf(plan.data.items, modes).some(
+        (i) => i.sizeBytes > plan.data!.storage.maxFileBytes,
+      ),
   );
   const canSubmit = $derived(
     !submitting &&
       !!plan.data &&
-      !nothingToPublish &&
-      (uploadIds.length === 0 || rights) &&
-      !overQuota,
+      total > 0 &&
+      (!needsRights || rights) &&
+      !overQuota &&
+      !tooBig,
   );
   const nextVersion = $derived((instance?.sync?.latestRevision ?? 0) + 1);
 
@@ -57,7 +67,7 @@
     try {
       await api.publishInstance(instanceId, {
         changelog: changelog.trim() || null,
-        uploadContentIds: uploadIds,
+        shareModes: modes,
         confirmedUploadRights: rights,
       });
       await instances.load();
@@ -89,74 +99,48 @@
   {:else if plan.error}
     <p class="py-4 text-[12.5px] text-(--danger)">{plan.error}</p>
   {:else if plan.data}
-    {@const c = plan.data.changes}
-    <h3 class="mt-1 mb-1 text-xs font-semibold text-(--text-muted)">
-      Changes <span class="font-normal text-(--text-faint)">{changeCount}</span>
-    </h3>
-    {#snippet change(
-      symbol: string,
-      cls: string,
-      name: string,
-      version: string,
-    )}
-      <div
-        class="grid grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-3 py-1.5"
-      >
-        <span
-          class="text-center font-(family-name:--font-mono) font-semibold {cls}"
-          >{symbol}</span
+    <!-- Plain summary of the effect, updated live as settings change. -->
+    <div
+      class="mb-3 flex flex-wrap gap-x-4 gap-y-1 rounded-lg bg-(--bg-raise) px-3.5 py-2.5 text-[12.5px]"
+    >
+      {#if total === 0}
+        <span class="text-(--text-muted)"
+          >Nothing to publish yet. Change a setting below, or change files in
+          your launcher.</span
         >
-        <span class="truncate">{name}</span>
-        <span class="font-(family-name:--font-mono) text-xs text-(--text-muted)"
-          >{version}</span
-        >
-      </div>
-    {/snippet}
-    {#each c.added as name (name)}{@render change(
-        "+",
-        "text-(--online)",
-        name,
-        "added",
-      )}{/each}
-    {#each c.updated as u (u.name)}{@render change(
-        "↑",
-        "text-(--accent)",
-        u.name,
-        `${u.from} → ${u.to}`,
-      )}{/each}
-    {#each c.removed as name (name)}{@render change(
-        "−",
-        "text-(--danger)",
-        name,
-        "removed",
-      )}{/each}
-    {#if changeCount === 0}
-      <p class="text-[12.5px] text-(--text-muted)">
-        No mod changes{plan.data.unknownFiles.length
-          ? " — tick a file below to publish it"
-          : ""}.
-      </p>
-    {/if}
+      {:else}
+        {#if diff.added.length}<span
+            ><b class="text-(--online)">+{diff.added.length}</b>
+            {plural(diff.added.length, "new file")} shared</span
+          >{/if}
+        {#if diff.changed.length}<span
+            ><b class="text-(--accent)">{diff.changed.length}</b>
+            {plural(diff.changed.length, "setting")} changed</span
+          >{/if}
+        {#if removedCount}<span title={plan.data.removed.join(", ")}
+            ><b class="text-(--danger)">−{removedCount}</b> removed (disabled in your
+            launcher)</span
+          >{/if}
+      {/if}
+    </div>
 
-    {#if plan.data.unknownFiles.length}
-      <UploadPicker
-        files={plan.data.unknownFiles}
-        storage={plan.data.storage}
-        bind:selected={uploadIds}
-        bind:rights
-      />
-    {/if}
+    <SharePicker
+      items={plan.data.items}
+      storage={plan.data.storage}
+      firstShare={false}
+      bind:modes
+      bind:rights
+    />
 
     <h3 class="mt-4 mb-1.5 text-xs font-semibold text-(--text-muted)">
       What changed? <span class="font-normal text-(--text-faint)"
         >(optional)</span
       >
     </h3>
-    <!-- bind:value works on <textarea> exactly like on <input> -->
     <textarea
       bind:value={changelog}
       maxlength="2000"
-      rows="3"
+      rows="2"
       placeholder="Shown to members when they update"
       class="w-full resize-none rounded-md border border-(--line-2) bg-(--bg) px-3 py-2 leading-snug outline-none focus:border-(--accent)"
     ></textarea>
@@ -165,14 +149,14 @@
   {#snippet footer()}
     {#if error}
       <span class="mr-auto text-xs text-(--danger)" role="alert">{error}</span>
-    {:else if nothingToPublish}
-      <span class="mr-auto text-xs text-(--text-faint)"
-        >Nothing to publish yet</span
+    {:else if needsRights && !rights}
+      <span class="mr-auto text-xs text-(--warn)"
+        >Confirm you can share the uploaded files</span
       >
-    {:else if plan.data}
-      <span class="mr-auto text-xs text-(--text-faint)">
-        {plural(changeCount + uploadIds.length, "change")}
-      </span>
+    {:else if plan.data && total}
+      <span class="mr-auto text-xs text-(--text-faint)"
+        >{plural(total, "change")}</span
+      >
     {/if}
     <Button variant="ghost" onclick={onclose}>Cancel</Button>
     <Button type="submit" variant="primary" disabled={!canSubmit}>

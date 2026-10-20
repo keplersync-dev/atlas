@@ -71,6 +71,8 @@ CREATE UNIQUE INDEX instance_shared_instance_id_idx
 
 -- Index of the files found by the last scan of an instance folder.
 -- Rescans skip hashing when (path, size_bytes, mtime_ms) are unchanged.
+-- Also lists optional items from the shared version that the user chose not to download
+-- (installed = 0): they have no file on disk, so the hashes/size come from the manifest.
 CREATE TABLE instance_content (
   id             TEXT PRIMARY KEY,
   instance_id    TEXT NOT NULL REFERENCES instance (id) ON DELETE CASCADE,
@@ -79,7 +81,7 @@ CREATE TABLE instance_content (
   path           TEXT NOT NULL,           -- relative to game_dir, without '.disabled': 'mods/sodium-0.6.0.jar'
   enabled        INTEGER NOT NULL DEFAULT 1, -- 0 = file on disk ends in '.disabled' (convention all launchers use)
   size_bytes     INTEGER NOT NULL,
-  mtime_ms       INTEGER NOT NULL,
+  mtime_ms       INTEGER,                 -- NULL when installed = 0 (no file on disk)
   sha1           TEXT NOT NULL,           -- Modrinth lookup + download cache key
   sha256         TEXT NOT NULL,           -- Atlas blob key + manifest hashing
   murmur2        INTEGER,                 -- CurseForge fingerprint
@@ -98,7 +100,15 @@ CREATE TABLE instance_content (
   side           TEXT NOT NULL DEFAULT 'both' CHECK (side IN ('client', 'server', 'both')),
   resolved_at    TEXT,                    -- last time the hash was looked up (retry unknowns weekly)
 
-  is_managed     INTEGER NOT NULL DEFAULT 0, -- 1 = came from the shared manifest; sync may replace/remove it
+  is_managed     INTEGER NOT NULL DEFAULT 0, -- 1 = in the shared version (required or optional); sync may replace/remove it
+
+  -- How this file is shared (see data-plan §7):
+  --   owners/editors: their setting; viewers: as published (their own extras are 'private')
+  share_mode            TEXT NOT NULL DEFAULT 'required' CHECK (share_mode IN ('required', 'optional', 'private')),
+  -- Setting at the last publish; NULL = never published. Differs from share_mode = a change to publish.
+  published_share_mode  TEXT CHECK (published_share_mode IN ('required', 'optional', 'private')),
+  -- 0 = optional item from the shared version the user didn't download (no file on disk)
+  installed             INTEGER NOT NULL DEFAULT 1,
 
   UNIQUE (instance_id, path)
 );

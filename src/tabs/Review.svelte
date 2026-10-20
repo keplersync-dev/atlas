@@ -9,6 +9,7 @@
   import Button from "../components/Button.svelte";
   import Head from "../components/Head.svelte";
   import Icon from "../components/Icon.svelte";
+  import OptionalPicker from "../components/OptionalPicker.svelte";
 
   let { id }: { id: Id } = $props();
 
@@ -34,6 +35,8 @@
   // Per-file choice for config conflicts, keyed by path. Missing = take theirs.
   // A $state object tracks each key separately, so one radio only re-renders its own row.
   let choices = $state<Record<string, "mine" | "theirs">>({});
+  // New optional items this update offers. Nothing ticked unless the user chooses.
+  let installOptional = $state<string[]>([]);
 
   let started = $state(false);
   let error = $state<string | null>(null);
@@ -56,7 +59,9 @@
     const status = summary?.status;
     if (!started) return;
     if (status === "syncing") sawSyncing = true;
-    else if (status === "ready" && sawSyncing) go({ page: "instance", id });
+    else if (status === "ready" && sawSyncing)
+      // replace: Back from the instance shouldn't return to a finished review.
+      go({ page: "instance", id }, { replace: true });
   });
 
   function conflictOptions(
@@ -81,7 +86,7 @@
     error = null;
     started = true;
     try {
-      await api.syncInstance(id, { configChoices: choices });
+      await api.syncInstance(id, { configChoices: choices, installOptional });
       // From here, progress arrives through live events into the store (see connectStores).
     } catch (e) {
       started = false;
@@ -307,6 +312,12 @@
           )}{/each}
       </section>
     {/if}
+
+    <OptionalPicker
+      items={preview.newOptional}
+      bind:selected={installOptional}
+      title="New optional extras"
+    />
 
     <!-- ── Sticky action bar: stays at the bottom of the scroll area ── -->
     <div

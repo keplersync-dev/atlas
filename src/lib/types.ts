@@ -28,6 +28,14 @@ export type ContentKind = "mod" | "resourcepack" | "shaderpack" | "datapack";
  * - local: unknown file that exists only on this PC
  */
 export type ContentSource = "modrinth" | "curseforge" | "upload" | "local";
+/**
+ * How a file in an instance is shared (set by the owner/editors, per file):
+ * - required: everyone who has the instance gets it
+ * - optional: friends see it, unticked, and choose whether to download it
+ * - private:  "Only me" — stays on this PC, never shared or shown to friends
+ * New files start as "required".
+ */
+export type ShareMode = "required" | "optional" | "private";
 export type Side = "client" | "server" | "both";
 export type MemberRole = "owner" | "editor" | "viewer";
 export type MemberStatus = "invited" | "active" | "declined";
@@ -272,6 +280,18 @@ export interface InstanceContent {
   enabled: boolean;
   /** Came from the shared manifest (sync may change it) vs. added by this user. */
   isManaged: boolean;
+  /**
+   * Owner/editors: how this file will be shared (their setting).
+   * Viewers: how it was published ("required"/"optional"); their own additions are "private".
+   */
+  shareMode: ShareMode;
+  /** How it was shared in the last published version; null = never published (new, or not shared). */
+  publishedShareMode: ShareMode | null;
+  /**
+   * false = an optional item from the shared version that this user chose not to
+   * download, so there's no file on disk. Always true for everything else.
+   */
+  installed: boolean;
 }
 
 export interface Backup {
@@ -332,6 +352,17 @@ export interface SharedInstance {
   groups: SharedGroupLink[];
   /** The local instance installed from this, if any. */
   localInstanceId: Id | null;
+  /** Optional items in the latest version — what a friend can choose to download. */
+  optionalItems: OptionalItem[];
+}
+
+/** An optional file a friend can choose to download. */
+export interface OptionalItem {
+  /** Stable across versions: provider project id, or the file hash for uploads. */
+  key: string;
+  name: string;
+  kind: ContentKind;
+  sizeBytes: number;
 }
 
 export interface RevisionChanges {
@@ -372,21 +403,37 @@ export interface SyncPreview {
   } | null;
   /** The game is open; the update waits until it closes. */
   gameRunning: boolean;
+  /** Optional items that are new in this update. Offered unticked; pass the chosen keys to syncInstance. */
+  newOptional: OptionalItem[];
 }
 
-/** Built before sharing or publishing so the UI can ask about unknown files. */
+/** One file in the share/publish picker. */
+export interface PublishItem {
+  contentId: Id;
+  name: string;
+  kind: ContentKind;
+  source: ContentSource;
+  path: string;
+  sizeBytes: number;
+  /** Not in the last published version (everything is new on a first share). */
+  isNew: boolean;
+  /** The current setting; new files start "required". */
+  shareMode: ShareMode;
+  /** How it was shared last time; null if it's new. */
+  publishedShareMode: ShareMode | null;
+  /** On no mod site: sharing it (required/optional) means uploading it to Atlas. */
+  needsUpload: boolean;
+  /** Already on Atlas's servers (no upload or quota needed). */
+  alreadyUploaded: boolean;
+}
+
+/** Built before sharing or publishing: every file with its setting, plus removals. */
 export interface PublishPlan {
   /** null when this is the first share. */
   baseRevision: number | null;
-  changes: RevisionChanges;
-  /** Files on no mod site. The user picks which to upload; the rest are left out of the shared version. */
-  unknownFiles: {
-    contentId: Id;
-    name: string;
-    path: string;
-    sizeBytes: number;
-    alreadyUploaded: boolean;
-  }[];
+  items: PublishItem[];
+  /** Shared files that will disappear from the shared version (deleted or disabled locally). */
+  removed: string[];
   /** CurseForge files whose authors disabled third-party downloads. Members download them by hand. */
   manualDownloads: ManualDownload[];
   storage: { usedBytes: number; quotaBytes: number; maxFileBytes: number };
@@ -460,6 +507,8 @@ export interface UpdateInstanceInput {
 export interface SyncOptions {
   /** For each SyncPreview.configConflicts path: keep my file or take theirs. Missing = theirs. */
   configChoices?: Record<string, "mine" | "theirs">;
+  /** Keys from SyncPreview.newOptional to download. Missing = don't. */
+  installOptional?: string[];
 }
 
 export interface UpdateProfileInput {
@@ -474,15 +523,16 @@ export interface ShareInstanceInput {
   groupIds: Id[];
   /** Role for everyone invited by this call. */
   role: Exclude<MemberRole, "owner">;
-  /** From PublishPlan.unknownFiles: which ones to upload. */
-  uploadContentIds: Id[];
-  /** User ticked "I have the right to share these files". Required if uploadContentIds is non-empty. */
+  /** Setting per PublishItem.contentId. Missing = keep the item's current shareMode. */
+  shareModes: Record<Id, ShareMode>;
+  /** User ticked "I have the right to share these files". Required when any needsUpload item isn't "private". */
   confirmedUploadRights: boolean;
 }
 
 export interface PublishInput {
   changelog: string | null;
-  uploadContentIds: Id[];
+  /** Setting per PublishItem.contentId. Missing = keep the item's current shareMode. */
+  shareModes: Record<Id, ShareMode>;
   confirmedUploadRights: boolean;
 }
 

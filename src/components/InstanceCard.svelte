@@ -1,0 +1,195 @@
+<script lang="ts" module>
+  import type { InstanceSummary } from "$lib/types";
+
+  /** Cards that want the user's attention sort first on Home. */
+  export function needsAttention(i: InstanceSummary) {
+    const s = i.sync?.state;
+    return (
+      i.status !== "ready" ||
+      s === "update_available" ||
+      s === "conflict" ||
+      (s === "local_changes" && i.sync?.role !== "viewer")
+    );
+  }
+</script>
+
+<script lang="ts">
+  import { openDialog } from "$lib/dialogs.svelte";
+  import { plural, timeAgo, versionLabel } from "$lib/format";
+  import { go } from "$lib/nav.svelte";
+  import { kindFor, wallPixels } from "$lib/pixel";
+  import { social } from "$lib/stores";
+  import Button from "./Button.svelte";
+
+  let { instance }: { instance: InstanceSummary } = $props();
+
+  const pixels = $derived(wallPixels(kindFor(instance.id), instance.id));
+  const open = () => go({ page: "instance", id: instance.id });
+
+  type Status = {
+    tone: "warn" | "accent" | "online" | "muted";
+    text: string;
+    action?: {
+      label: string;
+      variant: "warn" | "primary" | "default";
+      run: () => void;
+    };
+  };
+
+  // One plain-language line about this instance, plus a button only when there's
+  // something to do. Order matters: the first match wins.
+  const status = $derived.by((): Status => {
+    const i = instance;
+    const s = i.sync;
+    if (i.status === "missing")
+      return {
+        tone: "warn",
+        text: "Folder missing",
+        action: { label: "Fix", variant: "default", run: open },
+      };
+    if (i.isRunning) return { tone: "online", text: "Playing now" };
+    if (s?.state === "update_available")
+      return {
+        tone: "warn",
+        text: `${s.owner?.displayName ?? "The owner"} published an update`,
+        action: {
+          label: "Update",
+          variant: "warn",
+          run: () => go({ page: "review", id: i.id }),
+        },
+      };
+    if (s?.state === "conflict")
+      return {
+        tone: "warn",
+        text: "Update available · would undo your changes",
+        action: {
+          label: "Review",
+          variant: "warn",
+          run: () => go({ page: "review", id: i.id }),
+        },
+      };
+    if (s?.state === "local_changes" && s.role !== "viewer")
+      return {
+        tone: "accent",
+        text: `${plural(s.localChangeCount, "change")} not shared yet`,
+        action: {
+          label: "Publish",
+          variant: "primary",
+          run: () => openDialog({ kind: "publish", instanceId: i.id }),
+        },
+      };
+    if (s?.state === "local_changes")
+      return {
+        tone: "muted",
+        text: `${plural(s.localChangeCount, "local change")} on this PC only`,
+      };
+    if (s?.state === "frozen")
+      return { tone: "muted", text: "Frozen · the owner left" };
+    if (s) {
+      const shared = social.shared.find((x) => x.id === s.sharedInstanceId);
+      const others = shared
+        ? shared.members.filter(
+            (m) => m.role !== "owner" && m.status === "active",
+          ).length
+        : 0;
+      return {
+        tone: "muted",
+        text:
+          s.role === "owner"
+            ? `Shared with ${plural(others, "person", "people")} · up to date`
+            : `From ${s.owner?.displayName ?? "a friend"} · up to date`,
+      };
+    }
+    return { tone: "muted", text: "Only on this PC" };
+  });
+
+  const DOT = {
+    warn: "bg-(--warn)",
+    accent: "bg-(--accent)",
+    online: "bg-(--online)",
+    muted: "bg-(--text-faint)",
+  };
+  const TEXT = {
+    warn: "text-(--warn)",
+    accent: "text-(--accent)",
+    online: "text-(--online)",
+    muted: "text-(--text-muted)",
+  };
+</script>
+
+<article
+  class="group flex flex-col overflow-hidden rounded-xl bg-(--bg-raise) transition-colors hover:bg-(--bg-raise-2)
+    {instance.status === 'missing' ? 'opacity-75' : ''}"
+>
+  <!-- Cover and title open the instance; the action button does its own thing. -->
+  <button
+    onclick={open}
+    class="relative aspect-16/7 overflow-hidden"
+    tabindex="-1"
+    aria-hidden="true"
+  >
+    <svg
+      viewBox="0 0 40 24"
+      preserveAspectRatio="xMidYMid slice"
+      shape-rendering="crispEdges"
+      class="size-full transition-transform duration-300 group-hover:scale-[1.03] {instance.status ===
+      'missing'
+        ? 'grayscale'
+        : ''}"
+    >
+      {#each pixels as p, i (i)}
+        <rect x={p.x} y={p.y} width="1" height="1" fill={p.fill} />
+      {/each}
+    </svg>
+    <div
+      class="absolute inset-0 bg-linear-to-b from-transparent from-40% to-(--bg-raise)/80"
+    ></div>
+  </button>
+
+  <div class="flex flex-1 flex-col px-3.5 pt-2.5 pb-3">
+    <button onclick={open} class="text-left">
+      <b class="block truncate text-[14px] font-semibold">{instance.name}</b>
+      <small class="block truncate text-xs text-(--text-faint)">
+        {versionLabel(instance.loader, instance.minecraftVersion)} · {instance
+          .launcher.name}
+        {#if instance.lastPlayedAt}· {timeAgo(instance.lastPlayedAt)}{/if}
+      </small>
+    </button>
+
+    <div class="mt-auto pt-3">
+      {#if instance.status === "syncing" && instance.progress}
+        <div
+          class="flex items-center justify-between text-xs text-(--text-muted)"
+        >
+          <span>Updating…</span><span class="tabular-nums"
+            >{instance.progress.percent}%</span
+          >
+        </div>
+        <div class="mt-1.5 h-1 overflow-hidden rounded-full bg-(--line-2)">
+          <div
+            class="h-full bg-(--accent) transition-[width] duration-300"
+            style="width: {instance.progress.percent}%"
+          ></div>
+        </div>
+      {:else}
+        <div class="flex min-h-7 items-center gap-2.5">
+          <span
+            class="flex min-w-0 flex-1 items-center gap-1.5 text-xs {TEXT[
+              status.tone
+            ]}"
+          >
+            <i class="size-1.5 shrink-0 rounded-full {DOT[status.tone]}"></i>
+            <span class="truncate">{status.text}</span>
+          </span>
+          {#if status.action}
+            <Button
+              size="sm"
+              variant={status.action.variant}
+              onclick={status.action.run}>{status.action.label}</Button
+            >
+          {/if}
+        </div>
+      {/if}
+    </div>
+  </div>
+</article>

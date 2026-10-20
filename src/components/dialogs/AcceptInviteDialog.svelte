@@ -8,6 +8,7 @@
   import BlockArt from "../BlockArt.svelte";
   import Button from "../Button.svelte";
   import Dialog from "../Dialog.svelte";
+  import OptionalPicker from "../OptionalPicker.svelte";
 
   let {
     sharedInstanceId,
@@ -25,6 +26,9 @@
   // overrides that — which is what clicking a radio button does.
   let launcherId = $derived(creatable[0]?.id ?? null);
 
+  // Optional extras the user ticks (none to begin with).
+  let optional = $state<string[]>([]);
+
   let submitting = $state(false);
   let error = $state<string | null>(null);
 
@@ -40,7 +44,11 @@
     submitting = true;
     error = null;
     try {
-      const created = await api.acceptInvite(sharedInstanceId, launcherId);
+      const created = await api.acceptInvite(
+        sharedInstanceId,
+        launcherId,
+        optional,
+      );
       await Promise.all([instances.load(), social.load()]);
       onclose();
       // Open the new instance: its sync bar shows the files arriving.
@@ -112,6 +120,8 @@
         </label>
       {/each}
     {/if}
+
+    <OptionalPicker items={invite.optionalItems} bind:selected={optional} />
 
     <p class="mt-3.5 text-xs text-(--text-faint)">
       Your launcher downloads Minecraft and {versionLabel(invite.loader, null)} the

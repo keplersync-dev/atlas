@@ -94,7 +94,7 @@
       class="flex items-center justify-between gap-2.5 rounded-lg bg-(--bg) px-3.5 py-2.5"
     >
       <span
-        class="font-(family-name:--font-mono) text-xl font-semibold tracking-[2px]"
+        class="font-mono text-xl font-semibold tracking-[2px]"
         >{formatCode(me.friendCode)}</span
       >
       <div class="flex gap-0.5">
@@ -142,7 +142,7 @@
     placeholder="Their code or link"
     aria-label="Friend code"
     autocomplete="off"
-    class="mt-1 h-8.5 w-full rounded-md border border-(--line-2) bg-(--bg) px-3 font-(family-name:--font-mono) tracking-wider uppercase outline-none
+    class="mt-1 h-8.5 w-full rounded-md border border-(--line-2) bg-(--bg) px-3 font-mono tracking-wider uppercase outline-none
       placeholder:font-(family-name:--font) placeholder:tracking-normal placeholder:normal-case focus:border-(--accent)"
   />
 

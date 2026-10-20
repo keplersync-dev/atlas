@@ -73,7 +73,7 @@
             ></span>
           {/if}
           <span
-            class="relative grid h-6 place-items-center rounded-full font-(family-name:--font-mono) text-[11.5px] font-semibold
+            class="relative grid h-6 place-items-center rounded-full font-mono text-[11.5px] font-semibold
               {current
               ? 'bg-(--accent)/12 text-(--accent)'
               : 'bg-(--bg-raise-2) text-(--text-muted)'}"

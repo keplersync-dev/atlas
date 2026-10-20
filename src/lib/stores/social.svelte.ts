@@ -28,8 +28,6 @@ class SocialStore {
   outgoingRequests = $derived(
     this.requests.filter((r) => r.direction === "outgoing"),
   );
-  /** The number on the sidebar's Shared link. */
-  inboxCount = $derived(this.invites.length + this.incomingRequests.length);
 
   async load() {
     this.session = await api.getSession();

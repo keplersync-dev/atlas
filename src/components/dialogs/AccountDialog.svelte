@@ -243,8 +243,7 @@
     <!-- ── Friend code ── -->
     {@render section("Friend code")}
     <div class="flex items-center gap-3">
-      <span
-        class="flex-1 font-(family-name:--font-mono) text-base font-semibold tracking-[2px]"
+      <span class="flex-1 font-mono text-base font-semibold tracking-[2px]"
         >{formatCode(me.friendCode)}</span
       >
       <Button

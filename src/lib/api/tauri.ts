@@ -49,11 +49,15 @@ export const tauriApi: AtlasApi = {
     call("set_content_enabled", { instanceId, contentId, enabled }),
   restoreBackup: (instanceId, backupId) =>
     call("restore_backup", { instanceId, backupId }),
+  setShareMode: (instanceId, contentId, mode) =>
+    call("set_share_mode", { instanceId, contentId, mode }),
+  setOptionalInstalled: (instanceId, contentId, installed) =>
+    call("set_optional_installed", { instanceId, contentId, installed }),
 
   listSharedInstances: () => call("list_shared_instances"),
   getSharedInstance: (id) => call("get_shared_instance", { id }),
-  acceptInvite: (sharedInstanceId, launcherId) =>
-    call("accept_invite", { sharedInstanceId, launcherId }),
+  acceptInvite: (sharedInstanceId, launcherId, installOptional) =>
+    call("accept_invite", { sharedInstanceId, launcherId, installOptional }),
   declineInvite: (sharedInstanceId) =>
     call("decline_invite", { sharedInstanceId }),
   preparePublish: (instanceId) => call("prepare_publish", { instanceId }),

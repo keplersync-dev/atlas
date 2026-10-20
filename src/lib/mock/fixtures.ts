@@ -15,6 +15,7 @@ import type {
   InstanceDetail,
   Launcher,
   Me,
+  OptionalItem,
   PublicUser,
   RevisionSummary,
   SharedInstanceDetail,
@@ -371,7 +372,17 @@ const folderFor: Record<InstanceContent["kind"], string> = {
 function item(
   key: keyof typeof catalog,
   version: string | null,
-  opts: Partial<Pick<InstanceContent, "enabled" | "isManaged" | "source">> = {},
+  opts: Partial<
+    Pick<
+      InstanceContent,
+      | "enabled"
+      | "isManaged"
+      | "source"
+      | "shareMode"
+      | "publishedShareMode"
+      | "installed"
+    >
+  > = {},
 ): InstanceContent {
   const c: CatalogEntry = catalog[key];
   const source =
@@ -408,6 +419,15 @@ function item(
     side: c.side,
     enabled: opts.enabled ?? true,
     isManaged: opts.isManaged ?? false,
+    // New files start "required". Managed files were published with their current mode.
+    shareMode: opts.shareMode ?? "required",
+    publishedShareMode:
+      opts.publishedShareMode !== undefined
+        ? opts.publishedShareMode
+        : opts.isManaged
+          ? (opts.shareMode ?? "required")
+          : null,
+    installed: opts.installed ?? true,
   };
 }
 
@@ -506,8 +526,12 @@ export const instances: InstanceDetail[] = [
       item("appleskin", "3.0.5", managed),
       item("jade", "15.8.0", { ...managed, source: "curseforge" }),
       item("modMenu", "11.0.2", managed),
-      item("smpTweaks", "1.0"), // unknown file: publishing asks whether to upload it
-      item("freshAnimations", "1.9.2", managed),
+      // unknown file you chose to keep to yourself ("Only me")
+      item("smpTweaks", "1.0", {
+        shareMode: "private",
+        publishedShareMode: "private",
+      }),
+      item("freshAnimations", "1.9.2", { ...managed, shareMode: "optional" }),
       item("smpTextures", null, { ...managed, source: "upload" }),
       item("terralith", "2.5.4", managed),
     ],
@@ -544,8 +568,14 @@ export const instances: InstanceDetail[] = [
       item("jade", "15.8.0", managed),
       item("xaeroMinimap", "24.4.0", managed),
       item("modMenu", "11.0.2", managed),
+      // optional in Mia's version; you didn't download it (no file on disk)
+      item("freshAnimations", "1.9.2", {
+        ...managed,
+        shareMode: "optional",
+        installed: false,
+      }),
       // viewer's own extra: allowed, kept on update, doesn't count as a local change
-      item("complementary", "r5.3"),
+      item("complementary", "r5.3", { shareMode: "private" }),
     ],
     backups: [backup(2, 6 * DAY, 3, 4, 1), backup(3, 20 * DAY, 2, 3, 1)],
   },
@@ -664,7 +694,9 @@ export const instances: InstanceDetail[] = [
   },
 ];
 
-for (const inst of instances) inst.contentCount = inst.content.length;
+// Count only files on disk (optional items not downloaded are listed but not counted).
+for (const inst of instances)
+  inst.contentCount = inst.content.filter((c) => c.installed).length;
 
 /** Everything the launchers contain, tracked or not. */
 export const untrackedDetected: DetectedInstance[] = [
@@ -873,6 +905,12 @@ const rev = (
   changes: { added: [], removed: [], updated: [], ...changes },
 });
 
+const opt = (
+  name: string,
+  kind: InstanceContent["kind"],
+  mb: number,
+): OptionalItem => ({ key: name, name, kind, sizeBytes: mb * MB });
+
 const sharedBase = {
   frozen: false,
   myViaGroup: null,
@@ -898,6 +936,7 @@ export const sharedInstances: SharedInstanceDetail[] = [
     sizeBytes: 64 * MB,
     updatedAt: ago(1 * DAY),
     myRole: "owner",
+    optionalItems: [opt("Fresh Animations", "resourcepack", 4)],
     myStatus: "active",
     localInstanceId: ids.survival,
     groups: [{ group: { ...boys, icon: "users" }, role: "viewer" }],
@@ -940,6 +979,10 @@ export const sharedInstances: SharedInstanceDetail[] = [
     sizeBytes: 182 * MB,
     updatedAt: ago(35 * MIN),
     myRole: "viewer",
+    optionalItems: [
+      opt("Fresh Animations", "resourcepack", 4),
+      opt("Iris Shaders", "mod", 3),
+    ],
     myStatus: "active",
     myViaGroup: crew,
     invitedBy: users.mia,
@@ -953,7 +996,7 @@ export const sharedInstances: SharedInstanceDetail[] = [
     ],
     revisions: [
       rev(5, users.mia, 35 * MIN, "Cobblemon 1.6 + AppleSkin", {
-        added: ["AppleSkin"],
+        added: ["AppleSkin", "Iris Shaders (optional)"],
         updated: [
           { name: "Cobblemon", from: "1.5.2", to: "1.6.0" },
           { name: "Fabric API", from: "0.104.0+1.21.1", to: "0.105.0+1.21.1" },
@@ -980,6 +1023,7 @@ export const sharedInstances: SharedInstanceDetail[] = [
     sizeBytes: 9 * MB,
     updatedAt: ago(8 * DAY),
     myRole: "editor",
+    optionalItems: [],
     myStatus: "active",
     invitedBy: users.jonah,
     invitedAt: ago(25 * DAY),
@@ -1014,6 +1058,7 @@ export const sharedInstances: SharedInstanceDetail[] = [
     updatedAt: ago(80 * DAY),
     frozen: true,
     myRole: "viewer",
+    optionalItems: [],
     myStatus: "active",
     invitedAt: ago(100 * DAY),
     localInstanceId: ids.lucky,
@@ -1040,6 +1085,10 @@ export const sharedInstances: SharedInstanceDetail[] = [
     sizeBytes: 310 * MB,
     updatedAt: ago(3 * HOUR),
     myRole: "viewer",
+    optionalItems: [
+      opt("Complementary Reimagined", "shaderpack", 2),
+      opt("Fresh Animations", "resourcepack", 4),
+    ],
     myStatus: "invited",
     invitedBy: users.mia,
     invitedAt: ago(3 * HOUR),
@@ -1070,6 +1119,7 @@ export const sharedInstances: SharedInstanceDetail[] = [
     sizeBytes: 3 * MB,
     updatedAt: ago(1 * DAY),
     myRole: "editor",
+    optionalItems: [],
     myStatus: "invited",
     invitedBy: users.leo,
     invitedAt: ago(1 * DAY),
@@ -1100,6 +1150,10 @@ export const sharedInstances: SharedInstanceDetail[] = [
     sizeBytes: 640 * MB,
     updatedAt: ago(5 * HOUR),
     myRole: "viewer",
+    optionalItems: [
+      opt("BSL Shaders", "shaderpack", 2),
+      opt("Fresh Animations", "resourcepack", 4),
+    ],
     myStatus: "invited",
     myViaGroup: boys,
     invitedBy: users.sam,

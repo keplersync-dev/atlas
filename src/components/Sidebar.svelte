@@ -15,6 +15,13 @@
     { view: { page: "friends" }, label: "Friends", icon: "users" },
   ];
 
+  /** Count shown next to a nav link: invites on Shared, friend requests on Friends. */
+  function badge(view: View) {
+    if (view.page === "shared") return social.invites.length;
+    if (view.page === "friends") return social.incomingRequests.length;
+    return 0;
+  }
+
   /** Something waiting on the user: an update to review or changes to publish. */
   const needsYou = (i: InstanceSummary) =>
     instances.needingAttention.includes(i);
@@ -43,11 +50,11 @@
       >
         <Icon name={link.icon} />
         {link.label}
-        {#if link.view.page === "shared" && social.inboxCount}
+        {#if badge(link.view)}
           <span
             class="ml-auto rounded-full bg-(--accent) px-1.5 text-[11px] leading-4.25 font-semibold text-(--accent-ink) tabular-nums"
           >
-            {social.inboxCount}
+            {badge(link.view)}
           </span>
         {/if}
       </button>

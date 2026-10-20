@@ -3,12 +3,12 @@
   import { plural } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
   import { instances, social } from "$lib/stores";
-  import type { Id } from "$lib/types";
+  import type { Id, ShareMode } from "$lib/types";
   import BlockArt from "../BlockArt.svelte";
   import Button from "../Button.svelte";
   import Dialog from "../Dialog.svelte";
   import Head from "../Head.svelte";
-  import UploadPicker, { uploadBytes } from "./UploadPicker.svelte";
+  import SharePicker, { uploadBytes, uploadsOf } from "./SharePicker.svelte";
 
   // "share": first share of an instance that's only on this PC (creates revision 1).
   // "invite": add people to an instance that's already shared.
@@ -43,7 +43,8 @@
   let groupIds = $state<Id[]>([]);
   let role = $state<"viewer" | "editor">("viewer");
   let description = $state("");
-  let uploadIds = $state<Id[]>([]); // unticked by default: uploading is a deliberate choice
+  // Share setting per file the user changed here; everything else starts "required".
+  let modes = $state<Record<Id, ShareMode>>({});
   let rights = $state(false);
   let submitting = $state(false);
   let error = $state<string | null>(null);
@@ -56,19 +57,26 @@
     new Set(shared.data?.groups.map((g) => g.group.id) ?? []),
   );
 
+  const needsRights = $derived(
+    !!plan.data && uploadsOf(plan.data.items, modes).length > 0,
+  );
   const overQuota = $derived(
-    plan.data
-      ? plan.data.storage.usedBytes +
-          uploadBytes(plan.data.unknownFiles, uploadIds) >
-          plan.data.storage.quotaBytes
-      : false,
+    !!plan.data &&
+      plan.data.storage.usedBytes + uploadBytes(plan.data.items, modes) >
+        plan.data.storage.quotaBytes,
+  );
+  const tooBig = $derived(
+    !!plan.data &&
+      uploadsOf(plan.data.items, modes).some(
+        (i) => i.sizeBytes > plan.data!.storage.maxFileBytes,
+      ),
   );
 
   const canSubmit = $derived(
     !submitting &&
       social.signedIn &&
       (mode === "share"
-        ? !!plan.data && (uploadIds.length === 0 || rights) && !overQuota
+        ? !!plan.data && (!needsRights || rights) && !overQuota && !tooBig
         : friendIds.length + groupIds.length > 0),
   );
 
@@ -84,7 +92,7 @@
           friendIds,
           groupIds,
           role,
-          uploadContentIds: uploadIds,
+          shareModes: modes,
           confirmedUploadRights: rights,
         });
       } else if (sharedId) {
@@ -228,17 +236,21 @@
         class="h-8.5 w-full rounded-md border border-(--line-2) bg-(--bg) px-3 outline-none focus:border-(--accent)"
       />
 
+      <h3 class="mt-4 mb-0.5 text-xs font-semibold text-(--text-muted)">
+        What friends get
+      </h3>
       {#if plan.loading}
-        <p class="mt-4 text-[12.5px] text-(--text-muted)">
+        <p class="text-[12.5px] text-(--text-muted)">
           Checking which files friends can download…
         </p>
       {:else if plan.error}
-        <p class="mt-4 text-[12.5px] text-(--danger)">{plan.error}</p>
-      {:else if plan.data?.unknownFiles.length}
-        <UploadPicker
-          files={plan.data.unknownFiles}
+        <p class="text-[12.5px] text-(--danger)">{plan.error}</p>
+      {:else if plan.data}
+        <SharePicker
+          items={plan.data.items}
           storage={plan.data.storage}
-          bind:selected={uploadIds}
+          firstShare
+          bind:modes
           bind:rights
         />
       {/if}
@@ -248,6 +260,9 @@
   {#snippet footer()}
     {#if error}<span class="mr-auto text-xs text-(--danger)" role="alert"
         >{error}</span
+      >{:else if mode === "share" && needsRights && !rights}<span
+        class="mr-auto text-xs text-(--warn)"
+        >Confirm you can share the uploaded files</span
       >{/if}
     <Button variant="ghost" onclick={onclose}>Cancel</Button>
     <Button type="submit" variant="primary" disabled={!canSubmit}>

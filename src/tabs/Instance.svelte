@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from "$lib/api";
-  import { go } from "$lib/nav.svelte";
+  import { forgetInstance, go } from "$lib/nav.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
   import { plural, versionLabel } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
@@ -81,7 +81,9 @@
       return;
     await api.untrackInstance(id);
     await instances.load();
-    go({ page: "home" });
+    // This page no longer exists: remove it from history and leave without remembering it.
+    forgetInstance(id);
+    go({ page: "home" }, { replace: true });
   }
 
   const menuItems = $derived.by((): MenuItem[] => {

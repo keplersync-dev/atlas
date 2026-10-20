@@ -26,19 +26,23 @@
     <Sidebar />
 
     <main class="min-h-0 overflow-y-auto">
-      <div class="max-w-295 px-9 pt-7 pb-16">
-        {#if nav.view.page === "home"}
-          <Home />
-        {:else if nav.view.page === "shared"}
-          <Shared />
-        {:else if nav.view.page === "friends"}
-          <Friends />
-        {:else if nav.view.page === "instance"}
-          <Instance id={nav.view.id} />
-        {:else if nav.view.page === "review"}
-          <Review id={nav.view.id} />
-        {/if}
-      </div>
+      {#if nav.view.page === "home"}
+        <!-- Home uses the full width and lays out its own columns. -->
+        <Home />
+      {:else}
+        <!-- Other pages keep a comfortable reading width. -->
+        <div class="max-w-295 px-9 pt-7 pb-16">
+          {#if nav.view.page === "shared"}
+            <Shared />
+          {:else if nav.view.page === "friends"}
+            <Friends />
+          {:else if nav.view.page === "instance"}
+            <Instance id={nav.view.id} />
+          {:else if nav.view.page === "review"}
+            <Review id={nav.view.id} />
+          {/if}
+        </div>
+      {/if}
     </main>
   </div>
 </div>

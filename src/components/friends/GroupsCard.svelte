@@ -115,7 +115,7 @@
       <input
         bind:value={joinCode}
         placeholder="Invite code or link"
-        class="h-8 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 font-(family-name:--font-mono) text-xs outline-none focus:border-(--accent)"
+        class="h-8 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 font-mono text-xs outline-none focus:border-(--accent)"
       />
       <Button
         type="submit"

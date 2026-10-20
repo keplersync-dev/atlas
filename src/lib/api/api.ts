@@ -24,6 +24,7 @@ import type {
   PublishPlan,
   Session,
   ShareInstanceInput,
+  ShareMode,
   SharedInstance,
   SharedInstanceDetail,
   SyncOptions,
@@ -91,12 +92,33 @@ export interface AtlasApi {
     enabled: boolean,
   ): Promise<void>;
   restoreBackup(instanceId: Id, backupId: Id): Promise<InstanceSummary>;
+  /**
+   * Owners/editors: how a file is shared (required / optional / only me).
+   * Saved locally; it reaches friends with the next publish.
+   */
+  setShareMode(instanceId: Id, contentId: Id, mode: ShareMode): Promise<void>;
+  /**
+   * Receivers: download (true) or remove (false) an optional item from the shared version.
+   * Fails with "conflict" while the game is running.
+   */
+  setOptionalInstalled(
+    instanceId: Id,
+    contentId: Id,
+    installed: boolean,
+  ): Promise<void>;
 
   // ── Sharing ──────────────────────────────────────────────────────────
   listSharedInstances(): Promise<SharedInstance[]>;
   getSharedInstance(id: Id): Promise<SharedInstanceDetail>;
-  /** Creates a new instance in the chosen launcher, fills it with the latest revision, and tracks it. */
-  acceptInvite(sharedInstanceId: Id, launcherId: Id): Promise<InstanceSummary>;
+  /**
+   * Creates a new instance in the chosen launcher, fills it with the latest revision, and tracks it.
+   * `installOptional`: keys from SharedInstance.optionalItems the user ticked (optional items start unticked).
+   */
+  acceptInvite(
+    sharedInstanceId: Id,
+    launcherId: Id,
+    installOptional: string[],
+  ): Promise<InstanceSummary>;
   declineInvite(sharedInstanceId: Id): Promise<void>;
   /** Step 1 of sharing/publishing: what would be shared, and which files need a decision. */
   preparePublish(instanceId: Id): Promise<PublishPlan>;

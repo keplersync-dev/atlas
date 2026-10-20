@@ -14,18 +14,22 @@ import * as fx from "$lib/mock/fixtures";
 import type {
   AtlasEvent,
   Backup,
+  ContentKind,
   DetectedInstance,
   FriendRequest,
   Group,
   GroupDetail,
   Id,
+  InstanceContent,
   InstanceDetail,
   InstanceSummary,
   Launcher,
   Me,
   MemberRole,
+  OptionalItem,
   PublicUser,
   RevisionChanges,
+  ShareMode,
   SharedInstance,
   SharedInstanceDetail,
   SyncProgress,
@@ -151,7 +155,11 @@ function toSummary({
   backups,
   ...summary
 }: InstanceDetail): InstanceSummary {
-  return { ...summary, contentCount: content.length };
+  // Optional items the user didn't download are listed but have no file: don't count them.
+  return {
+    ...summary,
+    contentCount: content.filter((c) => c.installed).length,
+  };
 }
 
 function toSharedSummary({
@@ -286,27 +294,45 @@ function mergeChanges(
 }
 
 /**
- * What differs from the synced revision:
- * - disabled managed files (anyone)
- * - unmanaged files friends could download, for owners/editors only
- *   (for viewers they're personal extras; unknown files stay personal until uploaded)
+ * What differs from the synced revision.
+ * Owners/editors (their folder is the source of the next version):
+ * - removed:     a shared file they disabled
+ * - modeChanged: a shared file whose setting changed (e.g. Required → Optional, or → Only me)
+ * - added:       a file not in the shared version that would now be shared (setting isn't "Only me")
+ * Viewers: only disabling a *required* file counts. Skipping or removing optional items is their choice,
+ * and their own extras are "Only me" by nature.
  */
 function localChanges(inst: InstanceDetail) {
-  const disabled = inst.content.filter((c) => c.isManaged && !c.enabled);
-  const added =
-    inst.sync && inst.sync.role !== "viewer"
-      ? inst.content.filter(
-          (c) => !c.isManaged && c.enabled && c.source !== "local",
-        )
-      : [];
-  return { disabled, added };
+  const live = inst.content.filter((c) => c.installed);
+  if (!inst.sync || inst.sync.role === "viewer") {
+    const removed = live.filter(
+      (c) => c.isManaged && c.shareMode === "required" && !c.enabled,
+    );
+    return {
+      removed,
+      modeChanged: [] as InstanceContent[],
+      added: [] as InstanceContent[],
+    };
+  }
+  const removed = live.filter((c) => c.isManaged && !c.enabled);
+  const modeChanged = live.filter(
+    (c) => c.isManaged && c.enabled && c.shareMode !== c.publishedShareMode,
+  );
+  const added = live.filter(
+    (c) =>
+      !c.isManaged &&
+      c.enabled &&
+      c.shareMode !== "private" &&
+      c.shareMode !== c.publishedShareMode,
+  );
+  return { removed, modeChanged, added };
 }
 
 function refreshSyncState(inst: InstanceDetail) {
   const s = inst.sync;
   if (!s || s.state === "frozen") return;
-  const { disabled, added } = localChanges(inst);
-  s.localChangeCount = disabled.length + added.length;
+  const { removed, modeChanged, added } = localChanges(inst);
+  s.localChangeCount = removed.length + modeChanged.length + added.length;
   const behind = s.syncedRevision < s.latestRevision;
   s.state = s.localChangeCount
     ? behind
@@ -317,35 +343,125 @@ function refreshSyncState(inst: InstanceDetail) {
       : "up_to_date";
 }
 
-function applyUploads(
+const MODE_LABEL: Record<ShareMode, string> = {
+  required: "Required",
+  optional: "Optional",
+  private: "Only me",
+};
+
+/**
+ * Applies share settings to an owner's/editor's folder as a new published version:
+ * uploads unknown files that will be shared, marks what's in the version, and
+ * returns what changed (for the revision history).
+ */
+function applyPublish(
   inst: InstanceDetail,
-  uploadIds: Id[],
-  confirmed: boolean,
-) {
+  modes: Record<Id, ShareMode>,
+  confirmedRights: boolean,
+): RevisionChanges {
   const user = me();
-  const uploads = inst.content.filter(
-    (c) => uploadIds.includes(c.id) && c.source === "local",
+  const live = inst.content.filter((c) => c.installed);
+  const modeOf = (c: InstanceContent) => modes[c.id] ?? c.shareMode;
+
+  // Unknown files that will be shared have to be uploaded.
+  const uploads = live.filter(
+    (c) => c.source === "local" && c.enabled && modeOf(c) !== "private",
   );
-  if (uploads.length && !confirmed)
+  if (uploads.length && !confirmedRights)
     throw new ApiError(
       "invalid_input",
-      "Confirm you have the right to share these files",
+      "Confirm you have the right to share the files being uploaded",
     );
   const tooBig = uploads.find((c) => c.sizeBytes > user.storage.maxFileBytes);
   if (tooBig)
     throw new ApiError(
       "quota_exceeded",
-      `${tooBig.name} is larger than the per-file limit`,
+      `${tooBig.name} is larger than the per-file limit. Set it to Only me.`,
     );
   const total = uploads.reduce((n, c) => n + c.sizeBytes, 0);
   if (user.storage.usedBytes + total > user.storage.quotaBytes)
-    throw new ApiError("quota_exceeded", "Not enough storage left");
+    throw new ApiError(
+      "quota_exceeded",
+      "Not enough storage left. Set some files to Only me.",
+    );
   user.storage.usedBytes += total;
   for (const c of uploads) c.source = "upload";
-  // Everything shareable becomes managed; local files that weren't uploaded stay personal,
-  // and disabled files aren't part of the shared version at all.
-  for (const c of inst.content)
-    if (c.source !== "local" && c.enabled) c.isManaged = true;
+
+  const changes: RevisionChanges = { added: [], removed: [], updated: [] };
+  for (const c of live) {
+    c.shareMode = modeOf(c);
+    if (!c.enabled) {
+      // Disabled files aren't part of the shared version.
+      if (c.isManaged) changes.removed.push(c.name);
+      c.isManaged = false;
+      c.publishedShareMode = null;
+    } else if (c.shareMode === "private") {
+      if (c.isManaged) changes.removed.push(c.name);
+      c.isManaged = false;
+      c.publishedShareMode = "private";
+    } else {
+      if (!c.isManaged)
+        changes.added.push(
+          c.shareMode === "optional" ? `${c.name} (optional)` : c.name,
+        );
+      else if (c.publishedShareMode && c.publishedShareMode !== c.shareMode)
+        changes.updated.push({
+          name: c.name,
+          from: MODE_LABEL[c.publishedShareMode],
+          to: MODE_LABEL[c.shareMode],
+        });
+      c.isManaged = true;
+      c.publishedShareMode = c.shareMode;
+    }
+  }
+  return changes;
+}
+
+/** The optional items in an owner's published version, as friends see them. */
+const optionalItemsOf = (inst: InstanceDetail): OptionalItem[] =>
+  inst.content
+    .filter((c) => c.isManaged && c.shareMode === "optional")
+    .map((c) => ({
+      key: c.name,
+      name: c.name,
+      kind: c.kind,
+      sizeBytes: c.sizeBytes,
+    }));
+
+const FOLDERS: Record<ContentKind, string> = {
+  mod: "mods",
+  resourcepack: "resourcepacks",
+  shaderpack: "shaderpacks",
+  datapack: "datapacks",
+};
+
+/** A file arriving from a shared version. The mock only knows names, so details are made up. */
+function receivedItem(
+  name: string,
+  mode: ShareMode,
+  installed: boolean,
+  kind: ContentKind = "mod",
+  sizeBytes = 900_000,
+): InstanceContent {
+  return {
+    id: newId(),
+    kind,
+    source: "modrinth",
+    projectId: null,
+    versionId: null,
+    name,
+    versionLabel: "1.0.0",
+    author: null,
+    iconUrl: null,
+    path: `${FOLDERS[kind]}/${name.toLowerCase().replace(/\W+/g, "-")}.${kind === "mod" ? "jar" : "zip"}`,
+    sizeBytes,
+    side: "both",
+    enabled: true,
+    isManaged: true,
+    shareMode: mode,
+    publishedShareMode: mode,
+    installed,
+  };
 }
 
 /** Materialise member rows for friends + group members, skipping people already in. */
@@ -387,7 +503,12 @@ function unlinkLocal(sharedId: Id) {
   const inst = db.instances.find((i) => i.sync?.sharedInstanceId === sharedId);
   if (!inst) return;
   inst.sync = null;
-  for (const c of inst.content) c.isManaged = false;
+  // Optional items that were never downloaded have no file: drop them.
+  inst.content = inst.content.filter((c) => c.installed);
+  for (const c of inst.content) {
+    c.isManaged = false;
+    c.publishedShareMode = null;
+  }
   emit({ type: "instance.changed", instanceId: inst.id });
 }
 
@@ -560,10 +681,13 @@ export const mockApi: AtlasApi = {
             ...structuredClone(fromFixture),
             sync: null,
             trackedAt: nowIso(),
-            content: fromFixture.content.map((c) => ({
-              ...c,
-              isManaged: false,
-            })),
+            content: fromFixture.content
+              .filter((c) => c.installed)
+              .map((c) => ({
+                ...c,
+                isManaged: false,
+                publishedShareMode: null,
+              })),
             backups: [],
           }
         : {
@@ -725,6 +849,37 @@ export const mockApi: AtlasApi = {
     return respond(toSummary(inst));
   },
 
+  async setShareMode(instanceId, contentId, mode) {
+    const inst = findInstance(instanceId);
+    if (inst.sync?.role === "viewer")
+      throw new ApiError(
+        "forbidden",
+        "Only the owner and editors choose how files are shared",
+      );
+    const item = inst.content.find((c) => c.id === contentId);
+    if (!item) throw new ApiError("not_found", "Content not found");
+    item.shareMode = mode;
+    refreshSyncState(inst);
+    return respond(undefined);
+  },
+
+  async setOptionalInstalled(instanceId, contentId, installed) {
+    const inst = findInstance(instanceId);
+    if (inst.isRunning) throw new ApiError("conflict", "Close the game first");
+    const item = inst.content.find((c) => c.id === contentId);
+    if (!item) throw new ApiError("not_found", "Content not found");
+    if (!item.isManaged || item.shareMode !== "optional")
+      throw new ApiError(
+        "invalid_input",
+        "Only optional items can be added or removed this way",
+      );
+    item.installed = installed;
+    item.enabled = true;
+    refreshSyncState(inst);
+    emit({ type: "instance.changed", instanceId });
+    return respond(undefined);
+  },
+
   // ── Sharing ──────────────────────────────────────────────────────────
 
   async listSharedInstances() {
@@ -739,7 +894,7 @@ export const mockApi: AtlasApi = {
     return respond(findShared(id));
   },
 
-  async acceptInvite(sharedInstanceId, launcherId) {
+  async acceptInvite(sharedInstanceId, launcherId, installOptional) {
     const user = online();
     const s = findShared(sharedInstanceId);
     if (s.myStatus !== "invited")
@@ -795,25 +950,26 @@ export const mockApi: AtlasApi = {
     db.instances.unshift(inst);
     s.localInstanceId = inst.id;
     simulateSync(inst, () => {
-      // Everything any version added (revisions are newest first, so collect from all of them).
-      const names = [...new Set(s.revisions.flatMap((r) => r.changes.added))];
-      inst.content = names.map((n, k) => ({
-        id: newId(),
-        kind: "mod" as const,
-        source: "modrinth" as const,
-        projectId: null,
-        versionId: null,
-        name: n,
-        versionLabel: "1.0." + k,
-        author: null,
-        iconUrl: null,
-        path: `mods/${n.toLowerCase().replace(/\W+/g, "-")}.jar`,
-        sizeBytes: 900_000,
-        side: "both" as const,
-        enabled: true,
-        isManaged: true,
-      }));
-      inst.contentCount = inst.content.length;
+      // Required files: everything any version added (revisions are newest first, so
+      // collect from all of them), minus the optional ones.
+      const optionalNames = new Set(s.optionalItems.map((o) => o.name));
+      const required = [
+        ...new Set(s.revisions.flatMap((r) => r.changes.added)),
+      ].filter((n) => !n.endsWith(" (optional)") && !optionalNames.has(n));
+      inst.content = [
+        ...required.map((n) => receivedItem(n, "required", true)),
+        // Optional files: listed either way, downloaded only if the user ticked them.
+        ...s.optionalItems.map((o) =>
+          receivedItem(
+            o.name,
+            "optional",
+            installOptional.includes(o.key),
+            o.kind,
+            o.sizeBytes,
+          ),
+        ),
+      ];
+      inst.contentCount = inst.content.filter((c) => c.installed).length;
     });
     emit({ type: "shared.changed", sharedInstanceId });
     return respond(toSummary(inst));
@@ -838,22 +994,25 @@ export const mockApi: AtlasApi = {
       requireRole(findShared(inst.sync.sharedInstanceId), "owner", "editor");
     return respond({
       baseRevision: inst.sync?.latestRevision ?? null,
-      changes: {
-        added: localChanges(inst)
-          .added.filter((c) => c.source !== "local")
-          .map((c) => c.name),
-        removed: localChanges(inst).disabled.map((c) => c.name),
-        updated: [],
-      },
-      unknownFiles: inst.content
-        .filter((c) => c.source === "local")
+      // Disabled files aren't offered: they won't be in the shared version either way.
+      items: inst.content
+        .filter((c) => c.installed && c.enabled)
         .map((c) => ({
           contentId: c.id,
           name: c.name,
+          kind: c.kind,
+          source: c.source,
           path: c.path,
           sizeBytes: c.sizeBytes,
+          isNew: c.publishedShareMode === null,
+          shareMode: c.shareMode,
+          publishedShareMode: c.publishedShareMode,
+          needsUpload: c.source === "local",
           alreadyUploaded: false,
         })),
+      removed: inst.content
+        .filter((c) => c.installed && c.isManaged && !c.enabled)
+        .map((c) => c.name),
       manualDownloads: [],
       storage: user.storage,
     });
@@ -871,7 +1030,11 @@ export const mockApi: AtlasApi = {
         "invalid_input",
         "Atlas couldn't tell which Minecraft version and loader this folder uses",
       );
-    applyUploads(inst, input.uploadContentIds, input.confirmedUploadRights);
+    const changes = applyPublish(
+      inst,
+      input.shareModes,
+      input.confirmedUploadRights,
+    );
     const owner = publicMe();
     const shared: SharedInstanceDetail = {
       id: newId(),
@@ -895,6 +1058,7 @@ export const mockApi: AtlasApi = {
       invitedBy: null,
       invitedAt: null,
       localInstanceId: inst.id,
+      optionalItems: optionalItemsOf(inst),
       groups: [],
       members: [
         {
@@ -911,11 +1075,7 @@ export const mockApi: AtlasApi = {
           changelog: "Initial version",
           createdBy: owner,
           createdAt: nowIso(),
-          changes: {
-            added: inst.content.filter((c) => c.isManaged).map((c) => c.name),
-            removed: [],
-            updated: [],
-          },
+          changes: { added: changes.added, removed: [], updated: [] },
         },
       ],
     };
@@ -930,7 +1090,7 @@ export const mockApi: AtlasApi = {
       state: "up_to_date",
       localChangeCount: 0,
     };
-    refreshSyncState(inst); // unknown files that weren't uploaded stay as personal extras
+    refreshSyncState(inst);
     return respond(toSharedSummary(shared));
   },
 
@@ -945,33 +1105,33 @@ export const mockApi: AtlasApi = {
         "conflict",
         "Someone published a newer version. Update first.",
       );
-    const { added, disabled } = localChanges(inst);
-    const addedNames = added
-      .filter(
-        (c) => c.source !== "local" || input.uploadContentIds.includes(c.id),
-      )
-      .map((c) => c.name);
-    applyUploads(inst, input.uploadContentIds, input.confirmedUploadRights);
+    // Work on a copy so a refused publish (rights, quota, nothing to do) changes nothing.
+    const draft = structuredClone(inst);
+    const changes = applyPublish(
+      draft,
+      input.shareModes,
+      input.confirmedUploadRights,
+    );
+    if (
+      !changes.added.length &&
+      !changes.removed.length &&
+      !changes.updated.length
+    )
+      throw new ApiError("invalid_input", "Nothing to publish");
+    inst.content = draft.content;
     s.latestRevision += 1;
     s.updatedAt = nowIso();
-    s.contentCount = inst.content.filter(
-      (c) => c.isManaged && c.enabled,
-    ).length;
+    s.contentCount = inst.content.filter((c) => c.isManaged).length;
+    s.optionalItems = optionalItemsOf(inst);
     s.revisions.unshift({
       revision: s.latestRevision,
       changelog: input.changelog,
       createdBy: publicMe(),
       createdAt: nowIso(),
-      changes: {
-        added: addedNames,
-        removed: disabled.map((c) => c.name),
-        updated: [],
-      },
+      changes,
     });
     const self = s.members.find((m) => m.user.id === me().id);
     if (self) self.lastSyncedRevision = s.latestRevision;
-    // Disabled managed files are no longer part of the instance.
-    for (const c of disabled) c.isManaged = false;
     inst.sync = {
       ...inst.sync,
       syncedRevision: s.latestRevision,
@@ -989,13 +1149,16 @@ export const mockApi: AtlasApi = {
     const newer = s.revisions
       .filter((r) => r.revision > inst.sync!.syncedRevision)
       .reverse();
+    const changes = mergeChanges(newer);
+    // Optional items show up separately (unticked), not as plain additions.
+    changes.added = changes.added.filter((n) => !n.endsWith(" (optional)"));
     return respond({
       fromRevision: inst.sync.syncedRevision,
       toRevision: s.latestRevision,
-      changes: mergeChanges(newer),
+      changes,
       downloadBytes: newer.length * 14_000_000,
       manualDownloads: [],
-      overwrittenLocalChanges: localChanges(inst).disabled.map((c) => c.name),
+      overwrittenLocalChanges: localChanges(inst).removed.map((c) => c.name),
       // One example conflict so the UI has to handle it.
       configConflicts:
         inst.id === fx.ids.cobblemon && newer.length
@@ -1009,10 +1172,13 @@ export const mockApi: AtlasApi = {
           : [],
       launcherChange: null,
       gameRunning: inst.isRunning,
+      newOptional: s.optionalItems.filter(
+        (o) => !inst.content.some((c) => c.name === o.name),
+      ),
     });
   },
 
-  async syncInstance(instanceId) {
+  async syncInstance(instanceId, options) {
     online();
     const inst = findInstance(instanceId);
     if (!inst.sync) throw new ApiError("conflict", "Instance is not shared");
@@ -1022,9 +1188,24 @@ export const mockApi: AtlasApi = {
       throw new ApiError("conflict", `Instance is ${inst.status}`);
     const s = findShared(inst.sync.sharedInstanceId);
     const from = inst.sync.syncedRevision;
+    const chosen = options?.installOptional ?? [];
+    const newOptional = s.optionalItems.filter(
+      (o) => !inst.content.some((c) => c.name === o.name),
+    );
     simulateSync(inst, () => {
       addBackup(inst, from, s.latestRevision, "before_update");
       for (const c of inst.content) if (c.isManaged) c.enabled = true;
+      // New optional items are listed either way; downloaded only if ticked.
+      for (const o of newOptional)
+        inst.content.push(
+          receivedItem(
+            o.name,
+            "optional",
+            chosen.includes(o.key),
+            o.kind,
+            o.sizeBytes,
+          ),
+        );
       inst.sync = {
         ...inst.sync!,
         syncedRevision: s.latestRevision,
@@ -1047,7 +1228,11 @@ export const mockApi: AtlasApi = {
       inst.sync.syncedRevision,
       "before_revert",
     );
-    for (const c of inst.content) if (c.isManaged) c.enabled = true;
+    for (const c of inst.content) {
+      if (!c.isManaged) continue;
+      c.enabled = true;
+      if (c.publishedShareMode) c.shareMode = c.publishedShareMode;
+    }
     refreshSyncState(inst);
     return respond(toSummary(inst));
   },
