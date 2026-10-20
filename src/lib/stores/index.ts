@@ -34,6 +34,9 @@ export function connectStores() {
         instances.load();
         social.load();
         break;
+      case "activity.new":
+        social.activity.unshift(e.item);
+        break;
       case "friends.changed":
       case "groups.changed":
       case "session.changed":

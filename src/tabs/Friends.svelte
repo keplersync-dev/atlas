@@ -1,10 +1,22 @@
+<script lang="ts" module>
+  // Which friends' dropdowns the user opened or closed. Module-level, so it survives
+  // leaving the page. A friend with no entry opens by itself when something needs you.
+  let expanded = $state<Record<string, boolean>>({});
+</script>
+
 <script lang="ts">
   import { plural, timeAgo } from "$lib/format";
   import { social } from "$lib/stores";
   import type { Friend } from "$lib/types";
+  import AttentionBadges from "../components/AttentionBadges.svelte";
   import Button from "../components/Button.svelte";
   import Head from "../components/Head.svelte";
+  import Icon from "../components/Icon.svelte";
   import Menu from "../components/Menu.svelte";
+  import SharedRow, {
+    attentionOf,
+    byAttention,
+  } from "../components/SharedRow.svelte";
   import AddFriendCard from "../components/friends/AddFriendCard.svelte";
   import GroupsCard from "../components/friends/GroupsCard.svelte";
   import RequestsCard from "../components/friends/RequestsCard.svelte";
@@ -30,10 +42,20 @@
     social.friends.filter((f) => f.presence.state !== "offline").length,
   );
 
-  /** How many shared instances you have in common with this friend. */
-  const sharedWith = (f: Friend) =>
-    social.shared.filter((s) => s.members.some((m) => m.user.id === f.user.id))
-      .length;
+  /** What this friend shared with you (or a group you're in), needs-you first. */
+  const sharedBy = (f: Friend) =>
+    social.shared
+      .filter(
+        (s) =>
+          s.owner?.id === f.user.id &&
+          s.myRole !== "owner" &&
+          s.myStatus !== "declined",
+      )
+      .toSorted(byAttention);
+
+  const isOpen = (f: Friend) =>
+    expanded[f.user.id] ?? attentionOf(sharedBy(f)).total > 0;
+  const toggle = (f: Friend) => (expanded[f.user.id] = !isOpen(f));
 
   function status(f: Friend) {
     const p = f.presence;
@@ -102,45 +124,83 @@
           {section.title} · {section.list.length}
         </h2>
         {#each section.list as f (f.user.id)}
-          {@const common = sharedWith(f)}
-          <div
-            class="group flex items-center gap-3 rounded-md px-2 py-2.25 hover:bg-(--bg-hover)"
-          >
-            <Head user={f.user} size={36} presence={f.presence.state} />
-            <div class="min-w-0 flex-1">
-              <b class="font-medium">{f.user.displayName}</b>
-              <span class="text-(--text-faint)">@{f.user.username}</span>
-              <small
-                class="block truncate text-[11.5px] {f.presence.state ===
-                'playing'
-                  ? 'text-(--online)'
-                  : 'text-(--text-faint)'}"
-              >
-                {status(f)}{common
-                  ? ` · ${plural(common, "shared instance")}`
-                  : ""}
-              </small>
-            </div>
-            <!-- Only visible on hover (or while focused, for keyboard users). -->
+          {@const theirs = sharedBy(f)}
+          {@const open = theirs.length > 0 && isOpen(f)}
+          <div class="rounded-lg {open ? 'mb-2 bg-(--bg-raise)' : ''}">
             <div
-              class="opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+              class="group flex items-center gap-3 rounded-lg px-2 py-2.25 {open
+                ? 'hover:bg-(--bg-raise-2)'
+                : 'hover:bg-(--bg-hover)'}"
             >
-              <Menu
-                label="More for {f.user.displayName}"
-                items={[
-                  {
-                    label: "Remove friend",
-                    danger: true,
-                    onselect: () => remove(f, false),
-                  },
-                  {
-                    label: "Block",
-                    danger: true,
-                    onselect: () => remove(f, true),
-                  },
-                ]}
-              />
+              <!-- The row opens the friend's dropdown when they've shared something.
+                   Otherwise it's plain text, so it doesn't pretend to be clickable. -->
+              <svelte:element
+                this={theirs.length ? "button" : "div"}
+                role={theirs.length ? undefined : "presentation"}
+                aria-expanded={theirs.length ? open : undefined}
+                onclick={() => theirs.length && toggle(f)}
+                class="flex min-w-0 flex-1 items-center gap-3 text-left"
+              >
+                <Head
+                  user={f.user}
+                  size={36}
+                  presence={f.presence.state}
+                  ring={open ? "var(--bg-raise)" : undefined}
+                />
+                <span class="min-w-0 flex-1">
+                  <b class="font-medium">{f.user.displayName}</b>
+                  <span class="text-(--text-faint)">@{f.user.username}</span>
+                  <small
+                    class="block truncate text-[11.5px] {f.presence.state ===
+                    'playing'
+                      ? 'text-(--online)'
+                      : 'text-(--text-faint)'}"
+                  >
+                    {status(f)}
+                  </small>
+                </span>
+                {#if theirs.length}
+                  <AttentionBadges items={theirs} />
+                  <span class="text-xs text-(--text-muted)"
+                    >{plural(theirs.length, "shared instance")}</span
+                  >
+                  <span
+                    class="text-(--text-faint) transition-transform {open
+                      ? 'rotate-90'
+                      : ''}"
+                  >
+                    <Icon name="chev" class="size-3.5" />
+                  </span>
+                {/if}
+              </svelte:element>
+              <!-- Only visible on hover (or while focused, for keyboard users). -->
+              <div
+                class="opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+              >
+                <Menu
+                  label="More for {f.user.displayName}"
+                  items={[
+                    {
+                      label: "Remove friend",
+                      danger: true,
+                      onselect: () => remove(f, false),
+                    },
+                    {
+                      label: "Block",
+                      danger: true,
+                      onselect: () => remove(f, true),
+                    },
+                  ]}
+                />
+              </div>
             </div>
+            {#if open}
+              <div class="border-t border-(--line)">
+                {#each theirs as s (s.id)}
+                  <SharedRow {s} />
+                {/each}
+              </div>
+            {/if}
           </div>
         {/each}
       {:else}

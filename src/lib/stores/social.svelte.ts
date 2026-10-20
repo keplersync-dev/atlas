@@ -1,5 +1,6 @@
 import { api } from "$lib/api";
 import type {
+  ActivityItem,
   AuthProvider,
   Friend,
   FriendRequest,
@@ -18,6 +19,8 @@ class SocialStore {
   requests = $state<FriendRequest[]>([]);
   shared = $state<SharedInstance[]>([]);
   groups = $state<Group[]>([]);
+  /** Newest first. */
+  activity = $state<ActivityItem[]>([]);
   loaded = $state(false);
 
   signedIn = $derived(!!this.session?.user);
@@ -36,15 +39,17 @@ class SocialStore {
       this.requests = [];
       this.shared = [];
       this.groups = [];
+      this.activity = [];
     } else {
       try {
-        // Start all four requests at once instead of one after another.
-        [this.friends, this.requests, this.shared, this.groups] =
+        // Start all the requests at once instead of one after another.
+        [this.friends, this.requests, this.shared, this.groups, this.activity] =
           await Promise.all([
             api.listFriends(),
             api.listFriendRequests(),
             api.listSharedInstances(),
             api.listGroups(),
+            api.listActivity(),
           ]);
       } catch {
         // Offline or a server error: keep what we had so the UI stays usable.
