@@ -6,7 +6,9 @@ pub mod db;
 pub mod dto;
 pub mod error;
 pub mod events;
+pub mod game;
 pub mod launchers;
+pub mod scan;
 pub mod services;
 pub mod state;
 pub mod util;
@@ -127,16 +129,43 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     let state = AppState::new(db, paths);
     app.manage(state.clone());
 
-    // Background work that mustn't hold up the window: find launchers, then
-    // re-read every tracked instance's metadata (renames, version changes, missing folders).
     let handle = app.handle().clone();
+
+    // Rescan an instance whenever the watcher sees its content folders change.
+    if let Some(mut changes) = state.watcher.take_receiver() {
+        let (state, handle) = (state.clone(), handle.clone());
+        tauri::async_runtime::spawn(async move {
+            while let Some(id) = changes.recv().await {
+                if let Err(e) = services::instances::rescan(&state, &handle, &id).await {
+                    tracing::warn!(instance = %id, error = %e, "rescan after change failed");
+                }
+            }
+        });
+    }
+
+    game::spawn(state.clone(), handle.clone());
+
+    // Background work that mustn't hold up the window: find launchers, then rescan
+    // every tracked instance (metadata and files; this also starts watching them).
     tauri::async_runtime::spawn(async move {
         if let Err(e) = services::launchers::ensure_detected(&state).await {
             tracing::warn!(error = %e, "launcher detection failed");
         }
-        services::instances::refresh_all(&state, &handle).await;
+        services::instances::rescan_all(&state, &handle, std::time::Duration::ZERO).await;
     });
     Ok(())
+}
+
+/// Coming back to Atlas: catch changes the watcher can't see (launcher metadata),
+/// for instances not scanned in the last 30 seconds.
+fn on_window_event<R: Runtime>(window: &tauri::Window<R>, event: &tauri::WindowEvent) {
+    if let tauri::WindowEvent::Focused(true) = event {
+        let app = window.app_handle().clone();
+        tauri::async_runtime::spawn(async move {
+            let Some(state) = app.try_state::<AppState>().map(|s| s.inner().clone()) else { return };
+            services::instances::rescan_all(&state, &app, std::time::Duration::from_secs(30)).await;
+        });
+    }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -144,6 +173,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(setup)
+        .on_window_event(on_window_event)
         .invoke_handler(invoke_handler())
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

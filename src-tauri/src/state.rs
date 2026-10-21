@@ -4,11 +4,15 @@
 //! (docs/tauri-plan.md §4.2). Everything inside is cheap to clone, so a background
 //! task can take its own copy.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use sqlx::SqlitePool;
 use tokio::sync::OnceCell;
+
+use crate::game::Running;
+use crate::scan::watcher::Watcher;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -19,11 +23,35 @@ pub struct AppState {
     pub auto_detect: bool,
     /// Set once launcher detection has run this session (see services::launchers).
     pub detected: Arc<OnceCell<()>>,
+    /// Instances whose game is running (kept up to date by crate::game).
+    pub running: Running,
+    /// Watches tracked folders; rescans come out of `watcher.take_receiver()`.
+    pub watcher: Arc<Watcher>,
+    /// One scan at a time per instance (the watcher, a rescan and tracking can overlap).
+    pub scan_locks: Arc<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
 }
 
 impl AppState {
     pub fn new(db: SqlitePool, paths: AppPaths) -> Self {
-        Self { db, paths, auto_detect: true, detected: Arc::new(OnceCell::new()) }
+        Self {
+            db,
+            paths,
+            auto_detect: true,
+            detected: Arc::new(OnceCell::new()),
+            running: Running::default(),
+            watcher: Arc::new(Watcher::new()),
+            scan_locks: Arc::default(),
+        }
+    }
+
+    pub fn is_running(&self, instance_id: &str) -> bool {
+        self.running.contains(instance_id)
+    }
+
+    /// Hold this while scanning an instance.
+    pub async fn scan_lock(&self, instance_id: &str) -> tokio::sync::OwnedMutexGuard<()> {
+        let lock = self.scan_locks.lock().unwrap().entry(instance_id.to_string()).or_default().clone();
+        lock.lock_owned().await
     }
 }
 

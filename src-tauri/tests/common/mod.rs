@@ -35,6 +35,11 @@ impl TestApp {
         Self { _app: app, webview, dir }
     }
 
+    /// The app's state, for setting up situations a test can't reach through commands.
+    pub fn state(&self) -> AppState {
+        self._app.state::<AppState>().inner().clone()
+    }
+
     /// Call a command the way src/lib/api/tauri.ts does: camelCase args as JSON.
     /// Ok = the command's result, Err = what the UI would receive as the error.
     pub fn call(&self, cmd: &str, args: Value) -> Result<Value, Value> {

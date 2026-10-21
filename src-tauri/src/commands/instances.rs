@@ -18,16 +18,21 @@ pub async fn get_instance(state: State<'_, AppState>, id: Id) -> AppResult<Insta
 }
 
 #[tauri::command]
-pub async fn track_instances(
+pub async fn track_instances<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     refs: Vec<TrackInstanceRef>,
 ) -> AppResult<Vec<InstanceSummary>> {
-    instances::track(&state, &refs).await
+    instances::track(&state, &app, &refs).await
 }
 
 #[tauri::command]
-pub async fn track_folder(state: State<'_, AppState>, game_dir: String) -> AppResult<InstanceSummary> {
-    instances::track_folder(&state, &game_dir).await
+pub async fn track_folder<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    game_dir: String,
+) -> AppResult<InstanceSummary> {
+    instances::track_folder(&state, &app, &game_dir).await
 }
 
 #[tauri::command]
@@ -44,10 +49,38 @@ pub async fn update_instance(
     instances::update(&state, &id, &patch).await
 }
 
-/// T1 re-reads launcher metadata; T2 adds the file scan.
+/// Re-read launcher metadata and the files now (the watcher also does this on its own).
 #[tauri::command]
-pub async fn rescan_instance(state: State<'_, AppState>, id: Id) -> AppResult<InstanceSummary> {
-    Ok(instances::refresh(&state, &id).await?.0)
+pub async fn rescan_instance<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    id: Id,
+) -> AppResult<InstanceSummary> {
+    instances::rescan(&state, &app, &id).await
+}
+
+/// Renames the file to/from ".disabled". Refused while the game is running.
+#[tauri::command]
+pub async fn set_content_enabled<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    instance_id: Id,
+    content_id: Id,
+    enabled: bool,
+) -> AppResult<()> {
+    instances::set_content_enabled(&state, &app, &instance_id, &content_id, enabled).await
+}
+
+/// Owners/editors: how a file is shared. Reaches friends with the next publish.
+#[tauri::command]
+pub async fn set_share_mode<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    instance_id: Id,
+    content_id: Id,
+    mode: ShareMode,
+) -> AppResult<()> {
+    instances::set_share_mode(&state, &app, &instance_id, &content_id, mode).await
 }
 
 #[tauri::command]
@@ -66,24 +99,10 @@ pub async fn open_instance_folder<R: Runtime>(
 
 // ── Built in later phases ──────────────────────────────────────────────
 
-/// T2: rename to/from ".disabled".
-#[tauri::command]
-#[allow(unused_variables)]
-pub async fn set_content_enabled(instance_id: Id, content_id: Id, enabled: bool) -> AppResult<()> {
-    Err(AppError::not_built())
-}
-
 /// T4: sync engine.
 #[tauri::command]
 #[allow(unused_variables)]
 pub async fn restore_backup(instance_id: Id, backup_id: Id) -> AppResult<InstanceSummary> {
-    Err(AppError::not_built())
-}
-
-/// T2: share settings live on content rows, which the scanner creates.
-#[tauri::command]
-#[allow(unused_variables)]
-pub async fn set_share_mode(instance_id: Id, content_id: Id, mode: ShareMode) -> AppResult<()> {
     Err(AppError::not_built())
 }
 
