@@ -41,11 +41,31 @@
     shaderpack: "Shader",
     datapack: "Data pack",
   };
-  const SOURCES: Record<ContentSource, { label: string; dot: string }> = {
-    modrinth: { label: "Modrinth", dot: "bg-[#1bd96a]" },
-    curseforge: { label: "CurseForge", dot: "bg-[#f16436]" },
-    upload: { label: "Uploaded to Atlas", dot: "bg-(--accent)" },
-    local: { label: "Only on this PC", dot: "border border-(--text-faint)" },
+  // Where a file comes from. `hint` is the tooltip: what the label means for sharing.
+  const SOURCES: Record<
+    ContentSource,
+    { label: string; dot: string; hint: string }
+  > = {
+    modrinth: {
+      label: "Modrinth",
+      dot: "bg-[#1bd96a]",
+      hint: "Found on Modrinth. Friends download it from there.",
+    },
+    curseforge: {
+      label: "CurseForge",
+      dot: "bg-[#f16436]",
+      hint: "Found on CurseForge. Friends download it from there.",
+    },
+    upload: {
+      label: "Uploaded to Atlas",
+      dot: "bg-(--accent)",
+      hint: "Not on Modrinth or CurseForge, so it's stored on Atlas for friends to download.",
+    },
+    local: {
+      label: "Not identified",
+      dot: "border border-(--text-faint)",
+      hint: "Atlas couldn't match this file on Modrinth (CurseForge matching comes later). If you share it, it gets uploaded to Atlas.",
+    },
   };
 
   // Owners and editors decide how each file is shared; viewers see what was decided.
@@ -189,7 +209,9 @@
         <small class="block truncate text-[11.5px] text-(--text-faint)">
           {SINGULAR[item.kind]}
           {#if canSetModes}
-            · {SOURCES[item.source].label}
+            · <span title={SOURCES[item.source].hint}
+              >{SOURCES[item.source].label}</span
+            >
           {:else if optionalExtra}
             · <span class="text-(--accent)">Optional</span> from {ownerName}{item.installed
               ? ""
@@ -220,6 +242,7 @@
         </span>
       {:else}
         <span
+          title={SOURCES[item.source].hint}
           class="flex items-center gap-1.5 text-[11.5px] text-(--text-muted)"
         >
           <i class="size-1.5 rounded-xs {SOURCES[item.source].dot}"
