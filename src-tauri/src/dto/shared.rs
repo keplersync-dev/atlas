@@ -159,6 +159,7 @@ pub struct SyncPreview {
 pub struct PublishItem {
     pub content_id: Id,
     pub name: String,
+    pub icon_url: Option<String>,
     pub kind: ContentKind,
     pub source: ContentSource,
     pub path: String,

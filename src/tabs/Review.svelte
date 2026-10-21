@@ -109,8 +109,7 @@
     onclick={() => go({ page: "instance", id })}
     class="mb-4.5 inline-flex items-center gap-1.5 text-[12.5px] text-(--text-muted) hover:text-(--text-primary)"
   >
-    <span class="rotate-180"><Icon name="chev" class="size-3.5" /></span
-    >{summary?.name ?? "Back"}
+    <Icon name="chev" class="size-3.5 rotate-180" />{summary?.name ?? "Back"}
   </button>
 
   {#if !summary}

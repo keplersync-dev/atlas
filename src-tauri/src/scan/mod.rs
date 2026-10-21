@@ -3,5 +3,6 @@
 
 pub mod files;
 pub mod hash;
+pub mod icons;
 pub mod metadata;
 pub mod watcher;

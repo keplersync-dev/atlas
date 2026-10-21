@@ -11,6 +11,9 @@
 //!   META-INF/mods.toml             (Forge 1.13+) same as above
 //!   mcmod.info                     (Forge 1.12 and older) [{ modid, name, version, authorList }]
 //! A version of "${file.jarVersion}" means "see META-INF/MANIFEST.MF Implementation-Version".
+//!
+//! Icons: fabric/quilt `icon` (a path, or sizes → paths; the largest wins), mods.toml and
+//! mcmod.info `logoFile`, and `pack.png` for resource and data packs.
 
 use std::fs::File;
 use std::io::Read;
@@ -24,6 +27,8 @@ pub struct ModInfo {
     pub name: Option<String>,
     pub version: Option<String>,
     pub authors: Option<String>,
+    /// Path of the icon inside the archive.
+    pub icon: Option<String>,
 }
 
 /// Read a jar's metadata. Anything unreadable gives an empty ModInfo (never an error):
@@ -31,6 +36,10 @@ pub struct ModInfo {
 pub fn read_jar(path: &Path) -> ModInfo {
     let Ok(file) = File::open(path) else { return ModInfo::default() };
     let Ok(mut zip) = zip::ZipArchive::new(file) else { return ModInfo::default() };
+    read_archive(&mut zip)
+}
+
+fn read_archive(zip: &mut zip::ZipArchive<File>) -> ModInfo {
     let mut text = |name: &str| -> Option<String> {
         let mut entry = zip.by_name(name).ok()?;
         if entry.size() > 1_000_000 {
@@ -57,6 +66,43 @@ pub fn read_jar(path: &Path) -> ModInfo {
         info.version = text("META-INF/MANIFEST.MF").and_then(|m| manifest_version(&m));
     }
     info
+}
+
+/// Copy a mod's or pack's icon out of its archive into `out` (a .png path). Returns
+/// false when it has none (or it isn't a PNG/JPEG under 2 MB). Blocking.
+pub fn extract_icon(archive: &Path, out: &Path) -> bool {
+    let Ok(file) = File::open(archive) else { return false };
+    let Ok(mut zip) = zip::ZipArchive::new(file) else { return false };
+    let inner = read_archive(&mut zip).icon.unwrap_or_else(|| "pack.png".into());
+    let Ok(mut entry) = zip.by_name(inner.trim_start_matches('/')) else { return false };
+    if entry.size() > 2_000_000 {
+        return false;
+    }
+    let mut bytes = Vec::new();
+    if entry.read_to_end(&mut bytes).is_err() || !is_image(&bytes) {
+        return false;
+    }
+    let tmp = out.with_extension("part");
+    let saved = std::fs::create_dir_all(out.parent().expect("icon path has a parent"))
+        .and_then(|_| std::fs::write(&tmp, &bytes))
+        .and_then(|_| std::fs::rename(&tmp, out));
+    saved.is_ok()
+}
+
+fn is_image(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"\x89PNG\r\n\x1a\n") || bytes.starts_with(&[0xFF, 0xD8, 0xFF])
+}
+
+/// fabric/quilt `icon`: "assets/x/icon.png", or { "16": "...", "128": "..." }.
+fn icon_field(v: &Value) -> Option<String> {
+    if let Some(s) = v.as_str() {
+        return clean(Some(s));
+    }
+    v.as_object()?
+        .iter()
+        .filter_map(|(size, path)| Some((size.parse::<u32>().unwrap_or(0), path.as_str()?)))
+        .max_by_key(|(size, _)| *size)
+        .and_then(|(_, path)| clean(Some(path)))
 }
 
 fn clean(s: Option<&str>) -> Option<String> {
@@ -94,6 +140,7 @@ fn fabric(text: &str) -> ModInfo {
         name: clean(j["name"].as_str()),
         version: clean(j["version"].as_str()),
         authors,
+        icon: icon_field(&j["icon"]),
     }
 }
 
@@ -106,6 +153,7 @@ fn quilt(text: &str) -> ModInfo {
         name: clean(q["metadata"]["name"].as_str()),
         version: clean(q["version"].as_str()),
         authors,
+        icon: icon_field(&q["metadata"]["icon"]),
     }
 }
 
@@ -120,6 +168,7 @@ fn forge_toml(text: &str) -> ModInfo {
         name: get("displayName"),
         version: get("version"),
         authors: get("authors").or_else(|| clean(t.get("authors").and_then(|v| v.as_str()))),
+        icon: get("logoFile").or_else(|| clean(t.get("logoFile").and_then(|v| v.as_str()))),
     }
 }
 
@@ -133,6 +182,7 @@ fn mcmod_info(text: &str) -> ModInfo {
         name: clean(m["name"].as_str()),
         version: clean(m["version"].as_str()),
         authors: m["authorList"].as_array().and_then(|a| join_names(a.iter().filter_map(Value::as_str))),
+        icon: clean(m["logoFile"].as_str()).map(|p| p.trim_start_matches('/').to_string()),
     }
 }
 
@@ -181,6 +231,7 @@ mod tests {
                 name: Some("Sodium".into()),
                 version: Some("0.6.0+mc1.21.1".into()),
                 authors: Some("JellySquid, IMS".into()),
+                icon: None,
             }
         );
     }
@@ -232,6 +283,61 @@ mod tests {
         std::fs::write(&not_a_zip, b"plain bytes").unwrap();
         assert_eq!(read_jar(&not_a_zip), ModInfo::default());
         std::fs::remove_file(not_a_zip).ok();
+    }
+
+    fn jar_bytes(files: &[(&str, &[u8])]) -> std::path::PathBuf {
+        let p = std::env::temp_dir().join(format!("atlas-icon-{}.jar", crate::util::ids::new_id()));
+        let mut z = ZipWriter::new(File::create(&p).unwrap());
+        for (name, body) in files {
+            z.start_file(*name, SimpleFileOptions::default()).unwrap();
+            z.write_all(body).unwrap();
+        }
+        z.finish().unwrap();
+        p
+    }
+
+    fn png() -> Vec<u8> {
+        let mut b = vec![0x89];
+        b.extend_from_slice(b"PNG\r\n\x1a\nrest of a png");
+        b
+    }
+
+    #[test]
+    fn icons_from_every_format() {
+        let out = std::env::temp_dir().join(format!("atlas-icon-out-{}", crate::util::ids::new_id()));
+        type Case<'a> = (&'a str, Vec<(&'a str, Vec<u8>)>);
+        let cases: Vec<Case> = vec![
+            ("fabric sizes", vec![
+                ("fabric.mod.json", br#"{"id":"a","icon":{"16":"small.png","128":"assets/a/big.png"}}"#.to_vec()),
+                ("assets/a/big.png", png()),
+            ]),
+            ("forge logoFile", vec![
+                ("META-INF/mods.toml", b"[[mods]]\nmodId=\"b\"\nlogoFile=\"logo.png\"\n".to_vec()),
+                ("logo.png", png()),
+            ]),
+            ("mcmod.info", vec![
+                ("mcmod.info", br#"[{"modid":"c","logoFile":"/assets/c/logo.png"}]"#.to_vec()),
+                ("assets/c/logo.png", png()),
+            ]),
+            ("resource pack", vec![("pack.mcmeta", b"{}".to_vec()), ("pack.png", png())]),
+        ];
+        for (what, files) in cases {
+            let refs: Vec<(&str, &[u8])> = files.iter().map(|(n, b)| (*n, b.as_slice())).collect();
+            let jar = jar_bytes(&refs);
+            let target = out.join(format!("{}.png", what.replace(' ', "-")));
+            assert!(extract_icon(&jar, &target), "{what}");
+            assert_eq!(std::fs::read(&target).unwrap(), png(), "{what}");
+            std::fs::remove_file(jar).ok();
+        }
+        // Declared but missing, or not an image: no icon.
+        let jar = jar_bytes(&[("fabric.mod.json", br#"{"id":"d","icon":"nope.png"}"#)]);
+        assert!(!extract_icon(&jar, &out.join("d.png")));
+        let jar2 = jar_bytes(&[("pack.png", b"not an image")]);
+        assert!(!extract_icon(&jar2, &out.join("e.png")));
+        for j in [jar, jar2] {
+            std::fs::remove_file(j).ok();
+        }
+        std::fs::remove_dir_all(out).ok();
     }
 
     #[test]

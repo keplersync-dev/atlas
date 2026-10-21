@@ -6,7 +6,7 @@
   import { resource } from "$lib/resource.svelte";
   import { instances } from "$lib/stores";
   import type { Id } from "$lib/types";
-  import BlockArt from "../components/BlockArt.svelte";
+  import ContentIcon from "../components/ContentIcon.svelte";
   import Button from "../components/Button.svelte";
   import Icon from "../components/Icon.svelte";
   import Menu, { type MenuItem } from "../components/Menu.svelte";
@@ -35,13 +35,16 @@
     error = null;
   });
 
-  // When an update or restore finishes (syncing → ready), the files changed: reload the detail.
-  let lastStatus: string | undefined;
-  $effect(() => {
-    const status = summary?.status;
-    if (lastStatus === "syncing" && status === "ready") detail.reload();
-    lastStatus = status;
-  });
+  // The files changed (a scan finished, the watcher saw a change, names arrived from
+  // Modrinth, an update or restore ended): reload the detail. The store refreshes the
+  // summary on the same event, but the content list lives only on this page.
+  // An $effect that returns a function: Svelte calls it when the page goes away, which
+  // is exactly when we should stop listening (api.subscribe returns the unsubscribe).
+  $effect(() =>
+    api.subscribe((e) => {
+      if (e.type === "instance.changed" && e.instanceId === id) detail.reload();
+    }),
+  );
 
   // Where the back link goes, named so it's clear ("← Home", "← Shared"…).
   const backLabel = $derived.by(() => {
@@ -159,8 +162,7 @@
       onclick={back}
       class="mb-4.5 inline-flex items-center gap-1.5 text-[12.5px] text-(--text-muted) hover:text-(--text-primary)"
     >
-      <span class="rotate-180"><Icon name="chev" class="size-3.5" /></span
-      >{backLabel}
+      <Icon name="chev" class="size-3.5 rotate-180" />{backLabel}
     </button>
   {/if}
 
@@ -186,7 +188,8 @@
 
   <!-- ── Header ─────────────────────────────────────────────────────── -->
   <div class="flex items-start gap-5">
-    <BlockArt
+    <ContentIcon
+      src={summary.icon}
       seed={summary.id}
       class="size-22 rounded-xl {summary.status === 'missing'
         ? 'opacity-40 grayscale'

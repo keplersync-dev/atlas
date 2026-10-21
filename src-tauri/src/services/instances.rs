@@ -32,10 +32,21 @@ async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
     db::instances::get(&state.db, id).await?.ok_or_else(not_found)
 }
 
-fn metadata(found: &FoundInstance) -> Metadata {
+/// What the launcher says, as stored: its picture is copied into Atlas's cache first.
+async fn metadata(state: &AppState, found: &FoundInstance) -> Metadata {
+    let icon = match found.icon.clone() {
+        Some(icon) => {
+            let dir = state.paths.icons.clone();
+            tokio::task::spawn_blocking(move || scan::icons::cache_instance_icon(&dir, &icon))
+                .await
+                .ok()
+                .flatten()
+        }
+        None => None,
+    };
     Metadata {
         name: found.name.clone(),
-        icon: found.icon.clone(),
+        icon,
         minecraft_version: found.minecraft_version.clone(),
         loader: found.loader,
         loader_version: found.loader_version.clone(),
@@ -56,7 +67,8 @@ pub fn summary(
     InstanceSummary {
         id: row.id.clone(),
         name: row.name.clone(),
-        icon: row.icon.clone(),
+        // Local pictures are stored as "file:<path>"; the webview loads them via the asset protocol.
+        icon: row.icon.as_deref().map(crate::util::asset::url),
         launcher: LauncherRef { kind, name: launchers::display_name(kind).into() },
         game_dir: row.game_dir.clone(),
         minecraft_version: row.minecraft_version.clone(),
@@ -136,7 +148,7 @@ pub async fn track<R: Runtime>(
                 kind: r.launcher_kind,
                 launcher_instance_id: Some(found.launcher_instance_id.clone()),
                 game_dir,
-                meta: metadata(&found),
+                meta: metadata(state, &found).await,
             },
         )
         .await?;
@@ -243,7 +255,10 @@ async fn refresh_metadata(state: &AppState, id: &str) -> AppResult<(InstanceRow,
     } else {
         InstanceStatus::Missing
     };
-    let meta = found.as_ref().map(metadata);
+    let meta = match &found {
+        Some(f) => Some(metadata(state, f).await),
+        None => None,
+    };
     let changed = status != before.status() || meta.as_ref().is_some_and(|m| *m != Metadata::of(&before));
     db::instances::update_scan(&state.db, id, meta.as_ref(), status).await?;
     Ok((row(state, id).await?, changed))
@@ -267,7 +282,8 @@ pub async fn rescan<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) 
         if result.changed() {
             tracing::debug!(instance = %row.name, ?result, "content changed");
         }
-        result.changed()
+        let icons = scan::icons::fill(&state.db, &state.paths.icons, id, game_dir).await?;
+        result.changed() || icons > 0
     } else {
         state.watcher.unwatch(id);
         false

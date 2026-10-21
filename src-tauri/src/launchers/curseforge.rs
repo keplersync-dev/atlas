@@ -2,7 +2,8 @@
 //!
 //! <root>/Instances/<folder>/minecraftinstance.json — the folder is the game dir.
 //! Fields used: name, gameVersion, baseModLoader.name ("neoforge-21.1.250",
-//! "forge-47.4.0", "fabric-0.16.5"), lastPlayed ("0001-01-01T00:00:00" = never).
+//! "forge-47.4.0", "fabric-0.16.5"), lastPlayed ("0001-01-01T00:00:00" = never),
+//! profileImagePath (a custom picture, usually null), installedModpack.thumbnailUrl.
 //! Checked against CurseForge on Windows, 2026. Files may start with a UTF-8 BOM.
 
 use std::path::{Path, PathBuf};
@@ -42,6 +43,14 @@ struct Instance {
     game_version: Option<String>,
     base_mod_loader: Option<BaseModLoader>,
     last_played: Option<String>,
+    profile_image_path: Option<String>,
+    installed_modpack: Option<InstalledModpack>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InstalledModpack {
+    thumbnail_url: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -69,7 +78,7 @@ pub fn list(root: &Path) -> ReadResult<Vec<FoundInstance>> {
                 name: i.name.filter(|n| !n.trim().is_empty()).unwrap_or_else(|| folder.clone()),
                 launcher_instance_id: folder,
                 game_dir: path,
-                icon: None,
+                icon: i.icon,
                 minecraft_version: i.game_version,
                 loader: i.loader.as_ref().map(|(l, _)| *l).or(Some(Loader::Vanilla)),
                 loader_version: i.loader.and_then(|(_, v)| v),
@@ -83,6 +92,7 @@ pub fn list(root: &Path) -> ReadResult<Vec<FoundInstance>> {
 }
 
 struct Read {
+    icon: Option<String>,
     name: Option<String>,
     game_version: Option<String>,
     loader: Option<(Loader, Option<String>)>,
@@ -96,7 +106,10 @@ fn read_instance(file: &Path) -> ReadResult<Read> {
         .base_mod_loader
         .and_then(|b| b.name)
         .and_then(|n| parse_loader(&n));
-    Ok(Read { name: i.name, game_version: i.game_version, loader, last_played: i.last_played })
+    // A picture the user set wins; otherwise the modpack's thumbnail from CurseForge.
+    let custom = i.profile_image_path.filter(|p| Path::new(p).is_file()).map(|p| format!("file:{p}"));
+    let thumbnail = i.installed_modpack.and_then(|m| m.thumbnail_url).filter(|u| u.starts_with("https://"));
+    Ok(Read { icon: custom.or(thumbnail), name: i.name, game_version: i.game_version, loader, last_played: i.last_played })
 }
 
 /// "neoforge-21.1.250" → (NeoForge, "21.1.250").
@@ -130,6 +143,7 @@ mod tests {
         assert_eq!(atm.loader, Some(Loader::Neoforge));
         assert_eq!(atm.loader_version.as_deref(), Some("21.1.250"));
         assert_eq!(atm.last_played_at.as_deref(), Some("2026-09-22T01:15:38.895Z"));
+        assert_eq!(atm.icon.as_deref(), Some("https://media.forgecdn.net/avatars/thumbnails/1389/739/256/256/63890103359327238"));
 
         // folder name differs from the instance name; never played
         let sf = &list[1];
@@ -138,6 +152,7 @@ mod tests {
         assert_eq!(sf.loader, Some(Loader::Forge));
         assert_eq!(sf.loader_version.as_deref(), Some("14.23.5.2860"));
         assert_eq!(sf.last_played_at, None);
+        assert_eq!(sf.icon, None, "no thumbnail, no custom picture");
     }
 
     #[test]

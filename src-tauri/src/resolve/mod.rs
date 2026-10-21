@@ -90,7 +90,7 @@ pub async fn save(db: &SqlitePool, asked: &[&ContentRow], matches: &[Match]) -> 
     for m in matches {
         let done = sqlx::query(
             "UPDATE instance_content SET source = 'modrinth', project_id = ?, version_id = ?, name = ?,
-                version_label = ?, icon_url = ?, download_url = ?, page_url = ?, side = ?, resolved_at = ?
+                version_label = ?, icon_url = COALESCE(?, icon_url), download_url = ?, page_url = ?, side = ?, resolved_at = ?
              WHERE id = ? AND sha1 = ?",
         )
         .bind(&m.project_id)

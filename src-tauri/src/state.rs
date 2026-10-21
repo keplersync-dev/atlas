@@ -78,6 +78,8 @@ pub struct AppPaths {
     pub root: PathBuf,
     /// Downloaded files, reused across instances: cache/<sha1[0..2]>/<sha1>
     pub cache: PathBuf,
+    /// Mod and pack icons taken out of their files: cache/icons/<sha1>.png (scan/icons.rs)
+    pub icons: PathBuf,
     /// backups/<instance id>/<backup id>/
     pub backups: PathBuf,
     /// Shared-instance manifests, never change once published: manifests/<shared id>/<revision>.json
@@ -92,6 +94,7 @@ impl AppPaths {
         Self {
             root: root.to_path_buf(),
             cache: root.join("cache"),
+            icons: root.join("cache").join("icons"),
             backups: root.join("backups"),
             manifests: root.join("manifests"),
             logs: root.join("logs"),

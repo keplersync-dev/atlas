@@ -1,7 +1,7 @@
 <script lang="ts">
   import { openDialog } from "$lib/dialogs.svelte";
   import { instances } from "$lib/stores";
-  import BlockArt from "../BlockArt.svelte";
+  import ContentIcon from "../ContentIcon.svelte";
   import Button from "../Button.svelte";
   import Icon from "../Icon.svelte";
 
@@ -52,7 +52,7 @@
           onclick={() => pick(i.id)}
           class="flex w-full items-center gap-2.5 rounded-[5px] px-2 py-1.5 text-left hover:bg-(--bg-hover)"
         >
-          <BlockArt seed={i.id} class="size-7 rounded-md" />
+          <ContentIcon src={i.icon} seed={i.id} class="size-7 rounded-md" />
           <span class="min-w-0 flex-1">
             <b class="block truncate text-[12.5px] font-medium">{i.name}</b>
             <small class="block truncate text-[11px] text-(--text-faint)"

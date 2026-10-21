@@ -45,7 +45,7 @@
   import { untrack } from "svelte";
   import { fileSize, plural } from "$lib/format";
   import type { ContentKind, PublishPlan } from "$lib/types";
-  import BlockArt from "../BlockArt.svelte";
+  import ContentIcon from "../ContentIcon.svelte";
   import Icon from "../Icon.svelte";
   import ShareModeSelect, { SHARE_MODES } from "../ShareModeSelect.svelte";
 
@@ -174,7 +174,8 @@
     <div
       class="flex items-center gap-3 px-3 py-2 not-last:border-b not-last:border-(--line)"
     >
-      <BlockArt
+      <ContentIcon
+        src={item.iconUrl}
         seed={item.name}
         class="size-7 rounded-[5px] {mode === 'private' ? 'opacity-40' : ''}"
       />

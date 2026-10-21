@@ -26,7 +26,9 @@ pub struct FoundInstance {
     pub name: String,
     /// Absolute; the folder holding mods/, config/, saves/.
     pub game_dir: PathBuf,
-    /// Launcher icon key, or "file:<absolute path>".
+    /// An image Atlas can show: "file:<absolute path>", an https URL, or a
+    /// "data:image/...;base64," URI (official launcher). None = no picture (Atlas draws
+    /// a generated block). services::instances copies local ones into Atlas's cache.
     pub icon: Option<String>,
     pub minecraft_version: Option<String>,
     pub loader: Option<Loader>,

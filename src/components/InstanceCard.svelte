@@ -24,6 +24,16 @@
   let { instance }: { instance: InstanceSummary } = $props();
 
   const pixels = $derived(wallPixels(kindFor(instance.id), instance.id));
+  // The launcher's picture for this instance, if it has one and it loads.
+  let iconFailed = $state(false);
+  $effect(() => {
+    instance.icon;
+    iconFailed = false;
+  });
+  // Only real image URLs; icon keys ("leaf") aren't pictures.
+  const showIcon = $derived(
+    !!instance.icon && /^(https?:|data:image\/)/.test(instance.icon) && !iconFailed,
+  );
   const open = () => go({ page: "instance", id: instance.id });
 
   type Status = {
@@ -128,19 +138,41 @@
     tabindex="-1"
     aria-hidden="true"
   >
-    <svg
-      viewBox="0 0 40 24"
-      preserveAspectRatio="xMidYMid slice"
-      shape-rendering="crispEdges"
-      class="size-full transition-transform duration-300 group-hover:scale-[1.03] {instance.status ===
-      'missing'
-        ? 'grayscale'
-        : ''}"
-    >
-      {#each pixels as p, i (i)}
-        <rect x={p.x} y={p.y} width="1" height="1" fill={p.fill} />
-      {/each}
-    </svg>
+    {#if showIcon}
+      <!-- The picture twice: blown up and blurred as the backdrop, crisp on top. -->
+      <img
+        src={instance.icon}
+        alt=""
+        aria-hidden="true"
+        class="absolute inset-0 size-full scale-125 object-cover opacity-70 blur-2xl saturate-150 {instance.status ===
+        'missing'
+          ? 'grayscale'
+          : ''}"
+      />
+      <img
+        src={instance.icon}
+        alt=""
+        onerror={() => (iconFailed = true)}
+        class="absolute top-1/2 left-1/2 size-24 -translate-x-1/2 -translate-y-1/2 rounded-2xl object-cover shadow-[0_8px_24px_#0008] transition-transform duration-300 group-hover:scale-[1.04] {instance.status ===
+        'missing'
+          ? 'grayscale'
+          : ''}"
+      />
+    {:else}
+      <svg
+        viewBox="0 0 40 24"
+        preserveAspectRatio="xMidYMid slice"
+        shape-rendering="crispEdges"
+        class="size-full transition-transform duration-300 group-hover:scale-[1.03] {instance.status ===
+        'missing'
+          ? 'grayscale'
+          : ''}"
+      >
+        {#each pixels as p, i (i)}
+          <rect x={p.x} y={p.y} width="1" height="1" fill={p.fill} />
+        {/each}
+      </svg>
+    {/if}
     <div
       class="absolute inset-0 bg-linear-to-b from-transparent from-40% to-(--bg-raise)/80"
     ></div>

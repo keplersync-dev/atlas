@@ -1008,6 +1008,7 @@ export const mockApi: AtlasApi = {
         .map((c) => ({
           contentId: c.id,
           name: c.name,
+          iconUrl: c.iconUrl,
           kind: c.kind,
           source: c.source,
           path: c.path,

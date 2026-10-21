@@ -155,6 +155,7 @@ pub async fn run<R: Runtime>(state: &AppState, progress: &Progress<R>, source: &
     let _scanning = state.scan_lock(&id).await;
     scan::files::scan(&state.db, &id, &game_dir).await?;
     adopt::adopt(&state.db, &id, req.revision, &req.manifest).await?;
+    scan::icons::fill(&state.db, &state.paths.icons, &id, &game_dir).await?;
     Ok(())
 }
 

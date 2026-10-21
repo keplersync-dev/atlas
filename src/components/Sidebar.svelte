@@ -3,7 +3,7 @@
   import { openDialog } from "$lib/dialogs.svelte";
   import { instances, social } from "$lib/stores";
   import type { InstanceSummary } from "$lib/types";
-  import BlockArt from "./BlockArt.svelte";
+  import ContentIcon from "./ContentIcon.svelte";
   import Head from "./Head.svelte";
   import Icon from "./Icon.svelte";
 
@@ -75,8 +75,10 @@
     </button>
   </div>
 
+  <!-- grid-cols-[minmax(0,1fr)]: a grid column otherwise grows to fit its widest item, so
+       long names would push the list sideways instead of truncating. -->
   <div
-    class="grid min-h-0 flex-1 content-start gap-px overflow-y-auto px-2.5 pb-2.5"
+    class="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] content-start gap-px overflow-y-auto px-2.5 pb-2.5"
   >
     {#each instances.list as inst (inst.id)}
       {@const view = { page: "instance", id: inst.id } as const}
@@ -89,7 +91,8 @@
           ? 'bg-(--bg-raise-2) text-(--text-primary)'
           : 'text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)'}"
       >
-        <BlockArt
+        <ContentIcon
+          src={inst.icon}
           seed={inst.id}
           class="size-6 rounded {inst.status === 'missing'
             ? 'opacity-40 grayscale'

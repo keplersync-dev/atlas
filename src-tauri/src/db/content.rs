@@ -47,7 +47,8 @@ impl ContentRow {
             name: self.name.clone(),
             version_label: self.version_label.clone(),
             author: self.author.clone(),
-            icon_url: self.icon_url.clone(),
+            // Local icons are stored as "file:<path>"; the webview loads them via the asset protocol.
+            icon_url: self.icon_url.as_deref().map(crate::util::asset::url),
             path: self.path.clone(),
             size_bytes: self.size_bytes.max(0) as u64,
             side: from_wire(&self.side).unwrap_or(Side::Both),

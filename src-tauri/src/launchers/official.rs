@@ -96,7 +96,9 @@ pub fn list(root: &Path) -> ReadResult<Vec<FoundInstance>> {
                 launcher_instance_id: game_dir.to_string_lossy().into_owned(),
                 name: display_name(&p),
                 game_dir,
-                icon: p.icon.filter(|i| !i.starts_with("data:")),
+                // Custom pictures are embedded images; named ones ("Grass") are built into
+                // the launcher and have no file Atlas can show.
+                icon: p.icon.filter(|i| i.starts_with("data:image/")),
                 minecraft_version,
                 loader: loader.as_ref().map(|(l, _)| *l),
                 loader_version: loader.and_then(|(_, v)| v),
@@ -188,17 +190,17 @@ mod tests {
         assert_eq!(main.launcher_instance_id, root.to_string_lossy());
         assert_eq!(main.minecraft_version, None);
         assert_eq!(main.loader, Some(Loader::Vanilla));
-        assert_eq!(main.icon.as_deref(), Some("Grass"));
+        assert_eq!(main.icon, None, "built-in icon name");
         assert_eq!(main.last_played_at.as_deref(), Some("2025-12-31T13:02:19.217Z"));
 
-        // its own game dir; data: icons are dropped
+        // its own game dir and a custom (embedded) picture
         let fabric = &list[0];
         assert_eq!(fabric.name, "Fabric 1.21.1");
         assert_eq!(fabric.game_dir, PathBuf::from(r"C:\Games\fabric-1.21.1"));
         assert_eq!(fabric.minecraft_version.as_deref(), Some("1.21.1"));
         assert_eq!(fabric.loader, Some(Loader::Fabric));
         assert_eq!(fabric.loader_version.as_deref(), Some("0.16.9"));
-        assert_eq!(fabric.icon, None);
+        assert_eq!(fabric.icon.as_deref(), Some("data:image/png;base64,iVBORw0KGgo="));
         assert_eq!(fabric.last_played_at.as_deref(), Some("2024-11-01T12:43:39.000Z"));
     }
 

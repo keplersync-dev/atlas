@@ -7,7 +7,7 @@
     InstanceDetail,
     ShareMode,
   } from "$lib/types";
-  import BlockArt from "../BlockArt.svelte";
+  import ContentIcon from "../ContentIcon.svelte";
   import Icon from "../Icon.svelte";
   import ShareModeSelect from "../ShareModeSelect.svelte";
   import Switch from "../Switch.svelte";
@@ -179,7 +179,8 @@
         ? 'grid-cols-[28px_minmax(0,1fr)_110px_auto_36px]'
         : 'grid-cols-[28px_minmax(0,1fr)_150px_130px_36px]'}"
     >
-      <BlockArt
+      <ContentIcon
+        src={item.iconUrl}
         seed={item.name}
         class="size-7 rounded-[5px] {present ? '' : 'opacity-40'}"
       />

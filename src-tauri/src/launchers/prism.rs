@@ -7,6 +7,7 @@
 //! <root>/<InstanceDir>/<folder>/instance.cfg  name, iconKey, lastLaunchTime (ms), totalTimePlayed (s)
 //! <root>/<InstanceDir>/<folder>/mmc-pack.json components[]: uid + version
 //! game files in <folder>/minecraft/ (newer) or <folder>/.minecraft/
+//! custom icons: <root>/icons/<iconKey>.<png|jpg|…> (built-in keys like "grass" have no file)
 
 use std::path::{Path, PathBuf};
 
@@ -76,7 +77,7 @@ pub fn list(flavor: Flavor, root: &Path) -> ReadResult<Vec<FoundInstance>> {
         if folder.starts_with(['.', '_']) || !path.join("instance.cfg").is_file() {
             continue;
         }
-        match read_instance(&path, &folder) {
+        match read_instance(&path, &folder, &root.join("icons")) {
             Ok(i) => found.push(i),
             Err(e) => tracing::warn!(instance = %folder, error = %e, "skipping unreadable Prism instance"),
         }
@@ -84,7 +85,7 @@ pub fn list(flavor: Flavor, root: &Path) -> ReadResult<Vec<FoundInstance>> {
     Ok(found)
 }
 
-fn read_instance(dir: &Path, folder: &str) -> ReadResult<FoundInstance> {
+fn read_instance(dir: &Path, folder: &str, icons: &Path) -> ReadResult<FoundInstance> {
     let cfg = parse_ini(&std::fs::read_to_string(dir.join("instance.cfg"))?);
     let pack = read_pack(dir).unwrap_or_default();
     let game_dir = first_existing([dir.join("minecraft"), dir.join(".minecraft")])
@@ -93,13 +94,25 @@ fn read_instance(dir: &Path, folder: &str) -> ReadResult<FoundInstance> {
         launcher_instance_id: folder.to_string(),
         name: cfg.get("name").filter(|n| !n.is_empty()).cloned().unwrap_or_else(|| folder.to_string()),
         game_dir,
-        icon: cfg.get("iconKey").filter(|k| !k.is_empty() && *k != "default").cloned(),
+        icon: cfg.get("iconKey").and_then(|key| custom_icon(icons, key)),
         minecraft_version: pack.minecraft,
         loader: pack.loader.as_ref().map(|(l, _)| *l).or(Some(Loader::Vanilla)),
         loader_version: pack.loader.and_then(|(_, v)| v),
         last_played_at: cfg.get("lastLaunchTime").and_then(|v| v.parse().ok()).and_then(from_unix_millis),
         total_playtime_seconds: cfg.get("totalTimePlayed").and_then(|v| v.parse().ok()),
     })
+}
+
+/// A custom icon the user picked in Prism (built-in ones like "grass" have no file).
+fn custom_icon(icons: &Path, key: &str) -> Option<String> {
+    if key.is_empty() || key.contains(['/', '\\', '.']) {
+        return None;
+    }
+    ["png", "jpg", "jpeg", "gif", "webp"]
+        .iter()
+        .map(|ext| icons.join(format!("{key}.{ext}")))
+        .find(|p| p.is_file())
+        .map(|p| format!("file:{}", p.display()))
 }
 
 #[derive(Default)]
@@ -164,7 +177,7 @@ mod tests {
         assert_eq!(smp.loader_version.as_deref(), Some("0.16.5"));
         assert_eq!(smp.last_played_at.as_deref(), Some("2026-10-19T00:00:00.000Z"));
         assert_eq!(smp.total_playtime_seconds, Some(36_000));
-        assert_eq!(smp.icon.as_deref(), Some("grass"));
+        assert_eq!(smp.icon, Some(format!("file:{}", root.join("icons").join("smp.png").display())), "custom icon file");
 
         // older instance: .minecraft folder, vanilla, no play data
         let old = &list[0];
@@ -173,6 +186,6 @@ mod tests {
         assert_eq!(old.loader, Some(Loader::Vanilla));
         assert_eq!(old.minecraft_version.as_deref(), Some("1.8.9"));
         assert_eq!(old.last_played_at, None);
-        assert_eq!(old.icon, None);
+        assert_eq!(old.icon, None, "built-in key, no file");
     }
 }

@@ -411,6 +411,7 @@ export interface SyncPreview {
 export interface PublishItem {
   contentId: Id;
   name: string;
+  iconUrl: string | null;
   kind: ContentKind;
   source: ContentSource;
   path: string;
