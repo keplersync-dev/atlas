@@ -1,5 +1,5 @@
 //! The manifest: a shareable description of an instance (data-plan §4,
-//! docs/schema/manifest.example.json). Moves into the shared `atlas-protocol` crate in T5,
+//! tests/fixtures/manifest.example.json). Moves into the shared `atlas-protocol` crate in T5,
 //! so the server validates and hashes exactly the same way.
 
 use std::collections::HashSet;
@@ -252,7 +252,7 @@ mod tests {
     fn example() -> Vec<u8> {
         std::fs::read(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../docs/schema/manifest.example.json"
+            "/tests/fixtures/manifest.example.json"
         ))
         .unwrap()
     }

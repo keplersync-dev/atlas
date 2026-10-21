@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "name": "Survival SMP",
+  "description": "Our main world. Performance mods + a few QoL ones.",
+  "icon": "leaf",
+  "minecraft": {
+    "version": "1.21.1",
+    "loader": "fabric",
+    "loaderVersion": "0.16.5"
+  },
+  "recommendedMemoryMb": 6144,
+  "content": [
+    {
+      "kind": "mod",
+      "source": "modrinth",
+      "projectId": "AANobbMI",
+      "versionId": "RncWhTxD",
+      "name": "Sodium",
+      "versionLabel": "0.6.0+mc1.21.1",
+      "path": "mods/sodium-fabric-0.6.0+mc1.21.1.jar",
+      "sha1": "8f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+      "sha256": "c1f0b6a1d2e3f405162738495a6b7c8d9e0f1a2b3c4d5e6f708192a3b4c5d6e7",
+      "sizeBytes": 1120384,
+      "downloadUrl": "https://cdn.modrinth.com/data/AANobbMI/versions/RncWhTxD/sodium-fabric-0.6.0%2Bmc1.21.1.jar",
+      "side": "client",
+      "required": false
+    },
+    {
+      "kind": "mod",
+      "source": "curseforge",
+      "projectId": "238222",
+      "versionId": "5846880",
+      "name": "Just Enough Items",
+      "versionLabel": "19.21.0.247",
+      "path": "mods/jei-1.21.1-fabric-19.21.0.247.jar",
+      "sha1": "0a1b2c3d4e5f60718293a4b5c6d7e8f901234567",
+      "sha256": "9f8e7d6c5b4a39281706f5e4d3c2b1a0998877665544332211ffeeddccbbaa00",
+      "sizeBytes": 1488221,
+      "downloadUrl": "https://edge.forgecdn.net/files/5846/880/jei-1.21.1-fabric-19.21.0.247.jar",
+      "side": "both",
+      "required": true
+    },
+    {
+      "kind": "mod",
+      "source": "curseforge",
+      "projectId": "999999",
+      "versionId": "6000001",
+      "name": "Some Mod With Downloads Disabled",
+      "versionLabel": "2.1.0",
+      "path": "mods/somemod-2.1.0.jar",
+      "sha1": "1111111111111111111111111111111111111111",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "sizeBytes": 402112,
+      "downloadUrl": null,
+      "pageUrl": "https://www.curseforge.com/minecraft/mc-mods/somemod/files/6000001",
+      "side": "both",
+      "required": true
+    },
+    {
+      "kind": "resourcepack",
+      "source": "upload",
+      "projectId": null,
+      "versionId": null,
+      "name": "SMP Custom Textures",
+      "versionLabel": null,
+      "path": "resourcepacks/smp-textures.zip",
+      "sha1": "3333333333333333333333333333333333333333",
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "sizeBytes": 5242880,
+      "downloadUrl": null,
+      "side": "client",
+      "required": false
+    }
+  ],
+  "overrides": [
+    {
+      "path": "config/sodium-options.json",
+      "sha256": "2b7e151628aed2a6abf7158809cf4f3c762e7160f38b4da56a784d9045190cfe",
+      "sizeBytes": 812
+    }
+  ]
+}

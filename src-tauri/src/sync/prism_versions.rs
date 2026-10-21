@@ -98,7 +98,7 @@ mod tests {
         let mut m: Manifest = serde_json::from_slice(
             &std::fs::read(concat!(
                 env!("CARGO_MANIFEST_DIR"),
-                "/../docs/schema/manifest.example.json"
+                "/tests/fixtures/manifest.example.json"
             ))
             .unwrap(),
         )
