@@ -1,33 +1,43 @@
-// T0 stubs: remove this allow as the commands get real bodies (phase T1).
-#![allow(unused_variables)]
+use tauri::{AppHandle, Runtime, State};
 
 use crate::dto::{DetectedInstance, Id, Launcher, LauncherKind};
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
+use crate::services::launchers;
+use crate::state::AppState;
 
-/// T1: rows from the `launcher` table plus each adapter's instance count.
 #[tauri::command]
-pub async fn list_launchers() -> AppResult<Vec<Launcher>> {
-    Ok(Vec::new())
-}
-
-/// T1: run every adapter's detect(), upsert, emit launchers.changed.
-#[tauri::command]
-pub async fn detect_launchers() -> AppResult<Vec<Launcher>> {
-    Ok(Vec::new())
+pub async fn list_launchers(state: State<'_, AppState>) -> AppResult<Vec<Launcher>> {
+    launchers::list(&state).await
 }
 
 #[tauri::command]
-pub async fn add_launcher(kind: LauncherKind, root_path: String) -> AppResult<Launcher> {
-    Err(AppError::not_built())
+pub async fn detect_launchers<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> AppResult<Vec<Launcher>> {
+    launchers::detect(&state, &app).await
 }
 
 #[tauri::command]
-pub async fn remove_launcher(id: Id) -> AppResult<()> {
-    Err(AppError::not_found("Launcher not found"))
+pub async fn add_launcher<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    kind: LauncherKind,
+    root_path: String,
+) -> AppResult<Launcher> {
+    launchers::add(&state, &app, kind, &root_path).await
 }
 
-/// T1: every instance in every known launcher, tracked or not.
 #[tauri::command]
-pub async fn list_detected_instances() -> AppResult<Vec<DetectedInstance>> {
-    Ok(Vec::new())
+pub async fn remove_launcher<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    id: Id,
+) -> AppResult<()> {
+    launchers::remove(&state, &app, &id).await
+}
+
+#[tauri::command]
+pub async fn list_detected_instances(state: State<'_, AppState>) -> AppResult<Vec<DetectedInstance>> {
+    launchers::detected_instances(&state).await
 }

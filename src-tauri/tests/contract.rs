@@ -6,14 +6,12 @@
 //! may answer with an error (most are T0 stubs); what it must not do is be missing or
 //! reject the arguments, which is what a mismatch looks like.
 
+mod common;
+
 use std::collections::BTreeMap;
 
-use atlas_lib::state::{AppPaths, AppState};
+use common::TestApp;
 use serde_json::{Value, json};
-use tauri::ipc::{CallbackFn, InvokeBody};
-use tauri::test::{INVOKE_KEY, get_ipc_response, mock_builder, mock_context, noop_assets};
-use tauri::webview::InvokeRequest;
-use tauri::{Manager, WebviewWindow, WebviewWindowBuilder};
 
 /// `call("name", { a, b: x })` → ("name", ["a", "b"]), in file order.
 fn commands_in_tauri_ts() -> Vec<(String, Vec<String>)> {
@@ -72,36 +70,6 @@ fn sample(command: &str, key: &str) -> Value {
     }
 }
 
-fn mock_app() -> (tauri::App<tauri::test::MockRuntime>, WebviewWindow<tauri::test::MockRuntime>, tempdir::Dir) {
-    let dir = tempdir::Dir::new();
-    let app = mock_builder()
-        .invoke_handler(atlas_lib::invoke_handler())
-        .build(mock_context(noop_assets()))
-        .expect("build mock app");
-    let db = tauri::async_runtime::block_on(atlas_lib::db::open_in_memory()).unwrap();
-    app.manage(AppState { db, paths: AppPaths::new(&dir.0) });
-    let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
-        .build()
-        .expect("build webview");
-    (app, webview, dir)
-}
-
-fn invoke(webview: &WebviewWindow<tauri::test::MockRuntime>, cmd: &str, args: Value) -> Result<Value, Value> {
-    get_ipc_response(
-        webview,
-        InvokeRequest {
-            cmd: cmd.into(),
-            callback: CallbackFn(0),
-            error: CallbackFn(1),
-            url: "http://tauri.localhost".parse().unwrap(),
-            body: InvokeBody::Json(args),
-            headers: Default::default(),
-            invoke_key: INVOKE_KEY.to_string(),
-        },
-    )
-    .map(|body| body.deserialize::<Value>().unwrap())
-}
-
 const ERROR_CODES: [&str; 9] = [
     "not_found", "not_signed_in", "forbidden", "offline", "conflict",
     "invalid_input", "rate_limited", "quota_exceeded", "unknown",
@@ -112,12 +80,12 @@ fn every_ui_call_reaches_a_command_that_accepts_its_arguments() {
     let calls = commands_in_tauri_ts();
     assert!(calls.len() > 60, "parsed only {} calls from tauri.ts", calls.len());
 
-    let (_app, webview, _dir) = mock_app();
+    let app = TestApp::new();
     let mut problems = BTreeMap::new();
     for (cmd, keys) in &calls {
         let args: serde_json::Map<String, Value> =
             keys.iter().map(|k| (k.clone(), sample(cmd, k))).collect();
-        match invoke(&webview, cmd, Value::Object(args)) {
+        match app.call(cmd, Value::Object(args)) {
             Ok(_) => {}
             // A stub's answer: { code, message } with a code the UI knows.
             Err(Value::Object(e)) if e.get("code").and_then(Value::as_str).is_some_and(|c| ERROR_CODES.contains(&c)) => {}
@@ -131,38 +99,20 @@ fn every_ui_call_reaches_a_command_that_accepts_its_arguments() {
 }
 
 #[test]
-fn t0_answers_look_like_an_empty_signed_out_app() {
-    let (_app, webview, _dir) = mock_app();
-    assert_eq!(invoke(&webview, "get_session", json!({})).unwrap(), json!({ "user": null, "online": true }));
-    assert_eq!(invoke(&webview, "list_instances", json!({})).unwrap(), json!([]));
-    assert_eq!(invoke(&webview, "list_launchers", json!({})).unwrap(), json!([]));
-    assert_eq!(invoke(&webview, "list_detected_instances", json!({})).unwrap(), json!([]));
-    let err = invoke(&webview, "list_friends", json!({})).unwrap_err();
-    assert_eq!(err["code"], "not_signed_in");
+fn a_fresh_install_is_empty_and_signed_out() {
+    let app = TestApp::new();
+    assert_eq!(app.ok("get_session", json!({})), json!({ "user": null, "online": true }));
+    assert_eq!(app.ok("list_instances", json!({})), json!([]));
+    assert_eq!(app.ok("list_launchers", json!({})), json!([]));
+    assert_eq!(app.ok("list_detected_instances", json!({})), json!([]));
+    assert_eq!(app.err("list_friends", json!({})), "not_signed_in");
 }
 
 #[test]
 fn wrong_argument_names_are_caught() {
     // Proves the first test can fail: snake_case keys are not what Tauri expects.
-    let (_app, webview, _dir) = mock_app();
-    let err = invoke(&webview, "set_share_mode", json!({ "instance_id": "a", "content_id": "b", "mode": "required" }))
+    let app = TestApp::new();
+    let err = app.call("set_share_mode", json!({ "instance_id": "a", "content_id": "b", "mode": "required" }))
         .unwrap_err();
     assert!(err.as_str().is_some_and(|s| s.contains("instanceId")), "{err}");
-}
-
-/// A temporary folder for AppPaths, removed when dropped. (Avoids a dev-dependency.)
-mod tempdir {
-    pub struct Dir(pub std::path::PathBuf);
-    impl Dir {
-        pub fn new() -> Self {
-            let p = std::env::temp_dir().join(format!("atlas-test-{}", atlas_lib::util::ids::new_id()));
-            std::fs::create_dir_all(&p).unwrap();
-            Self(p)
-        }
-    }
-    impl Drop for Dir {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
 }

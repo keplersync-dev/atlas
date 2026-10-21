@@ -1,7 +1,12 @@
 //! The local SQLite database (`atlas.db`). Schema: migrations/0001_init.sql.
 //!
-//! One file per table will live next to this one (launchers.rs, instances.rs, ...),
-//! each with plain async functions that take a pool or a transaction.
+//! One file per table, each with plain async functions taking the pool. Row structs
+//! are separate from the DTOs in crate::dto; services convert one into the other.
+
+pub mod backups;
+pub mod content;
+pub mod instances;
+pub mod launchers;
 
 use std::{path::Path, str::FromStr, time::Duration};
 

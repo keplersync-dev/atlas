@@ -6,6 +6,8 @@ pub mod db;
 pub mod dto;
 pub mod error;
 pub mod events;
+pub mod launchers;
+pub mod services;
 pub mod state;
 pub mod util;
 
@@ -18,81 +20,80 @@ use crate::state::{AppPaths, AppState};
 /// handler. Keep it in the order of src/lib/api/api.ts.
 pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static
 {
-    use commands::*;
     tauri::generate_handler![
         // Session & account
-        session::get_session,
-        session::sign_in,
-        session::sign_out,
-        session::link_identity,
-        session::unlink_identity,
-        session::update_profile,
-        session::reset_friend_code,
-        session::delete_account,
+        commands::session::get_session,
+        commands::session::sign_in,
+        commands::session::sign_out,
+        commands::session::link_identity,
+        commands::session::unlink_identity,
+        commands::session::update_profile,
+        commands::session::reset_friend_code,
+        commands::session::delete_account,
         // Launchers
-        launchers::list_launchers,
-        launchers::detect_launchers,
-        launchers::add_launcher,
-        launchers::remove_launcher,
-        launchers::list_detected_instances,
+        commands::launchers::list_launchers,
+        commands::launchers::detect_launchers,
+        commands::launchers::add_launcher,
+        commands::launchers::remove_launcher,
+        commands::launchers::list_detected_instances,
         // Instances
-        instances::list_instances,
-        instances::get_instance,
-        instances::track_instances,
-        instances::track_folder,
-        instances::untrack_instance,
-        instances::update_instance,
-        instances::rescan_instance,
-        instances::open_in_launcher,
-        instances::open_instance_folder,
-        instances::set_content_enabled,
-        instances::restore_backup,
-        instances::set_share_mode,
-        instances::set_optional_installed,
+        commands::instances::list_instances,
+        commands::instances::get_instance,
+        commands::instances::track_instances,
+        commands::instances::track_folder,
+        commands::instances::untrack_instance,
+        commands::instances::update_instance,
+        commands::instances::rescan_instance,
+        commands::instances::open_in_launcher,
+        commands::instances::open_instance_folder,
+        commands::instances::set_content_enabled,
+        commands::instances::restore_backup,
+        commands::instances::set_share_mode,
+        commands::instances::set_optional_installed,
         // Sharing
-        sharing::list_shared_instances,
-        sharing::get_shared_instance,
-        sharing::accept_invite,
-        sharing::decline_invite,
-        sharing::prepare_publish,
-        sharing::share_instance,
-        sharing::publish_instance,
-        sharing::preview_sync,
-        sharing::sync_instance,
-        sharing::revert_local_changes,
-        sharing::update_shared_instance,
-        sharing::invite_to_shared_instance,
-        sharing::set_shared_member_role,
-        sharing::remove_shared_member,
-        sharing::unshare_from_group,
-        sharing::transfer_shared_instance,
-        sharing::leave_shared_instance,
-        sharing::archive_shared_instance,
+        commands::sharing::list_shared_instances,
+        commands::sharing::get_shared_instance,
+        commands::sharing::accept_invite,
+        commands::sharing::decline_invite,
+        commands::sharing::prepare_publish,
+        commands::sharing::share_instance,
+        commands::sharing::publish_instance,
+        commands::sharing::preview_sync,
+        commands::sharing::sync_instance,
+        commands::sharing::revert_local_changes,
+        commands::sharing::update_shared_instance,
+        commands::sharing::invite_to_shared_instance,
+        commands::sharing::set_shared_member_role,
+        commands::sharing::remove_shared_member,
+        commands::sharing::unshare_from_group,
+        commands::sharing::transfer_shared_instance,
+        commands::sharing::leave_shared_instance,
+        commands::sharing::archive_shared_instance,
         // Friends
-        friends::list_friends,
-        friends::list_friend_requests,
-        friends::preview_friend_code,
-        friends::send_friend_request,
-        friends::respond_to_friend_request,
-        friends::cancel_friend_request,
-        friends::remove_friend,
-        friends::block_user,
+        commands::friends::list_friends,
+        commands::friends::list_friend_requests,
+        commands::friends::preview_friend_code,
+        commands::friends::send_friend_request,
+        commands::friends::respond_to_friend_request,
+        commands::friends::cancel_friend_request,
+        commands::friends::remove_friend,
+        commands::friends::block_user,
         // Groups
-        groups::list_groups,
-        groups::get_group,
-        groups::create_group,
-        groups::update_group,
-        groups::delete_group,
-        groups::create_group_invite,
-        groups::revoke_group_invite,
-        groups::preview_group_invite,
-        groups::join_group,
-        groups::set_group_member_role,
-        groups::remove_group_member,
-        groups::transfer_group,
+        commands::groups::list_groups,
+        commands::groups::get_group,
+        commands::groups::create_group,
+        commands::groups::update_group,
+        commands::groups::delete_group,
+        commands::groups::create_group_invite,
+        commands::groups::revoke_group_invite,
+        commands::groups::preview_group_invite,
+        commands::groups::join_group,
+        commands::groups::set_group_member_role,
+        commands::groups::remove_group_member,
+        commands::groups::transfer_group,
         // Activity
-        activity::list_activity,
-        activity::mark_activity_read,
+        commands::activity::list_activity,
+        commands::activity::mark_activity_read,
     ]
 }
 
@@ -123,7 +124,18 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     tracing::info!(root = %paths.root.display(), "starting Atlas");
 
     let db = tauri::async_runtime::block_on(db::open(&paths.database()))?;
-    app.manage(AppState { db, paths });
+    let state = AppState::new(db, paths);
+    app.manage(state.clone());
+
+    // Background work that mustn't hold up the window: find launchers, then
+    // re-read every tracked instance's metadata (renames, version changes, missing folders).
+    let handle = app.handle().clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = services::launchers::ensure_detected(&state).await {
+            tracing::warn!(error = %e, "launcher detection failed");
+        }
+        services::instances::refresh_all(&state, &handle).await;
+    });
     Ok(())
 }
 

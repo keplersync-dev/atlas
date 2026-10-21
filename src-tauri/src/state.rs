@@ -5,13 +5,26 @@
 //! task can take its own copy.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use sqlx::SqlitePool;
+use tokio::sync::OnceCell;
 
 #[derive(Clone)]
 pub struct AppState {
     pub db: SqlitePool,
     pub paths: AppPaths,
+    /// Look for launchers in their default folders. Off in tests, so results don't
+    /// depend on what's installed on the machine running them.
+    pub auto_detect: bool,
+    /// Set once launcher detection has run this session (see services::launchers).
+    pub detected: Arc<OnceCell<()>>,
+}
+
+impl AppState {
+    pub fn new(db: SqlitePool, paths: AppPaths) -> Self {
+        Self { db, paths, auto_detect: true, detected: Arc::new(OnceCell::new()) }
+    }
 }
 
 /// Atlas's own folders under `%APPDATA%\dev.keplerhaloxx.atlas` (data-plan §2).

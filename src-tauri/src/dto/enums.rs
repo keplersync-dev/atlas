@@ -80,6 +80,19 @@ wire_enum!(
     ConfigChoice { Mine, Theirs }
 );
 
+/// An enum's wire string ("update_available"), for storing in TEXT columns.
+pub fn to_wire<T: Serialize>(value: T) -> String {
+    match serde_json::to_value(value) {
+        Ok(serde_json::Value::String(s)) => s,
+        other => panic!("not a string enum: {other:?}"),
+    }
+}
+
+/// Parse a wire string from a TEXT column. None for values this build doesn't know.
+pub fn from_wire<T: serde::de::DeserializeOwned>(s: &str) -> Option<T> {
+    serde_json::from_value(serde_json::Value::String(s.to_owned())).ok()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
