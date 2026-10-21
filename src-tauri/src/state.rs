@@ -4,7 +4,7 @@
 //! (docs/tauri-plan.md §4.2). Everything inside is cheap to clone, so a background
 //! task can take its own copy.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -29,6 +29,12 @@ pub struct AppState {
     pub watcher: Arc<Watcher>,
     /// One scan at a time per instance (the watcher, a rescan and tracking can overlap).
     pub scan_locks: Arc<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
+    /// For calls to Modrinth (and later the Atlas server). Identifies Atlas, as Modrinth asks.
+    pub http: reqwest::Client,
+    /// Modrinth API base URL. None = don't look files up (tests).
+    pub modrinth_api: Option<String>,
+    /// Instances with a lookup in flight, so a burst of scans doesn't ask twice.
+    pub resolving: Arc<Mutex<HashSet<String>>>,
 }
 
 impl AppState {
@@ -41,6 +47,13 @@ impl AppState {
             running: Running::default(),
             watcher: Arc::new(Watcher::new()),
             scan_locks: Arc::default(),
+            http: reqwest::Client::builder()
+                .user_agent(concat!("keplerhaloxx/atlas/", env!("CARGO_PKG_VERSION")))
+                .timeout(std::time::Duration::from_secs(20))
+                .build()
+                .expect("http client"),
+            modrinth_api: Some(crate::resolve::modrinth::API.to_string()),
+            resolving: Arc::default(),
         }
     }
 

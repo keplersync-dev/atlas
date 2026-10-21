@@ -28,6 +28,7 @@ impl TestApp {
         let db = tauri::async_runtime::block_on(atlas_lib::db::open_in_memory()).unwrap();
         let mut state = AppState::new(db, AppPaths::new(&dir.0.join("appdata")));
         state.auto_detect = false;
+        state.modrinth_api = None; // never call Modrinth from tests
         app.manage(state);
         let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()

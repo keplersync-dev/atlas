@@ -6,6 +6,8 @@
 //! - A file whose path, size and modified time haven't changed keeps its hashes.
 //! - Rows keep their ids across scans (the UI keys on them) and their share settings.
 //! - A missing managed optional file means "not installed", not deleted (tauri-plan §9.1).
+//! - Jars are read for their name, version and mod id (metadata.rs). A mod updated in the
+//!   launcher (old jar gone, new jar with the same mod id, in one scan) keeps its share setting.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -14,7 +16,8 @@ use std::time::UNIX_EPOCH;
 use sqlx::SqlitePool;
 
 use super::hash::{Hashes, hash_file};
-use crate::db::content::{self, ContentRow, NewFile};
+use super::metadata::{ModInfo, read_jar};
+use crate::db::content::{self, ContentRow, FileFacts, NewFile};
 use crate::dto::{ContentKind, ShareMode, from_wire, to_wire};
 use crate::error::{AppError, AppResult};
 
@@ -104,19 +107,28 @@ fn display_name(path: &str) -> String {
         .unwrap_or_else(|| path.to_string())
 }
 
-/// Hash files on up to 4 threads. Blocking. Order of results matches `files`.
-fn hash_all(files: &[PathBuf]) -> Vec<std::io::Result<Hashes>> {
+/// A hashed file plus what it says about itself (jars only).
+struct Read {
+    hashes: Hashes,
+    info: ModInfo,
+}
+
+/// Hash (and, for jars, read) files on up to 4 threads. Blocking. Results match `files`.
+fn read_all(files: &[PathBuf]) -> Vec<std::io::Result<Read>> {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
     let next = AtomicUsize::new(0);
-    let results: Mutex<Vec<Option<std::io::Result<Hashes>>>> =
+    let results: Mutex<Vec<Option<std::io::Result<Read>>>> =
         Mutex::new((0..files.len()).map(|_| None).collect());
     std::thread::scope(|s| {
         for _ in 0..4.min(files.len()) {
             s.spawn(|| loop {
                 let i = next.fetch_add(1, Ordering::Relaxed);
                 let Some(path) = files.get(i) else { break };
-                let r = hash_file(path);
+                let r = hash_file(path).map(|hashes| Read {
+                    info: if has_extension(&path.to_string_lossy(), "jar") { read_jar(path) } else { ModInfo::default() },
+                    hashes,
+                });
                 results.lock().unwrap()[i] = Some(r);
             });
         }
@@ -156,8 +168,8 @@ pub async fn scan(db: &SqlitePool, instance_id: &str, game_dir: &Path) -> AppRes
         .filter(|f| by_path.get(&f.path.to_lowercase()).is_none_or(|r| !unchanged(f, r)))
         .collect();
     let paths: Vec<PathBuf> = to_hash.iter().map(|f| f.absolute.clone()).collect();
-    let hashes = blocking(move || hash_all(&paths)).await?;
-    let hashed: HashMap<String, Hashes> = to_hash
+    let hashes = blocking(move || read_all(&paths)).await?;
+    let hashed: HashMap<String, Read> = to_hash
         .iter()
         .zip(hashes)
         .filter_map(|(f, h)| match h {
@@ -168,6 +180,18 @@ pub async fn scan(db: &SqlitePool, instance_id: &str, game_dir: &Path) -> AppRes
                 None
             }
         })
+        .collect();
+
+    // Rows whose file is gone this scan, by mod id: an updated mod's new jar takes over
+    // the old one's share setting.
+    let on_disk: std::collections::HashSet<String> = files.iter().map(|f| f.path.to_lowercase()).collect();
+    let gone: Vec<&ContentRow> = rows
+        .iter()
+        .filter(|r| r.installed && !on_disk.contains(&r.path.to_lowercase()))
+        .collect();
+    let inherited: HashMap<(&str, &str), &str> = gone
+        .iter()
+        .filter_map(|r| Some(((r.kind.as_str(), r.mod_id.as_deref()?), r.share_mode.as_str())))
         .collect();
 
     let mut result = ScanResult::default();
@@ -181,7 +205,8 @@ pub async fn scan(db: &SqlitePool, instance_id: &str, game_dir: &Path) -> AppRes
                     result.updated += 1;
                 }
             }
-            (Some(r), Some(h)) => {
+            (Some(r), Some(read)) => {
+                let h = &read.hashes;
                 if r.sha1 == h.sha1 {
                     // Same bytes, new timestamp (copied, touched) or re-enabled.
                     content::touch_file(&mut tx, &r.id, f.enabled, f.size as i64, f.mtime_ms).await?;
@@ -189,29 +214,23 @@ pub async fn scan(db: &SqlitePool, instance_id: &str, game_dir: &Path) -> AppRes
                         result.updated += 1;
                     }
                 } else {
-                    content::replace_file(
-                        &mut tx, &r.id, f.enabled, f.size as i64, f.mtime_ms,
-                        &h.sha1, &h.sha256, h.murmur2 as i64, &display_name(&f.path),
-                    )
-                    .await?;
+                    let name = read.info.name.clone().unwrap_or_else(|| display_name(&f.path));
+                    content::replace_file(&mut tx, &r.id, facts(f, read, &name)).await?;
                     result.updated += 1;
                 }
             }
-            (None, Some(h)) => {
+            (None, Some(read)) => {
+                let kind = to_wire(f.kind);
+                let name = read.info.name.clone().unwrap_or_else(|| display_name(&f.path));
+                let share_mode = read
+                    .info
+                    .mod_id
+                    .as_deref()
+                    .and_then(|id| inherited.get(&(kind.as_str(), id)).copied())
+                    .unwrap_or("required");
                 content::insert_file(
                     &mut tx,
-                    NewFile {
-                        instance_id,
-                        kind: &to_wire(f.kind),
-                        path: &f.path,
-                        enabled: f.enabled,
-                        size_bytes: f.size as i64,
-                        mtime_ms: f.mtime_ms,
-                        sha1: &h.sha1,
-                        sha256: &h.sha256,
-                        murmur2: h.murmur2 as i64,
-                        name: &display_name(&f.path),
-                    },
+                    NewFile { instance_id, kind: &kind, path: &f.path, facts: facts(f, read, &name), share_mode },
                 )
                 .await?;
                 result.added += 1;
@@ -221,8 +240,7 @@ pub async fn scan(db: &SqlitePool, instance_id: &str, game_dir: &Path) -> AppRes
     }
 
     // Rows whose file is gone.
-    let on_disk: std::collections::HashSet<String> = files.iter().map(|f| f.path.to_lowercase()).collect();
-    for r in rows.iter().filter(|r| r.installed && !on_disk.contains(&r.path.to_lowercase())) {
+    for r in gone {
         let optional = from_wire::<ShareMode>(&r.share_mode) == Some(ShareMode::Optional);
         if r.is_managed && optional {
             content::mark_not_installed(&mut tx, &r.id).await?;
@@ -233,6 +251,21 @@ pub async fn scan(db: &SqlitePool, instance_id: &str, game_dir: &Path) -> AppRes
     }
     tx.commit().await?;
     Ok(result)
+}
+
+fn facts<'a>(f: &DiskFile, read: &'a Read, name: &'a str) -> FileFacts<'a> {
+    FileFacts {
+        enabled: f.enabled,
+        size_bytes: f.size as i64,
+        mtime_ms: f.mtime_ms,
+        sha1: &read.hashes.sha1,
+        sha256: &read.hashes.sha256,
+        murmur2: read.hashes.murmur2 as i64,
+        name,
+        version_label: read.info.version.as_deref(),
+        author: read.info.authors.as_deref(),
+        mod_id: read.info.mod_id.as_deref(),
+    }
 }
 
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> AppResult<T> {
@@ -386,6 +419,44 @@ mod tests {
         f.write("mods/iris.jar", b"iris");
         assert_eq!(f.scan().await.updated, 1);
         assert!(f.rows().await[0].installed);
+    }
+
+    fn write_jar(f: &Fixture, rel: &str, mod_id: &str, name: &str, version: &str) {
+        use std::io::Write;
+        let mut z = zip::ZipWriter::new(std::fs::File::create(f.dir.join(rel)).unwrap());
+        z.start_file("fabric.mod.json", zip::write::SimpleFileOptions::default()).unwrap();
+        let json = format!(r#"{{"id":"{mod_id}","name":"{name}","version":"{version}","authors":["Someone"]}}"#);
+        z.write_all(json.as_bytes()).unwrap();
+        z.finish().unwrap();
+    }
+
+    #[tokio::test]
+    async fn jars_get_their_own_name_and_updates_keep_the_share_setting() {
+        let f = Fixture::new().await;
+        write_jar(&f, "mods/sodium-0.5.jar", "sodium", "Sodium", "0.5.0");
+        f.write("resourcepacks/Faithful 32x.zip", b"pack");
+        f.scan().await;
+        let rows = f.rows().await;
+        let sodium = &rows[0];
+        assert_eq!(sodium.name, "Sodium");
+        assert_eq!(sodium.version_label.as_deref(), Some("0.5.0"));
+        assert_eq!(sodium.author.as_deref(), Some("Someone"));
+        assert_eq!(sodium.mod_id.as_deref(), Some("sodium"));
+        assert_eq!(rows[1].name, "Faithful 32x", "packs keep their file name");
+        content::set_share_mode(&f.pool, &sodium.id, "optional").await.unwrap();
+
+        // Updated in the launcher: old jar replaced by a new file name, same mod id.
+        std::fs::remove_file(f.dir.join("mods/sodium-0.5.jar")).unwrap();
+        write_jar(&f, "mods/sodium-0.6.jar", "sodium", "Sodium", "0.6.0");
+        write_jar(&f, "mods/lithium.jar", "lithium", "Lithium", "1.0");
+        assert_eq!(f.scan().await, ScanResult { added: 2, updated: 0, removed: 1 });
+        let rows = f.rows().await;
+        let new = rows.iter().find(|r| r.path == "mods/sodium-0.6.jar").unwrap();
+        assert_eq!(new.version_label.as_deref(), Some("0.6.0"));
+        assert_eq!(new.share_mode, "optional", "carried over from 0.5");
+        assert_eq!(new.published_share_mode, None, "the new jar itself was never published");
+        let lithium = rows.iter().find(|r| r.path == "mods/lithium.jar").unwrap();
+        assert_eq!(lithium.share_mode, "required", "unrelated new mods start Required");
     }
 
     #[tokio::test]

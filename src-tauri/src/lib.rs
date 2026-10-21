@@ -8,6 +8,7 @@ pub mod error;
 pub mod events;
 pub mod game;
 pub mod launchers;
+pub mod resolve;
 pub mod scan;
 pub mod services;
 pub mod state;

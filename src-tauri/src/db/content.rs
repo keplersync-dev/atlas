@@ -17,6 +17,7 @@ pub struct ContentRow {
     pub sha1: String,
     pub sha256: String,
     pub murmur2: Option<i64>,
+    pub mod_id: Option<String>,
     pub source: String,
     pub project_id: Option<String>,
     pub version_id: Option<String>,
@@ -74,11 +75,8 @@ pub async fn list(db: &SqlitePool, instance_id: &str) -> sqlx::Result<Vec<Conten
 // can apply a whole scan in one transaction: pass `&mut *tx`.
 
 
-/// A file the scanner found that has no row yet. New files are shared as Required.
-pub struct NewFile<'a> {
-    pub instance_id: &'a str,
-    pub kind: &'a str,
-    pub path: &'a str,
+/// What the scanner read from a file: hashes plus what the file says about itself.
+pub struct FileFacts<'a> {
     pub enabled: bool,
     pub size_bytes: i64,
     pub mtime_ms: i64,
@@ -86,25 +84,43 @@ pub struct NewFile<'a> {
     pub sha256: &'a str,
     pub murmur2: i64,
     pub name: &'a str,
+    pub version_label: Option<&'a str>,
+    pub author: Option<&'a str>,
+    pub mod_id: Option<&'a str>,
+}
+
+/// A file the scanner found that has no row yet.
+pub struct NewFile<'a> {
+    pub instance_id: &'a str,
+    pub kind: &'a str,
+    pub path: &'a str,
+    pub facts: FileFacts<'a>,
+    /// "required" for a brand-new file; the old version's setting for an updated mod.
+    pub share_mode: &'a str,
 }
 
 pub async fn insert_file(c: &mut SqliteConnection, f: NewFile<'_>) -> sqlx::Result<()> {
     sqlx::query(
         "INSERT INTO instance_content (id, instance_id, kind, path, enabled, size_bytes, mtime_ms,
-            sha1, sha256, murmur2, source, name, side, is_managed, share_mode, installed)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', ?, 'both', 0, 'required', 1)",
+            sha1, sha256, murmur2, mod_id, source, name, version_label, author, side, is_managed,
+            share_mode, installed)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local', ?, ?, ?, 'both', 0, ?, 1)",
     )
     .bind(crate::util::ids::new_id())
     .bind(f.instance_id)
     .bind(f.kind)
     .bind(f.path)
-    .bind(f.enabled)
-    .bind(f.size_bytes)
-    .bind(f.mtime_ms)
-    .bind(f.sha1)
-    .bind(f.sha256)
-    .bind(f.murmur2)
-    .bind(f.name)
+    .bind(f.facts.enabled)
+    .bind(f.facts.size_bytes)
+    .bind(f.facts.mtime_ms)
+    .bind(f.facts.sha1)
+    .bind(f.facts.sha256)
+    .bind(f.facts.murmur2)
+    .bind(f.facts.mod_id)
+    .bind(f.facts.name)
+    .bind(f.facts.version_label)
+    .bind(f.facts.author)
+    .bind(f.share_mode)
     .execute(c)
     .await?;
     Ok(())
@@ -112,32 +128,24 @@ pub async fn insert_file(c: &mut SqliteConnection, f: NewFile<'_>) -> sqlx::Resu
 
 /// The file at an existing row's path is a different file now (new hash): keep the
 /// row (and its share setting) but forget where it came from until it's resolved again.
-#[allow(clippy::too_many_arguments)]
-pub async fn replace_file(
-    c: &mut SqliteConnection,
-    id: &str,
-    enabled: bool,
-    size_bytes: i64,
-    mtime_ms: i64,
-    sha1: &str,
-    sha256: &str,
-    murmur2: i64,
-    name: &str,
-) -> sqlx::Result<()> {
+pub async fn replace_file(c: &mut SqliteConnection, id: &str, f: FileFacts<'_>) -> sqlx::Result<()> {
     sqlx::query(
         "UPDATE instance_content SET enabled = ?, size_bytes = ?, mtime_ms = ?, sha1 = ?, sha256 = ?,
-            murmur2 = ?, installed = 1, source = 'local', project_id = NULL, version_id = NULL, name = ?,
-            version_label = NULL, author = NULL, icon_url = NULL, download_url = NULL, page_url = NULL,
+            murmur2 = ?, mod_id = ?, installed = 1, source = 'local', project_id = NULL, version_id = NULL,
+            name = ?, version_label = ?, author = ?, icon_url = NULL, download_url = NULL, page_url = NULL,
             side = 'both', resolved_at = NULL
          WHERE id = ?",
     )
-    .bind(enabled)
-    .bind(size_bytes)
-    .bind(mtime_ms)
-    .bind(sha1)
-    .bind(sha256)
-    .bind(murmur2)
-    .bind(name)
+    .bind(f.enabled)
+    .bind(f.size_bytes)
+    .bind(f.mtime_ms)
+    .bind(f.sha1)
+    .bind(f.sha256)
+    .bind(f.murmur2)
+    .bind(f.mod_id)
+    .bind(f.name)
+    .bind(f.version_label)
+    .bind(f.author)
     .bind(id)
     .execute(c)
     .await?;

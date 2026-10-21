@@ -254,7 +254,28 @@ pub async fn rescan<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) 
     if meta_changed || files_changed {
         emit(app, AtlasEvent::InstanceChanged { instance_id: id.to_string() });
     }
+    if row.status() == InstanceStatus::Ready {
+        look_up_in_background(state, app, id);
+    }
     summary_of(state, &row).await
+}
+
+/// Identify unknown files on Modrinth without holding up the scan. Sends
+/// `instance.changed` when names, versions or icons arrive.
+fn look_up_in_background<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) {
+    let Some(api) = state.modrinth_api.clone() else { return };
+    if !state.resolving.lock().unwrap().insert(id.to_string()) {
+        return; // already looking
+    }
+    let (state, app, id) = (state.clone(), app.clone(), id.to_string());
+    tauri::async_runtime::spawn(async move {
+        match crate::resolve::resolve_instance(&state.db, &state.http, &api, &id).await {
+            Ok(0) => {}
+            Ok(_) => emit(&app, AtlasEvent::InstanceChanged { instance_id: id.clone() }),
+            Err(e) => tracing::warn!(instance = %id, error = %e, "saving lookups failed"),
+        }
+        state.resolving.lock().unwrap().remove(&id);
+    });
 }
 
 /// Rescan every tracked instance whose last scan is older than `older_than`
