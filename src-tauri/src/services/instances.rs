@@ -1,7 +1,6 @@
 //! Tracked instances: tracking, summaries for the UI, metadata refresh, opening.
 //!
-//! A rescan = launcher metadata (T1) + the file scan (T2). Sync info (T4/T7) is still
-//! a placeholder here.
+//! A rescan = launcher metadata + the file scan.
 
 use std::path::Path;
 use std::time::Duration;
@@ -239,7 +238,7 @@ pub async fn track_folder<R: Runtime>(
             meta: Metadata {
                 name,
                 icon: None,
-                // No launcher metadata to read. T3 can guess from the mods' own metadata.
+                // No launcher metadata to read; versions could be guessed from the mods.
                 minecraft_version: None,
                 loader: None,
                 loader_version: None,
@@ -279,7 +278,7 @@ pub async fn update(
 ) -> AppResult<InstanceSummary> {
     row(state, id).await?;
     db::instances::update_prefs(&state.db, id, patch.is_favorite, patch.hide_activity).await?;
-    // T6: if hideActivity changed while this instance is running, resend presence.
+    // TODO: if hideActivity changed while this instance is running, resend presence.
     summary_of(state, &row(state, id).await?).await
 }
 

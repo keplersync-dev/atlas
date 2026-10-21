@@ -42,7 +42,7 @@ pub struct SharedGroupLink {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OptionalItem {
-    /// Provider project id, or the file's sha256 for uploads (tauri-plan §11.1).
+    /// Provider project id, or the file's sha256 for uploads.
     pub key: String,
     pub name: String,
     pub kind: ContentKind,

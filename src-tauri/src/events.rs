@@ -2,8 +2,7 @@
 //!
 //! Everything goes out on one channel, `atlas://event`, which src/lib/api/tauri.ts
 //! listens to. Most events mean "refetch"; `instance.progress` and `presence.changed`
-//! carry the new data. See docs/tauri-plan.md §7 for who emits what, and the
-//! required order of events at the end of a job.
+//! carry the new data. jobs.rs documents the order of events at the end of a job.
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Runtime};

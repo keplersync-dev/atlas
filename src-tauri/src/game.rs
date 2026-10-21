@@ -1,8 +1,8 @@
-//! Is the game running from a tracked folder? (docs/tauri-plan.md §9.4)
+//! Is the game running from a tracked folder?
 //!
 //! Every 3 seconds, look at Java processes. One belongs to an instance when its
 //! `--gameDir` argument or its working directory is that instance's game dir.
-//! Commands refuse to write files while it runs; sync jobs (T4) wait instead.
+//! Commands refuse to write files while it runs; sync jobs wait instead.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -76,7 +76,7 @@ async fn update<R: Runtime>(state: &AppState, app: &AppHandle<R>, running_dirs: 
                 is_running,
             },
         );
-        // T6: send presence ("playing" + instance name unless hidden).
+        // TODO: send presence ("playing" + instance name unless hidden).
     }
 }
 

@@ -3,7 +3,7 @@
 //!
 //! It reads src/lib/api/tauri.ts, so adding a call there without a Rust command (or
 //! renaming an argument on one side only) fails here instead of at runtime. A command
-//! may answer with an error (most are T0 stubs); what it must not do is be missing or
+//! may answer with an error (many need the server and aren't built yet); what it must not do is be missing or
 //! reject the arguments, which is what a mismatch looks like.
 
 mod common;

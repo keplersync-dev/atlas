@@ -1,4 +1,4 @@
-//! What a mod says about itself, read from inside its jar (tauri-plan §9.1 step 5).
+//! What a mod says about itself, read from inside its jar.
 //!
 //! Gives a readable name and version before (or without) a Modrinth match, and the mod's
 //! own id, which is how Atlas recognises a mod across updates: "sodium-0.5.jar" replaced

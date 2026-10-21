@@ -1,5 +1,5 @@
-//! The manifest: a shareable description of an instance (data-plan §4,
-//! tests/fixtures/manifest.example.json). Moves into the shared `atlas-protocol` crate in T5,
+//! The manifest: a shareable description of an instance (see
+//! tests/fixtures/manifest.example.json). Will move into a crate shared with the server,
 //! so the server validates and hashes exactly the same way.
 
 use std::collections::HashSet;
@@ -74,7 +74,7 @@ fn yes() -> bool {
 }
 
 impl Entry {
-    /// Identifies "the same item" across versions (tauri-plan §11.1): the provider's
+    /// Identifies "the same item" across versions: the provider's
     /// project id, or the file hash for uploads. Also `OptionalItem.key`.
     pub fn key(&self) -> &str {
         self.project_id.as_deref().unwrap_or(&self.sha256)
@@ -90,7 +90,7 @@ pub struct Override {
     pub size_bytes: u64,
 }
 
-// ── Validation (backend-plan §6.2) ─────────────────────────────────────
+// ── Validation ─────────────────────────────────────
 // A manifest decides where files are written on other people's PCs: treat it as hostile.
 
 pub const MAX_BYTES: usize = 2 * 1024 * 1024;

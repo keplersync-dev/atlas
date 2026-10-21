@@ -1,4 +1,4 @@
-//! Sync state, computed when a response is built and never stored (tauri-plan §10).
+//! Sync state, computed when a response is built and never stored.
 //! Pure functions: the same rules as `localChanges` / `refreshSyncState` in the mock
 //! (src/lib/api/mock.ts), plus deleted files, which the mock can't model.
 

@@ -1,4 +1,4 @@
-//! `setting` table: app settings as JSON values (data-plan §5).
+//! `setting` table: app settings as JSON values.
 //! Keys so far: `backups_to_keep` (3), `dev_source:<shared id>` (debug builds, sync/source.rs).
 
 use serde::{Serialize, de::DeserializeOwned};

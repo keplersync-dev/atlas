@@ -1,4 +1,4 @@
-//! Decide what an update does to a folder (tauri-plan §12.2–12.3). Pure: no files, no
+//! Decide what an update does to a folder. Pure: no files, no
 //! network. The same planner drives updates, first installs, revert and installing an
 //! optional item: they only differ in the target revision and which optional items are wanted.
 //!

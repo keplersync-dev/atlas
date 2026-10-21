@@ -1,5 +1,5 @@
 //! When a new version needs a different Minecraft or loader version: Prism/MultiMC
-//! instances are updated by editing `mmc-pack.json` (tauri-plan §12.3 step 7). Other
+//! instances are updated by editing `mmc-pack.json`. Other
 //! launchers can't be edited safely; the review screen tells the user what to change.
 
 use std::path::Path;

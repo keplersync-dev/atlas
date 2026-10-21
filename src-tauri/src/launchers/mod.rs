@@ -1,10 +1,10 @@
-//! Launcher adapters: read the instances other launchers created (docs/tauri-plan.md §8).
+//! Launcher adapters: read the instances other launchers created.
 //!
 //! One small module per launcher, each tested against sample files in
 //! tests/fixtures/<launcher>/. Launchers change their formats now and then; when one
 //! breaks, only its module and fixtures change.
 //!
-//! Adapters only read files (and open the launcher). They never write anything in T1.
+//! Adapters only read files (and open the launcher). They never write anything.
 
 mod curseforge;
 mod modrinth;
@@ -79,8 +79,8 @@ pub fn display_name(kind: LauncherKind) -> &'static str {
     }
 }
 
-/// Atlas can create instances there (for accepting invites, T7).
-/// Modrinth App stays off until its import flow is verified (tauri-plan §12.5).
+/// Atlas can create instances there (for accepting invites).
+/// The Modrinth App stays off until its import flow is verified.
 pub fn can_create_instances(kind: LauncherKind) -> bool {
     matches!(kind, LauncherKind::Prism | LauncherKind::Multimc)
 }

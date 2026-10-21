@@ -1,7 +1,7 @@
 //! Rust mirrors of src/lib/types.ts — the shapes the UI receives and sends.
 //!
 //! Keep these in the same order as types.ts so they're easy to compare side by side.
-//! Rules (docs/tauri-plan.md §6):
+//! Rules:
 //! - structs are `rename_all = "camelCase"`, enum values are snake_case strings;
 //! - `T | null` is `Option<T>` and serializes as `null` (never skipped);
 //! - DTOs are separate from database rows: services convert rows into these.

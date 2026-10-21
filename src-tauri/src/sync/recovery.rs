@@ -1,4 +1,4 @@
-//! Crash safety (tauri-plan §12.6): if Atlas stopped in the middle of applying an update,
+//! Crash safety: if Atlas stopped in the middle of applying an update,
 //! the folder is put back exactly as it was, using the journal and the backup.
 //!
 //! Runs at startup, before anything else touches instance folders.

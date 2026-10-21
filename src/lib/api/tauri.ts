@@ -14,7 +14,7 @@ async function call<T>(
   try {
     return await invoke<T>(command, args);
   } catch (e) {
-    // Rust commands return Err(AppError) serialised as { code, message } (see docs/backend-plan.md).
+    // Rust commands return Err(AppError) serialised as { code, message }.
     const err = e as { code?: ApiError["code"]; message?: string };
     throw new ApiError(err.code ?? "unknown", err.message ?? String(e));
   }

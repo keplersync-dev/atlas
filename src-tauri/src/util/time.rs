@@ -1,6 +1,6 @@
 use chrono::{DateTime, SecondsFormat, Utc};
 
-/// Now as ISO-8601 UTC with millis: "2026-10-19T16:39:00.000Z" (data-plan §3).
+/// Now as ISO-8601 UTC with millis: "2026-10-19T16:39:00.000Z".
 pub fn now_iso() -> String {
     iso(Utc::now())
 }

@@ -1,5 +1,5 @@
 //! `backup` table: snapshots taken before an update, revert or restore.
-//! T1 only reads it; the sync engine (T4) writes it.
+//! Written by the sync engine (sync/backup.rs).
 
 use sqlx::{FromRow, SqlitePool};
 

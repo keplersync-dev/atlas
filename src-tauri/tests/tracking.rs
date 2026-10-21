@@ -1,4 +1,4 @@
-//! T1 end to end, through the same IPC the UI uses: add launchers (the fixture
+//! End to end, through the same IPC the UI uses: add launchers (the fixture
 //! installs), see their instances, track some, change preferences, untrack.
 
 mod common;

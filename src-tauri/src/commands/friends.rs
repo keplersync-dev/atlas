@@ -1,4 +1,4 @@
-// T0 stubs: remove this allow as the commands get real bodies (phase T6).
+// Not built yet: these need the Atlas server.
 #![allow(unused_variables)]
 
 use crate::dto::{Friend, FriendRequest, Id, PublicUser};

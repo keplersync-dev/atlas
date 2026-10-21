@@ -1,5 +1,5 @@
 //! Long work on an instance folder (update, accept, restore, revert, optional download),
-//! one job per instance at a time (docs/tauri-plan.md §7.2).
+//! one job per instance at a time.
 //!
 //! The job manager owns the runtime-only parts of `InstanceSummary`: `status: "syncing"`
 //! and `progress`. Every job ends the same way, which the UI relies on (Review.svelte

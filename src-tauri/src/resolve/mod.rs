@@ -1,11 +1,11 @@
-//! Where files come from: look unknown files up by hash (docs/tauri-plan.md §9.3).
+//! Where files come from: look unknown files up by hash.
 //!
 //! Runs in the background after a scan, for rows still `source = 'local'` that were never
 //! looked up or were last looked up over a week ago. A match fills in the Modrinth project,
 //! version, title, icon, download and page links. Offline or rate-limited: nothing is
 //! marked, so the next scan simply tries again.
 //!
-//! CurseForge comes later (T5): its API key must stay on the Atlas server, so those lookups
+//! CurseForge comes later: its API key must stay on the Atlas server, so those lookups
 //! go through `POST /v1/resolve/curseforge` with the murmur2 fingerprints.
 
 pub mod modrinth;

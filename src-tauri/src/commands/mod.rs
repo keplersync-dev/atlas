@@ -4,9 +4,8 @@
 //! argument names must match src/lib/api/tauri.ts (Tauri turns the UI's camelCase keys
 //! into these snake_case parameters). tests/contract.rs checks that for every command.
 //!
-//! Phase T0: everything is registered. Commands that later phases build return the
-//! errors from docs/tauri-plan.md §5 for now: social ones `not_signed_in`, local ones
-//! "not found" (there's nothing tracked yet) or `not_built()`.
+//! Commands that aren't built yet answer `not_signed_in` (social ones) or
+//! "Not available yet" (local ones).
 
 pub mod activity;
 pub mod friends;

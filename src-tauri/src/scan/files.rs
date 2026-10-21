@@ -5,7 +5,7 @@
 //! - "x.jar.disabled" is stored as "mods/x.jar" with enabled = false (every launcher does this).
 //! - A file whose path, size and modified time haven't changed keeps its hashes.
 //! - Rows keep their ids across scans (the UI keys on them) and their share settings.
-//! - A missing managed optional file means "not installed", not deleted (tauri-plan §9.1).
+//! - A missing managed optional file means "not installed", not deleted.
 //! - Jars are read for their name, version and mod id (metadata.rs). A mod updated in the
 //!   launcher (old jar gone, new jar with the same mod id, in one scan) keeps its share setting.
 
@@ -103,7 +103,7 @@ fn has_extension(name: &str, ext: &str) -> bool {
         .is_some_and(|e| e.eq_ignore_ascii_case(ext))
 }
 
-/// What a file is called until it's identified (T3 gives it a real name).
+/// What a file is called until its metadata or Modrinth gives it a real name.
 fn display_name(path: &str) -> String {
     Path::new(path)
         .file_stem()

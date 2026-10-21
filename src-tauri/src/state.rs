@@ -1,8 +1,6 @@
 //! Shared app state, available to every command as `State<'_, AppState>`.
 //!
-//! Later phases add the job manager, game monitor, watcher and cloud client here
-//! (docs/tauri-plan.md §4.2). Everything inside is cheap to clone, so a background
-//! task can take its own copy.
+//! Everything inside is cheap to clone, so a background task can take its own copy.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -78,7 +76,7 @@ impl AppState {
     }
 }
 
-/// Atlas's own folders under `%APPDATA%\dev.keplerhaloxx.atlas` (data-plan §2).
+/// Atlas's own folders under `%APPDATA%\dev.keplerhaloxx.atlas`.
 #[derive(Debug, Clone)]
 pub struct AppPaths {
     pub root: PathBuf,

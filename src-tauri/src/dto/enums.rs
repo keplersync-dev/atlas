@@ -83,7 +83,7 @@ wire_enum!(PresenceState {
 wire_enum!(AuthProvider { Minecraft, Discord });
 
 wire_enum!(
-    /// Derived, never stored (data-plan §7).
+    /// Derived, never stored.
     SyncState { LocalOnly, UpToDate, UpdateAvailable, LocalChanges, Conflict, Frozen }
 );
 

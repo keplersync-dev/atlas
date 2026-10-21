@@ -1,4 +1,4 @@
-// T0 stubs: remove this allow as the commands get real bodies (phases T4, T7).
+// Some of these aren't built yet: they need the Atlas server.
 #![allow(unused_variables)]
 
 use crate::dto::{

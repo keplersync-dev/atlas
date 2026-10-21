@@ -1,4 +1,4 @@
-//! T4 end to end over IPC, with a dev source standing in for the server: first install,
+//! End to end over IPC, with a dev source standing in for the server: first install,
 //! update, config conflicts, revert, optional items, restore, a failed update, and
 //! recovering from a crash in the middle of applying.
 

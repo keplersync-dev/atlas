@@ -1,5 +1,5 @@
 //! `instance_content` table: the file index of each tracked instance.
-//! T1 only reads it; the scanner (T2) writes it.
+//! Written by the scanner (scan/files.rs) and the sync engine.
 
 use sqlx::{FromRow, SqliteConnection, SqlitePool};
 

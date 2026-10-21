@@ -1,5 +1,4 @@
-//! Watch tracked game folders and ask for a rescan when their content changes
-//! (docs/tauri-plan.md §9.2).
+//! Watch tracked game folders and ask for a rescan when their content changes.
 //!
 //! Each game dir is watched recursively, so content folders created later are seen too,
 //! and events are filtered down to the content folders: saves/, logs/ and the like

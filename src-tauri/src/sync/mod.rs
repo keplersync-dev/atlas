@@ -1,5 +1,4 @@
-//! The sync engine: manifests, sync state, applying versions to folders
-//! (docs/tauri-plan.md §10, §12).
+//! The sync engine: manifests, sync state, applying versions to folders.
 
 pub mod adopt;
 pub mod apply;

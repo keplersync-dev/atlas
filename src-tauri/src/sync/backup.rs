@@ -1,5 +1,5 @@
-//! Backups: copies of every file an update, revert or restore changes, taken just before
-//! (tauri-plan §12.7). Restoring undoes exactly what the backup recorded.
+//! Backups: copies of every file an update, revert or restore changes, taken just before.
+//! Restoring undoes exactly what the backup recorded.
 //!
 //!   backups/<instance id>/<backup id>/<same relative paths>
 //!   backups/<instance id>/<backup id>/state.json   the database's view before the change

@@ -1,5 +1,5 @@
 //! Apply a version to an instance folder: the body of update, first install, revert and
-//! "download this optional item" jobs (tauri-plan §12.3). Stages:
+//! "download this optional item" jobs. Stages:
 //!
 //!   waiting_for_game_exit → backup → download (→ waiting_for_manual_downloads) → apply
 //!

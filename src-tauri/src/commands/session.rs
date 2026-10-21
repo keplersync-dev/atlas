@@ -1,10 +1,10 @@
-// T0 stubs: remove this allow as the commands get real bodies (phase T5).
+// Not built yet: these need the Atlas server.
 #![allow(unused_variables)]
 
 use crate::dto::{AuthProvider, Me, Session, UpdateProfileInput};
 use crate::error::{AppError, AppResult};
 
-/// Signed out until accounts exist (T5). `online: true` so the UI shows the normal
+/// Signed out until accounts exist. `online: true` so the UI shows the normal
 /// signed-out state rather than an "offline" banner.
 #[tauri::command]
 pub async fn get_session() -> AppResult<Session> {

@@ -1,4 +1,4 @@
-//! Getting the bytes a plan needs into Atlas's cache, verified (tauri-plan §12.3 step 4–5).
+//! Getting the bytes a plan needs into Atlas's cache, verified.
 //!
 //!   cache/<sha1[0..2]>/<sha1>                    mods and packs, reused across instances
 //!   cache/blobs/<sha256[0..2]>/<sha256>          config files (only have a sha256)

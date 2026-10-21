@@ -1,6 +1,6 @@
 //! Shared-instance sync on this PC: state for summaries, preview, update, revert, restore,
-//! optional items (tauri-plan §10–§12). Versions come from a `Source` (a dev folder in T4,
-//! the Atlas server from T7).
+//! optional items. Versions come from a `Source` (a dev folder for now, the Atlas
+//! server later).
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -36,7 +36,7 @@ async fn linked(state: &AppState, row: &InstanceRow) -> AppResult<Source> {
         .ok_or_else(|| AppError::conflict("Instance is not shared"))?;
     source::for_shared(&state.db, shared)
         .await?
-        // T7: the Atlas server. Until then a shared instance without a dev source can't sync.
+        // TODO: the Atlas server. Until then a shared instance without a dev source can't sync.
         .ok_or_else(AppError::offline)
 }
 
@@ -58,7 +58,7 @@ pub async fn info(state: &AppState, row: &InstanceRow) -> AppResult<Option<Insta
     Ok(Some(InstanceSyncInfo {
         shared_instance_id: shared.to_string(),
         role,
-        owner: None, // T7: from the server
+        owner: None, // TODO: from the server
         synced_revision: synced,
         latest_revision: latest,
         state: sync_state::sync_state(frozen, synced, latest, changes),
@@ -391,7 +391,7 @@ pub async fn dev_link(
     Ok(())
 }
 
-/// Stop being linked (tauri-plan §11.5 "unlink"): the folder stays, now only on this PC.
+/// Stop being linked: the folder stays, now only on this PC.
 pub async fn unlink(state: &AppState, id: &str) -> AppResult<()> {
     let row = row(state, id).await?;
     if let Some(shared) = &row.shared_instance_id {

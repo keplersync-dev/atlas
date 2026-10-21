@@ -1,5 +1,4 @@
-//! Scanning: keep `instance_content` equal to what's in an instance's folders
-//! (docs/tauri-plan.md §9.1).
+//! Scanning: keep `instance_content` equal to what's in an instance's folders.
 
 pub mod files;
 pub mod hash;

@@ -1,13 +1,13 @@
 //! Where a shared instance's versions come from.
 //!
-//! T4 has one kind: a **dev source**, a folder standing in for the server so the sync
+//! There's one kind so far: a **dev source**, a folder standing in for the server so the sync
 //! engine can be built and tried before any server exists:
 //!
 //!   <folder>/revisions/1.json, 2.json, ...   one manifest per revision
 //!   <folder>/files/<relative path>            the bytes: files/mods/sodium.jar, files/config/a.json
 //!
-//! An instance is linked to one with the debug-only `dev_link_manifest` command. T7 adds
-//! the Atlas server (GET /shared-instances/{id}/revisions/{n}, downloads by URL).
+//! An instance is linked to one with the debug-only `dev_link_manifest` command. The Atlas
+//! server will be the other kind (GET /shared-instances/{id}/revisions/{n}, downloads by URL).
 
 use std::path::{Path, PathBuf};
 
@@ -61,7 +61,7 @@ impl Source {
         }
     }
 
-    /// A revision's manifest, validated (hostile-input rules, backend-plan §6.2).
+    /// A revision's manifest, validated (hostile-input rules).
     pub fn manifest(&self, revision: u32) -> AppResult<Manifest> {
         match self {
             Source::Dev(folder) => {

@@ -1,4 +1,4 @@
-//! Atlas desktop backend. Plan: docs/tauri-plan.md. The contract with the UI:
+//! Atlas desktop backend. The contract with the UI:
 //! src/lib/types.ts (shapes) and src/lib/api/api.ts (commands).
 
 pub mod commands;
@@ -123,7 +123,7 @@ fn init_logging(paths: &AppPaths) -> LogGuard {
     LogGuard(guard)
 }
 
-/// Startup (docs/tauri-plan.md §4.3). Must not wait on the network.
+/// Startup. Must not wait on the network.
 fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::Error>> {
     let paths = AppPaths::new(&app.path().app_data_dir()?);
     paths.create_all()?;

@@ -57,7 +57,7 @@ impl AppError {
     pub fn unknown(m: impl Into<String>) -> Self {
         Self::new(ErrorCode::Unknown, m)
     }
-    /// For local commands whose phase hasn't been built yet (docs/tauri-plan.md §20).
+    /// For local commands that aren't built yet.
     pub fn not_built() -> Self {
         Self::unknown("Not available yet")
     }

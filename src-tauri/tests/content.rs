@@ -1,4 +1,4 @@
-//! T2 end to end over IPC: an instance's files show up after a scan, can be turned
+//! End to end over IPC: an instance's files show up after a scan, can be turned
 //! on and off, get share settings, and are protected while the game runs.
 
 mod common;
