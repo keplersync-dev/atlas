@@ -5,11 +5,11 @@ use crate::dto::{
     Id, InstanceSummary, InviteInput, InviteRole, PublishInput, PublishPlan, ShareInstanceInput,
     SharedInstance, SharedInstanceDetail, SyncOptions, SyncPreview, UpdateSharedInstanceInput,
 };
-use crate::error::{AppError, AppResult};
+use tauri::{AppHandle, Runtime, State};
 
-fn no_instance() -> AppError {
-    AppError::not_found("Instance not found")
-}
+use crate::error::{AppError, AppResult};
+use crate::services::{instances, sync};
+use crate::state::AppState;
 
 #[tauri::command]
 pub async fn list_shared_instances() -> AppResult<Vec<SharedInstance>> {
@@ -51,18 +51,31 @@ pub async fn publish_instance(instance_id: Id, input: PublishInput) -> AppResult
 }
 
 #[tauri::command]
-pub async fn preview_sync(instance_id: Id) -> AppResult<SyncPreview> {
-    Err(no_instance())
+pub async fn preview_sync(state: State<'_, AppState>, instance_id: Id) -> AppResult<SyncPreview> {
+    sync::preview(&state, &instance_id).await
+}
+
+/// Backs up, then writes the latest version. Returns right away with status "syncing";
+/// `instance.progress` events follow.
+#[tauri::command]
+pub async fn sync_instance<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    instance_id: Id,
+    options: SyncOptions,
+) -> AppResult<InstanceSummary> {
+    sync::sync(&state, &app, &instance_id, options).await?;
+    instances::summary_by_id(&state, &instance_id).await
 }
 
 #[tauri::command]
-pub async fn sync_instance(instance_id: Id, options: SyncOptions) -> AppResult<InstanceSummary> {
-    Err(no_instance())
-}
-
-#[tauri::command]
-pub async fn revert_local_changes(instance_id: Id) -> AppResult<InstanceSummary> {
-    Err(no_instance())
+pub async fn revert_local_changes<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    instance_id: Id,
+) -> AppResult<InstanceSummary> {
+    sync::revert(&state, &app, &instance_id).await?;
+    instances::summary_by_id(&state, &instance_id).await
 }
 
 #[tauri::command]

@@ -483,6 +483,11 @@ export type AtlasEvent =
   | { type: "instance.running"; instanceId: Id; isRunning: boolean }
   /** Rescan found changes (files edited in the launcher, metadata changed, folder missing). */
   | { type: "instance.changed"; instanceId: Id }
+  /**
+   * A background job (update, accept, restore) failed; the folder was left as it was.
+   * Sent just before the job's final `instance.progress` with status "ready".
+   */
+  | { type: "instance.jobFailed"; instanceId: Id; message: string }
   | { type: "launchers.changed" }
   | { type: "presence.changed"; userId: Id; presence: Presence }
   | { type: "friends.changed" }

@@ -1,10 +1,11 @@
 use tauri::{AppHandle, Runtime, State};
 
 use crate::dto::{
-    Id, InstanceDetail, InstanceSummary, ShareMode, TrackInstanceRef, UpdateInstanceInput,
+    Id, InstanceDetail, InstanceSummary, MemberRole, ShareMode, TrackInstanceRef, UpdateInstanceInput,
 };
-use crate::error::{AppError, AppResult};
-use crate::services::instances;
+use crate::error::AppResult;
+use crate::events::{AtlasEvent, emit};
+use crate::services::{instances, sync};
 use crate::state::AppState;
 
 #[tauri::command]
@@ -97,22 +98,57 @@ pub async fn open_instance_folder<R: Runtime>(
     instances::open_folder(&state, &app, &id).await
 }
 
-// ── Built in later phases ──────────────────────────────────────────────
-
-/// T4: sync engine.
+/// Undo what a backup recorded. Returns right away with status "syncing".
 #[tauri::command]
-#[allow(unused_variables)]
-pub async fn restore_backup(instance_id: Id, backup_id: Id) -> AppResult<InstanceSummary> {
-    Err(AppError::not_built())
+pub async fn restore_backup<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    instance_id: Id,
+    backup_id: Id,
+) -> AppResult<InstanceSummary> {
+    sync::restore(&state, &app, &instance_id, &backup_id).await?;
+    instances::summary_by_id(&state, &instance_id).await
 }
 
-/// T4: sync engine (downloads).
+/// Download or remove an optional item from the shared version (waits until done).
 #[tauri::command]
-#[allow(unused_variables)]
-pub async fn set_optional_installed(
+pub async fn set_optional_installed<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
     instance_id: Id,
     content_id: Id,
     installed: bool,
 ) -> AppResult<()> {
-    Err(AppError::not_built())
+    sync::set_optional_installed(&state, &app, &instance_id, &content_id, installed).await
+}
+
+// ── Development only ───────────────────────────────────────────────────
+
+/// Debug builds: link an instance to a folder of manifests (see sync/source.rs).
+/// From the devtools console:
+///   __TAURI_INTERNALS__.invoke("dev_link_manifest", { instanceId, folder, role: "viewer", adoptRevision: 1 })
+#[tauri::command]
+pub async fn dev_link_manifest<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    instance_id: Id,
+    folder: String,
+    role: MemberRole,
+    adopt_revision: Option<u32>,
+) -> AppResult<InstanceSummary> {
+    sync::dev_link(&state, &instance_id, &folder, role, adopt_revision).await?;
+    emit(&app, AtlasEvent::InstanceChanged { instance_id: instance_id.clone() });
+    instances::summary_by_id(&state, &instance_id).await
+}
+
+/// Debug builds: undo dev_link_manifest. The folder stays as it is.
+#[tauri::command]
+pub async fn dev_unlink_manifest<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    instance_id: Id,
+) -> AppResult<InstanceSummary> {
+    sync::unlink(&state, &instance_id).await?;
+    emit(&app, AtlasEvent::InstanceChanged { instance_id: instance_id.clone() });
+    instances::summary_by_id(&state, &instance_id).await
 }

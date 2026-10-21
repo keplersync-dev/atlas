@@ -42,3 +42,11 @@ pub async fn list(db: &SqlitePool, instance_id: &str) -> sqlx::Result<Vec<Backup
         .fetch_all(db)
         .await
 }
+
+pub async fn get(db: &SqlitePool, instance_id: &str, id: &str) -> sqlx::Result<Option<BackupRow>> {
+    sqlx::query_as("SELECT * FROM backup WHERE id = ? AND instance_id = ?")
+        .bind(id)
+        .bind(instance_id)
+        .fetch_optional(db)
+        .await
+}

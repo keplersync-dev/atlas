@@ -27,6 +27,9 @@ pub struct InstanceRow {
     pub shared_instance_id: Option<String>,
     pub shared_role: Option<String>,
     pub synced_revision: Option<i64>,
+    pub synced_manifest_hash: Option<String>,
+    pub synced_manifest: Option<String>,
+    pub sync_report_due: bool,
     pub tracked_at: String,
     pub last_scanned_at: Option<String>,
 }
@@ -37,6 +40,13 @@ impl InstanceRow {
     }
     pub fn loader(&self) -> Option<Loader> {
         self.loader.as_deref().and_then(from_wire)
+    }
+    /// The manifest this folder was last made equal to, if it's shared.
+    pub fn synced_manifest(&self) -> Option<crate::sync::manifest::Manifest> {
+        serde_json::from_str(self.synced_manifest.as_deref()?).ok()
+    }
+    pub fn role(&self) -> Option<crate::dto::MemberRole> {
+        self.shared_role.as_deref().and_then(from_wire)
     }
     /// Stored status: Ready or Missing. (Syncing only exists at runtime.)
     pub fn status(&self) -> InstanceStatus {
@@ -191,4 +201,35 @@ pub async fn content_counts(db: &SqlitePool) -> sqlx::Result<HashMap<String, u32
     .fetch_all(db)
     .await?;
     Ok(rows.into_iter().map(|(id, n)| (id, n as u32)).collect())
+}
+
+/// Link to a shared instance (or unlink with `None`): role and sync columns.
+pub async fn set_link(
+    db: &SqlitePool,
+    id: &str,
+    shared: Option<(&str, crate::dto::MemberRole)>,
+) -> sqlx::Result<()> {
+    match shared {
+        Some((shared_id, role)) => {
+            sqlx::query(
+                "UPDATE instance SET shared_instance_id = ?, shared_role = ?, synced_revision = 0,
+                    synced_manifest = NULL, synced_manifest_hash = NULL WHERE id = ?",
+            )
+            .bind(shared_id)
+            .bind(to_wire(role))
+            .bind(id)
+            .execute(db)
+            .await?
+        }
+        None => {
+            sqlx::query(
+                "UPDATE instance SET shared_instance_id = NULL, shared_role = NULL, synced_revision = NULL,
+                    synced_manifest = NULL, synced_manifest_hash = NULL, sync_report_due = 0 WHERE id = ?",
+            )
+            .bind(id)
+            .execute(db)
+            .await?
+        }
+    };
+    Ok(())
 }

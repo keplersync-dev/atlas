@@ -18,8 +18,14 @@ export function connectStores() {
         // Progress carries the new data, so patch in place instead of refetching.
         const i = instances.byId(e.instanceId);
         if (i) Object.assign(i, { status: e.status, progress: e.progress });
+        // A new job starting clears the last failure.
+        if (e.status === "syncing" && !e.progress)
+          instances.dismissFailure(e.instanceId);
         break;
       }
+      case "instance.jobFailed":
+        instances.failures[e.instanceId] = e.message;
+        break;
       case "presence.changed": {
         const f = social.friends.find((x) => x.user.id === e.userId);
         if (f) f.presence = e.presence;

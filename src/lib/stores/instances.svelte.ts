@@ -12,6 +12,8 @@ class InstancesStore {
   list = $state<InstanceSummary[]>([]);
   loaded = $state(false);
   error = $state<string | null>(null);
+  /** Why the last update/restore of an instance failed, until dismissed or retried. */
+  failures = $state<Record<Id, string>>({});
 
   /** Instances with something waiting on the user: an update to review or changes to publish. */
   needingAttention = $derived(
@@ -45,6 +47,10 @@ class InstancesStore {
 
   byId(id: Id) {
     return this.list.find((i) => i.id === id);
+  }
+
+  dismissFailure(id: Id) {
+    delete this.failures[id];
   }
 }
 

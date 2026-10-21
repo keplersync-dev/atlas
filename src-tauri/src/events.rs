@@ -29,6 +29,9 @@ pub enum AtlasEvent {
     InstanceRunning { instance_id: Id, is_running: bool },
     #[serde(rename = "instance.changed")]
     InstanceChanged { instance_id: Id },
+    /// A background job (update, accept, restore) failed. `message` is for the player.
+    #[serde(rename = "instance.jobFailed")]
+    InstanceJobFailed { instance_id: Id, message: String },
     #[serde(rename = "launchers.changed")]
     LaunchersChanged {},
     #[serde(rename = "presence.changed")]

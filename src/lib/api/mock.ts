@@ -213,9 +213,17 @@ function simulateSync(inst: InstanceDetail, done: () => void) {
   const timer = setInterval(() => {
     if (inst.isRunning) return set("waiting_for_game_exit", percent);
     percent = Math.min(100, percent + 6 + Math.random() * 8);
-    if (percent >= 100) {
+    // VITE_MOCK_FAIL_RATE also makes some jobs fail part-way (nothing is changed).
+    const fails = failRate > 0 && percent > 40 && Math.random() < failRate / 4;
+    if (percent >= 100 || fails) {
       clearInterval(timer);
-      done();
+      if (fails)
+        emit({
+          type: "instance.jobFailed",
+          instanceId: inst.id,
+          message: "Couldn't download Sodium (the connection was lost).",
+        });
+      else done();
       inst.status = "ready";
       inst.progress = null;
       emit({

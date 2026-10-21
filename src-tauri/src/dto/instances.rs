@@ -33,7 +33,7 @@ pub struct DetectedInstance {
     pub instance_id: Option<Id>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManualDownload {
     pub content_name: String,

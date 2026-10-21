@@ -7,6 +7,7 @@ pub mod backups;
 pub mod content;
 pub mod instances;
 pub mod launchers;
+pub mod settings;
 
 use std::{path::Path, str::FromStr, time::Duration};
 

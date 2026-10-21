@@ -12,6 +12,7 @@ use sqlx::SqlitePool;
 use tokio::sync::OnceCell;
 
 use crate::game::Running;
+use crate::jobs::Jobs;
 use crate::scan::watcher::Watcher;
 
 #[derive(Clone)]
@@ -25,6 +26,8 @@ pub struct AppState {
     pub detected: Arc<OnceCell<()>>,
     /// Instances whose game is running (kept up to date by crate::game).
     pub running: Running,
+    /// Update/restore jobs in progress (crate::jobs).
+    pub jobs: Jobs,
     /// Watches tracked folders; rescans come out of `watcher.take_receiver()`.
     pub watcher: Arc<Watcher>,
     /// One scan at a time per instance (the watcher, a rescan and tracking can overlap).
@@ -45,6 +48,7 @@ impl AppState {
             auto_detect: true,
             detected: Arc::new(OnceCell::new()),
             running: Running::default(),
+            jobs: Jobs::default(),
             watcher: Arc::new(Watcher::new()),
             scan_locks: Arc::default(),
             http: reqwest::Client::builder()
@@ -79,6 +83,8 @@ pub struct AppPaths {
     /// Shared-instance manifests, never change once published: manifests/<shared id>/<revision>.json
     pub manifests: PathBuf,
     pub logs: PathBuf,
+    /// The user's Downloads folder, watched for manual CurseForge downloads.
+    pub downloads: PathBuf,
 }
 
 impl AppPaths {
@@ -89,6 +95,9 @@ impl AppPaths {
             backups: root.join("backups"),
             manifests: root.join("manifests"),
             logs: root.join("logs"),
+            downloads: std::env::var_os("USERPROFILE")
+                .map(|h| PathBuf::from(h).join("Downloads"))
+                .unwrap_or_else(|| root.join("downloads")),
         }
     }
 

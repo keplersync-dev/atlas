@@ -5,7 +5,8 @@ use sqlx::{FromRow, SqliteConnection, SqlitePool};
 
 use crate::dto::{ContentKind, ContentSource, InstanceContent, ShareMode, Side, from_wire};
 
-#[derive(Debug, Clone, FromRow)]
+/// Serialize/Deserialize: backups keep a snapshot of the rows (sync/backup.rs).
+#[derive(Debug, Clone, FromRow, serde::Serialize, serde::Deserialize)]
 pub struct ContentRow {
     pub id: String,
     pub instance_id: String,

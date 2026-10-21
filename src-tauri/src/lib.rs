@@ -7,11 +7,13 @@ pub mod dto;
 pub mod error;
 pub mod events;
 pub mod game;
+pub mod jobs;
 pub mod launchers;
 pub mod resolve;
 pub mod scan;
 pub mod services;
 pub mod state;
+pub mod sync;
 pub mod util;
 
 use tauri::{Manager, Runtime};
@@ -53,6 +55,8 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::instances::restore_backup,
         commands::instances::set_share_mode,
         commands::instances::set_optional_installed,
+        commands::instances::dev_link_manifest,
+        commands::instances::dev_unlink_manifest,
         // Sharing
         commands::sharing::list_shared_instances,
         commands::sharing::get_shared_instance,
@@ -131,6 +135,12 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     app.manage(state.clone());
 
     let handle = app.handle().clone();
+
+    // An update interrupted by a crash or power cut is undone before anything else.
+    let recovered = tauri::async_runtime::block_on(sync::recovery::run(&state));
+    if !recovered.is_empty() {
+        tracing::warn!(count = recovered.len(), "undid interrupted updates");
+    }
 
     // Rescan an instance whenever the watcher sees its content folders change.
     if let Some(mut changes) = state.watcher.take_receiver() {

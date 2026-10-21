@@ -15,8 +15,8 @@ use crate::db::{
     instances::{InstanceRow, Metadata, NewInstance},
 };
 use crate::dto::{
-    InstanceDetail, InstanceStatus, InstanceSummary, LauncherKind, LauncherRef, MemberRole,
-    ShareMode, TrackInstanceRef, UpdateInstanceInput, from_wire, to_wire,
+    InstanceDetail, InstanceStatus, InstanceSummary, InstanceSyncInfo, LauncherKind, LauncherRef,
+    MemberRole, ShareMode, SyncProgress, TrackInstanceRef, UpdateInstanceInput, from_wire, to_wire,
 };
 use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
@@ -44,8 +44,14 @@ fn metadata(found: &FoundInstance) -> Metadata {
     }
 }
 
-/// A row as the UI's `InstanceSummary`.
-pub fn summary(row: &InstanceRow, content_count: u32, is_running: bool) -> InstanceSummary {
+/// A row as the UI's `InstanceSummary`. `job`: Some while an update/restore runs.
+pub fn summary(
+    row: &InstanceRow,
+    content_count: u32,
+    is_running: bool,
+    sync: Option<InstanceSyncInfo>,
+    job: Option<Option<SyncProgress>>,
+) -> InstanceSummary {
     let kind = row.kind();
     InstanceSummary {
         id: row.id.clone(),
@@ -56,7 +62,7 @@ pub fn summary(row: &InstanceRow, content_count: u32, is_running: bool) -> Insta
         minecraft_version: row.minecraft_version.clone(),
         loader: row.loader(),
         loader_version: row.loader_version.clone(),
-        status: row.status(), // T4: "syncing" from the job manager
+        status: if job.is_some() { InstanceStatus::Syncing } else { row.status() },
         is_favorite: row.is_favorite,
         hide_activity: row.hide_activity,
         content_count,
@@ -65,24 +71,33 @@ pub fn summary(row: &InstanceRow, content_count: u32, is_running: bool) -> Insta
         is_running,
         tracked_at: row.tracked_at.clone(),
         last_scanned_at: row.last_scanned_at.clone(),
-        sync: None, // T4/T7: shared instances
-        progress: None,
+        sync,
+        progress: job.flatten(),
     }
 }
 
-async fn summary_of(state: &AppState, row: &InstanceRow) -> AppResult<InstanceSummary> {
+async fn full_summary(state: &AppState, row: &InstanceRow, count: u32) -> AppResult<InstanceSummary> {
+    let sync = super::sync::info(state, row).await?;
+    Ok(summary(row, count, state.is_running(&row.id), sync, state.jobs.status(&row.id)))
+}
+
+pub async fn summary_of(state: &AppState, row: &InstanceRow) -> AppResult<InstanceSummary> {
     let counts = db::instances::content_counts(&state.db).await?;
-    Ok(summary(row, counts.get(&row.id).copied().unwrap_or(0), state.is_running(&row.id)))
+    full_summary(state, row, counts.get(&row.id).copied().unwrap_or(0)).await
+}
+
+pub async fn summary_by_id(state: &AppState, id: &str) -> AppResult<InstanceSummary> {
+    summary_of(state, &row(state, id).await?).await
 }
 
 /// Every tracked instance. No file or network access, so it's always fast.
 pub async fn list(state: &AppState) -> AppResult<Vec<InstanceSummary>> {
     let counts = db::instances::content_counts(&state.db).await?;
-    Ok(db::instances::list(&state.db)
-        .await?
-        .iter()
-        .map(|r| summary(r, counts.get(&r.id).copied().unwrap_or(0), state.is_running(&r.id)))
-        .collect())
+    let mut out = Vec::new();
+    for r in db::instances::list(&state.db).await? {
+        out.push(full_summary(state, &r, counts.get(&r.id).copied().unwrap_or(0)).await?);
+    }
+    Ok(out)
 }
 
 pub async fn detail(state: &AppState, id: &str) -> AppResult<InstanceDetail> {
@@ -90,7 +105,7 @@ pub async fn detail(state: &AppState, id: &str) -> AppResult<InstanceDetail> {
     let content: Vec<_> = db::content::list(&state.db, id).await?.iter().map(|c| c.to_dto()).collect();
     let backups = db::backups::list(&state.db, id).await?.iter().map(|b| b.to_dto()).collect();
     let count = content.iter().filter(|c| c.installed).count() as u32;
-    Ok(InstanceDetail { summary: summary(&row, count, state.is_running(id)), content, backups })
+    Ok(InstanceDetail { summary: full_summary(state, &row, count).await?, content, backups })
 }
 
 /// Track instances found in launchers. Ones already tracked, or no longer in their
@@ -126,7 +141,7 @@ pub async fn track<R: Runtime>(
         )
         .await?;
         tracing::info!(name = %row.name, "tracking instance");
-        added.push(summary(&row, 0, false));
+        added.push(summary(&row, 0, false, None, None));
         scan_in_background(state, app, &row.id);
     }
     Ok(added)
@@ -181,12 +196,14 @@ pub async fn track_folder<R: Runtime>(
     )
     .await?;
     scan_in_background(state, app, &row.id);
-    Ok(summary(&row, 0, false))
+    Ok(summary(&row, 0, false, None, None))
 }
 
 /// Stop tracking. Deletes Atlas's rows and backups only; the folder is never touched.
 pub async fn untrack(state: &AppState, id: &str) -> AppResult<()> {
-    // T4: refuse while a job is running ("Wait for the update to finish").
+    if state.jobs.is_busy(id) {
+        return Err(AppError::conflict("Wait for the update to finish"));
+    }
     if !db::instances::delete(&state.db, id).await? {
         return Err(not_found());
     }
@@ -235,6 +252,10 @@ async fn refresh_metadata(state: &AppState, id: &str) -> AppResult<(InstanceRow,
 /// Re-read an instance: launcher metadata, then its files. Sends `instance.changed`
 /// when anything differs, and keeps the folder watched while it exists.
 pub async fn rescan<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) -> AppResult<InstanceSummary> {
+    if state.jobs.is_busy(id) {
+        // An update is writing the folder; it rescans when it's done.
+        return summary_by_id(state, id).await;
+    }
     let _scanning = state.scan_lock(id).await;
     let (row, meta_changed) = refresh_metadata(state, id).await?;
     let game_dir = Path::new(&row.game_dir);
@@ -341,6 +362,9 @@ pub async fn set_content_enabled<R: Runtime>(
     let instance = row(state, instance_id).await?;
     if state.is_running(instance_id) {
         return Err(AppError::conflict("Close the game first"));
+    }
+    if state.jobs.is_busy(instance_id) {
+        return Err(AppError::conflict("Wait for the update to finish"));
     }
     let item = db::content::get(&state.db, instance_id, content_id)
         .await?

@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "name": "Atlas demo",
+  "description": "Dev source for trying updates by hand.",
+  "minecraft": {
+    "version": "1.21.1",
+    "loader": "fabric",
+    "loaderVersion": "0.16.5"
+  },
+  "content": [
+    {
+      "kind": "resourcepack",
+      "source": "modrinth",
+      "projectId": "atlasdemo",
+      "versionId": "atlasdemo-2.0",
+      "name": "Atlas Demo Pack",
+      "versionLabel": "2.0",
+      "path": "resourcepacks/Atlas Demo 2.0.zip",
+      "sha1": "675cde725c42278732b5bc7308f85f1bd7630798",
+      "sha256": "fb4612f9ba6b830d6e35fb6654934eefcf39f7689b92d8b6ecaf9368e2554236",
+      "sizeBytes": 203,
+      "downloadUrl": null,
+      "side": "client",
+      "required": true
+    },
+    {
+      "kind": "resourcepack",
+      "source": "modrinth",
+      "projectId": "atlasextras",
+      "versionId": "atlasextras-1.0",
+      "name": "Atlas Extras",
+      "versionLabel": "1.0",
+      "path": "resourcepacks/Atlas Extras.zip",
+      "sha1": "206525fb73dab7c9de90880079558d01c95a5fd4",
+      "sha256": "2ca070baae2a9e24aa699cb3802babea4e2d942ef426e2be732714cae73bbadf",
+      "sizeBytes": 199,
+      "downloadUrl": null,
+      "side": "client",
+      "required": false
+    }
+  ],
+  "overrides": [
+    {
+      "path": "config/atlas-demo.json",
+      "sha256": "5c2d93ae84557a7ccdf3387fbf827312adb068e1eca60b7526c98f2b08155c6f",
+      "sizeBytes": 46
+    }
+  ]
+}

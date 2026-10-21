@@ -59,9 +59,18 @@
     const status = summary?.status;
     if (!started) return;
     if (status === "syncing") sawSyncing = true;
-    else if (status === "ready" && sawSyncing)
+    else if (status === "ready" && sawSyncing) {
+      // A failure arrives just before "ready": stay here and say why.
+      const failed = instances.failures[id];
+      if (failed) {
+        started = false;
+        sawSyncing = false;
+        error = `The update didn't finish: ${failed} Your files weren't changed.`;
+        return;
+      }
       // replace: Back from the instance shouldn't return to a finished review.
       go({ page: "instance", id }, { replace: true });
+    }
   });
 
   function conflictOptions(

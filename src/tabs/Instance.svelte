@@ -164,6 +164,26 @@
     </button>
   {/if}
 
+  {#if instances.failures[id]}
+    <div
+      role="alert"
+      class="mb-5 flex items-start gap-3 rounded-lg border border-(--danger)/30 bg-(--danger)/8 px-4 py-3 text-[12.5px]"
+    >
+      <span class="mt-0.5 text-(--danger)"><Icon name="warn" class="size-4" /></span>
+      <span class="min-w-0 flex-1">
+        <b class="font-semibold">The last update didn't finish.</b>
+        {instances.failures[id]} Your files weren't changed.
+      </span>
+      <button
+        onclick={() => instances.dismissFailure(id)}
+        aria-label="Dismiss"
+        class="grid size-6 place-items-center rounded-md text-(--text-faint) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+      >
+        <Icon name="close" class="size-3.5" />
+      </button>
+    </div>
+  {/if}
+
   <!-- ── Header ─────────────────────────────────────────────────────── -->
   <div class="flex items-start gap-5">
     <BlockArt
