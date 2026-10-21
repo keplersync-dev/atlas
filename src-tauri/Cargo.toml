@@ -1,8 +1,9 @@
 [package]
 name = "atlas"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Keep Minecraft modpacks in sync with friends, alongside the launcher you already use"
+authors = ["keplerHaloxx"]
+license = "GPL-3.0-only"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

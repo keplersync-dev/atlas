@@ -17,7 +17,10 @@ fn embed_manifest_everywhere() -> bool {
     if !(windows && msvc) {
         return false;
     }
-    let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("windows-app-manifest.xml");
+    // Read at run time: env!() would bake in wherever this script was first compiled,
+    // which breaks when a target dir is shared between checkouts.
+    let dir = std::env::var("CARGO_MANIFEST_DIR").expect("cargo sets CARGO_MANIFEST_DIR");
+    let manifest = std::path::Path::new(&dir).join("windows-app-manifest.xml");
     println!("cargo:rerun-if-changed={}", manifest.display());
     println!("cargo:rustc-link-arg=/MANIFEST:EMBED");
     println!("cargo:rustc-link-arg=/MANIFESTINPUT:{}", manifest.display());

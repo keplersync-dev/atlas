@@ -1,7 +1,7 @@
 {
   "name": "atlas",
   "version": "0.1.0",
-  "description": "",
+  "description": "Keep Minecraft modpacks in sync with friends, alongside the launcher you already use",
   "type": "module",
   "scripts": {
     "dev": "vite dev",
@@ -12,7 +12,7 @@
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri"
   },
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/api": "^2",
