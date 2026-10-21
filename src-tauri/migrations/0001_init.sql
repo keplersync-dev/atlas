@@ -57,6 +57,8 @@ CREATE TABLE instance (
   shared_role             TEXT CHECK (shared_role IN ('owner', 'editor', 'viewer')),
   synced_revision         INTEGER,            -- cloud revision this folder was last made equal to
   synced_manifest_hash    TEXT,               -- hash of the managed content at that revision (detects local edits)
+  synced_manifest         TEXT,               -- the manifest JSON at synced_revision: finds deleted files, diffs updates, reverts offline
+  sync_report_due         INTEGER NOT NULL DEFAULT 0, -- 1 = the server hasn't been told synced_revision yet (offline at the time)
   sync_include            TEXT NOT NULL DEFAULT '["config/**"]', -- JSON globs of extra files shared as overrides
 
   tracked_at              TEXT NOT NULL,
