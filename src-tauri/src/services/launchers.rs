@@ -34,7 +34,10 @@ async fn detect_and_save(state: &AppState) -> AppResult<bool> {
     for kind in launchers::KINDS {
         for root in launchers::detect(kind) {
             let root = clean_path(&root);
-            if db::launchers::find_by_root(&state.db, &root).await?.is_none() {
+            if db::launchers::find_by_root(&state.db, &root)
+                .await?
+                .is_none()
+            {
                 db::launchers::insert(&state.db, kind, &root, false).await?;
                 tracing::info!(?kind, %root, "found launcher");
                 changed = true;
@@ -58,7 +61,9 @@ async fn detect_and_save(state: &AppState) -> AppResult<bool> {
 /// Every instance in one launcher install. A launcher that can't be read gives an
 /// empty list (and a log line) rather than failing the whole request.
 pub async fn instances_in(row: &LauncherRow) -> Vec<FoundInstance> {
-    let Some(kind) = row.kind() else { return vec![] };
+    let Some(kind) = row.kind() else {
+        return vec![];
+    };
     match launchers::list_instances(kind, Path::new(&row.root_path)).await {
         Ok(list) => list,
         Err(e) => {
@@ -106,15 +111,24 @@ pub async fn add<R: Runtime>(
 ) -> AppResult<Launcher> {
     let name = launchers::display_name(kind);
     if kind == LauncherKind::Folder || !launchers::is_root(kind, Path::new(root)) {
-        return Err(AppError::invalid_input(format!("That folder isn't a {name} install")));
+        return Err(AppError::invalid_input(format!(
+            "That folder isn't a {name} install"
+        )));
     }
     let root = clean_path(Path::new(root));
-    if db::launchers::find_by_root(&state.db, &root).await?.is_some() {
-        return Err(AppError::conflict(format!("{name} in that folder is already added")));
+    if db::launchers::find_by_root(&state.db, &root)
+        .await?
+        .is_some()
+    {
+        return Err(AppError::conflict(format!(
+            "{name} in that folder is already added"
+        )));
     }
     let row = db::launchers::insert(&state.db, kind, &root, true).await?;
     emit(app, AtlasEvent::LaunchersChanged {});
-    to_dto(&row).await.ok_or_else(|| AppError::unknown("Couldn't add the launcher"))
+    to_dto(&row)
+        .await
+        .ok_or_else(|| AppError::unknown("Couldn't add the launcher"))
 }
 
 pub async fn remove<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) -> AppResult<()> {
@@ -131,10 +145,17 @@ pub async fn detected_instances(state: &AppState) -> AppResult<Vec<DetectedInsta
     let tracked = db::instances::list(&state.db).await?;
     let by_ref: HashMap<(String, String), String> = tracked
         .iter()
-        .filter_map(|i| Some(((i.launcher_kind.clone(), i.launcher_instance_id.clone()?), i.id.clone())))
+        .filter_map(|i| {
+            Some((
+                (i.launcher_kind.clone(), i.launcher_instance_id.clone()?),
+                i.id.clone(),
+            ))
+        })
         .collect();
-    let by_dir: HashMap<String, String> =
-        tracked.iter().map(|i| (i.game_dir.to_lowercase(), i.id.clone())).collect();
+    let by_dir: HashMap<String, String> = tracked
+        .iter()
+        .map(|i| (i.game_dir.to_lowercase(), i.id.clone()))
+        .collect();
 
     let mut out = Vec::new();
     for row in db::launchers::list(&state.db).await? {

@@ -83,7 +83,11 @@ fn side(client: &str, server: &str) -> Side {
 
 /// Save matches, and note that the other rows were asked about. Each update checks the
 /// row still has the same file (sha1), in case it changed while we were online.
-pub async fn save(db: &SqlitePool, asked: &[&ContentRow], matches: &[Match]) -> sqlx::Result<usize> {
+pub async fn save(
+    db: &SqlitePool,
+    asked: &[&ContentRow],
+    matches: &[Match],
+) -> sqlx::Result<usize> {
     let now = now_iso();
     let mut tx = db.begin().await?;
     let mut saved = 0;
@@ -108,7 +112,10 @@ pub async fn save(db: &SqlitePool, asked: &[&ContentRow], matches: &[Match]) -> 
         .await?;
         saved += done.rows_affected() as usize;
     }
-    for r in asked.iter().filter(|r| !matches.iter().any(|m| m.content_id == r.id)) {
+    for r in asked
+        .iter()
+        .filter(|r| !matches.iter().any(|m| m.content_id == r.id))
+    {
         sqlx::query("UPDATE instance_content SET resolved_at = ? WHERE id = ? AND sha1 = ?")
             .bind(&now)
             .bind(&r.id)
@@ -220,8 +227,14 @@ mod tests {
     #[tokio::test]
     async fn matches_fill_in_the_row_and_misses_are_noted() {
         let (pool, id) = rows_with(&[
-            ("mods/sodium.jar", "8f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e"),
-            ("mods/custom.jar", "0000000000000000000000000000000000000000"),
+            (
+                "mods/sodium.jar",
+                "8f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+            ),
+            (
+                "mods/custom.jar",
+                "0000000000000000000000000000000000000000",
+            ),
         ])
         .await;
         let rows = db::content::list(&pool, &id).await.unwrap();
@@ -229,15 +242,20 @@ mod tests {
         assert_eq!(asked.len(), 2);
 
         let versions: HashMap<String, modrinth::Version> = serde_json::from_str(VERSIONS).unwrap();
-        let projects: HashMap<String, modrinth::Project> = serde_json::from_str::<Vec<modrinth::Project>>(PROJECTS)
-            .unwrap()
-            .into_iter()
-            .map(|p| (p.id.clone(), p))
-            .collect();
+        let projects: HashMap<String, modrinth::Project> =
+            serde_json::from_str::<Vec<modrinth::Project>>(PROJECTS)
+                .unwrap()
+                .into_iter()
+                .map(|p| (p.id.clone(), p))
+                .collect();
         let matches = match_rows(&asked, &versions, &projects);
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].page_url, "https://modrinth.com/mod/sodium");
-        assert_eq!(matches[0].side, Side::Client, "server unsupported = client only");
+        assert_eq!(
+            matches[0].side,
+            Side::Client,
+            "server unsupported = client only"
+        );
 
         assert_eq!(save(&pool, &asked, &matches).await.unwrap(), 1);
         let rows = db::content::list(&pool, &id).await.unwrap();
@@ -247,7 +265,13 @@ mod tests {
         assert_eq!(sodium.version_label.as_deref(), Some("mc1.21.1-0.6.0"));
         assert_eq!(sodium.project_id.as_deref(), Some("AANobbMI"));
         assert_eq!(sodium.side, "client");
-        assert!(sodium.download_url.as_deref().unwrap().starts_with("https://cdn.modrinth.com/"));
+        assert!(
+            sodium
+                .download_url
+                .as_deref()
+                .unwrap()
+                .starts_with("https://cdn.modrinth.com/")
+        );
         let custom = rows.iter().find(|r| r.path == "mods/custom.jar").unwrap();
         assert_eq!(custom.source, "local");
         assert!(custom.resolved_at.is_some(), "asked about, not found");
@@ -258,7 +282,11 @@ mod tests {
 
     #[tokio::test]
     async fn a_file_that_changed_meanwhile_is_not_overwritten() {
-        let (pool, id) = rows_with(&[("mods/sodium.jar", "8f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e")]).await;
+        let (pool, id) = rows_with(&[(
+            "mods/sodium.jar",
+            "8f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e",
+        )])
+        .await;
         let rows = db::content::list(&pool, &id).await.unwrap();
         let asked = needs_lookup(&rows);
         let versions: HashMap<String, modrinth::Version> = serde_json::from_str(VERSIONS).unwrap();
@@ -269,20 +297,32 @@ mod tests {
             .collect();
         let matches = match_rows(&asked, &versions, &projects);
         // The scanner saw a new file at that path before the answer came back.
-        sqlx::query("UPDATE instance_content SET sha1 = 'new'").execute(&pool).await.unwrap();
+        sqlx::query("UPDATE instance_content SET sha1 = 'new'")
+            .execute(&pool)
+            .await
+            .unwrap();
         assert_eq!(save(&pool, &asked, &matches).await.unwrap(), 0);
-        assert_eq!(db::content::list(&pool, &id).await.unwrap()[0].source, "local");
+        assert_eq!(
+            db::content::list(&pool, &id).await.unwrap()[0].source,
+            "local"
+        );
     }
 
     #[tokio::test]
     async fn offline_changes_nothing() {
-        let (pool, id) = rows_with(&[("mods/a.jar", "8f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e")]).await;
+        let (pool, id) =
+            rows_with(&[("mods/a.jar", "8f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e")]).await;
         let http = reqwest::Client::new();
         // Nothing listens on this port: a connection error, like being offline.
-        let saved = resolve_instance(&pool, &http, "http://127.0.0.1:9", &id).await.unwrap();
+        let saved = resolve_instance(&pool, &http, "http://127.0.0.1:9", &id)
+            .await
+            .unwrap();
         assert_eq!(saved, 0);
         let rows = db::content::list(&pool, &id).await.unwrap();
-        assert!(rows[0].resolved_at.is_none(), "still to be looked up next time");
+        assert!(
+            rows[0].resolved_at.is_none(),
+            "still to be looked up next time"
+        );
     }
 
     #[test]
@@ -310,7 +350,10 @@ mod real {
             .unwrap();
         for kind in launchers::KINDS {
             for root in launchers::detect(kind) {
-                for found in launchers::list_instances(kind, &root).await.unwrap_or_default() {
+                for found in launchers::list_instances(kind, &root)
+                    .await
+                    .unwrap_or_default()
+                {
                     let row = db::instances::insert(
                         &pool,
                         db::instances::NewInstance {
@@ -331,9 +374,14 @@ mod real {
                     )
                     .await
                     .unwrap();
-                    scan::files::scan(&pool, &row.id, &found.game_dir).await.unwrap();
+                    scan::files::scan(&pool, &row.id, &found.game_dir)
+                        .await
+                        .unwrap();
                     let start = std::time::Instant::now();
-                    let saved = super::resolve_instance(&pool, &http, super::modrinth::API, &row.id).await.unwrap();
+                    let saved =
+                        super::resolve_instance(&pool, &http, super::modrinth::API, &row.id)
+                            .await
+                            .unwrap();
                     let rows = db::content::list(&pool, &row.id).await.unwrap();
                     if rows.is_empty() {
                         continue;
@@ -346,11 +394,22 @@ mod real {
                         .take(2)
                         .map(|r| format!("{} {}", r.name, r.version_label.as_deref().unwrap_or("")))
                         .collect();
-                    let unknown: Vec<&str> =
-                        rows.iter().filter(|r| r.source == "local").take(2).map(|r| r.name.as_str()).collect();
+                    let unknown: Vec<&str> = rows
+                        .iter()
+                        .filter(|r| r.source == "local")
+                        .take(2)
+                        .map(|r| r.name.as_str())
+                        .collect();
                     println!(
                         "{:36} {:3} files | jar metadata {:3}/{:3} mods | Modrinth {:3} ({:>5.2?}) | e.g. {:?} | unknown e.g. {:?}",
-                        found.name, rows.len(), named, mods.len(), saved, start.elapsed(), sample, unknown
+                        found.name,
+                        rows.len(),
+                        named,
+                        mods.len(),
+                        saved,
+                        start.elapsed(),
+                        sample,
+                        unknown
                     );
                 }
             }

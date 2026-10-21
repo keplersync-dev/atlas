@@ -15,7 +15,9 @@ use super::{FoundInstance, ReadResult};
 use crate::dto::Loader;
 
 pub fn default_roots() -> Vec<PathBuf> {
-    let Some(home) = env_dir("USERPROFILE") else { return vec![] };
+    let Some(home) = env_dir("USERPROFILE") else {
+        return vec![];
+    };
     vec![
         home.join("curseforge").join("minecraft"),
         home.join("Documents").join("curseforge").join("minecraft"),
@@ -31,8 +33,14 @@ pub fn is_root(path: &Path) -> bool {
 pub fn program() -> Option<PathBuf> {
     let local = env_dir("LOCALAPPDATA")?;
     first_existing([
-        local.join("Programs").join("CurseForge Windows").join("CurseForge.exe"),
-        local.join("Programs").join("CurseForge").join("CurseForge.exe"),
+        local
+            .join("Programs")
+            .join("CurseForge Windows")
+            .join("CurseForge.exe"),
+        local
+            .join("Programs")
+            .join("CurseForge")
+            .join("CurseForge.exe"),
     ])
 }
 
@@ -75,7 +83,10 @@ pub fn list(root: &Path) -> ReadResult<Vec<FoundInstance>> {
         }
         match read_instance(&file) {
             Ok(i) => found.push(FoundInstance {
-                name: i.name.filter(|n| !n.trim().is_empty()).unwrap_or_else(|| folder.clone()),
+                name: i
+                    .name
+                    .filter(|n| !n.trim().is_empty())
+                    .unwrap_or_else(|| folder.clone()),
                 launcher_instance_id: folder,
                 game_dir: path,
                 icon: i.icon,
@@ -85,7 +96,9 @@ pub fn list(root: &Path) -> ReadResult<Vec<FoundInstance>> {
                 last_played_at: i.last_played.as_deref().and_then(parse_time),
                 total_playtime_seconds: None, // CurseForge doesn't record it
             }),
-            Err(e) => tracing::warn!(instance = %folder, error = %e, "skipping unreadable CurseForge instance"),
+            Err(e) => {
+                tracing::warn!(instance = %folder, error = %e, "skipping unreadable CurseForge instance")
+            }
         }
     }
     Ok(found)
@@ -107,9 +120,21 @@ fn read_instance(file: &Path) -> ReadResult<Read> {
         .and_then(|b| b.name)
         .and_then(|n| parse_loader(&n));
     // A picture the user set wins; otherwise the modpack's thumbnail from CurseForge.
-    let custom = i.profile_image_path.filter(|p| Path::new(p).is_file()).map(|p| format!("file:{p}"));
-    let thumbnail = i.installed_modpack.and_then(|m| m.thumbnail_url).filter(|u| u.starts_with("https://"));
-    Ok(Read { icon: custom.or(thumbnail), name: i.name, game_version: i.game_version, loader, last_played: i.last_played })
+    let custom = i
+        .profile_image_path
+        .filter(|p| Path::new(p).is_file())
+        .map(|p| format!("file:{p}"));
+    let thumbnail = i
+        .installed_modpack
+        .and_then(|m| m.thumbnail_url)
+        .filter(|u| u.starts_with("https://"));
+    Ok(Read {
+        icon: custom.or(thumbnail),
+        name: i.name,
+        game_version: i.game_version,
+        loader,
+        last_played: i.last_played,
+    })
 }
 
 /// "neoforge-21.1.250" → (NeoForge, "21.1.250").
@@ -138,12 +163,23 @@ mod tests {
         let atm = &list[0];
         assert_eq!(atm.name, "All the Mods 10");
         assert_eq!(atm.launcher_instance_id, "All the Mods 10 To the Sky");
-        assert_eq!(atm.game_dir, root.join("Instances/All the Mods 10 To the Sky"));
+        assert_eq!(
+            atm.game_dir,
+            root.join("Instances/All the Mods 10 To the Sky")
+        );
         assert_eq!(atm.minecraft_version.as_deref(), Some("1.21.1"));
         assert_eq!(atm.loader, Some(Loader::Neoforge));
         assert_eq!(atm.loader_version.as_deref(), Some("21.1.250"));
-        assert_eq!(atm.last_played_at.as_deref(), Some("2026-09-22T01:15:38.895Z"));
-        assert_eq!(atm.icon.as_deref(), Some("https://media.forgecdn.net/avatars/thumbnails/1389/739/256/256/63890103359327238"));
+        assert_eq!(
+            atm.last_played_at.as_deref(),
+            Some("2026-09-22T01:15:38.895Z")
+        );
+        assert_eq!(
+            atm.icon.as_deref(),
+            Some(
+                "https://media.forgecdn.net/avatars/thumbnails/1389/739/256/256/63890103359327238"
+            )
+        );
 
         // folder name differs from the instance name; never played
         let sf = &list[1];
@@ -157,8 +193,14 @@ mod tests {
 
     #[test]
     fn loader_names() {
-        assert_eq!(parse_loader("fabric-0.16.5"), Some((Loader::Fabric, Some("0.16.5".into()))));
-        assert_eq!(parse_loader("quilt-0.26.0"), Some((Loader::Quilt, Some("0.26.0".into()))));
+        assert_eq!(
+            parse_loader("fabric-0.16.5"),
+            Some((Loader::Fabric, Some("0.16.5".into())))
+        );
+        assert_eq!(
+            parse_loader("quilt-0.26.0"),
+            Some((Loader::Quilt, Some("0.26.0".into())))
+        );
         assert_eq!(parse_loader("weird-1.0"), None);
     }
 }

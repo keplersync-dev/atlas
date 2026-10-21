@@ -63,7 +63,11 @@ pub async fn versions_by_sha1(
     Ok(out)
 }
 
-pub async fn projects(http: &reqwest::Client, api: &str, ids: &[String]) -> reqwest::Result<HashMap<String, Project>> {
+pub async fn projects(
+    http: &reqwest::Client,
+    api: &str,
+    ids: &[String],
+) -> reqwest::Result<HashMap<String, Project>> {
     let mut out = HashMap::new();
     for chunk in ids.chunks(BATCH) {
         let ids = serde_json::to_string(chunk).expect("strings serialize");

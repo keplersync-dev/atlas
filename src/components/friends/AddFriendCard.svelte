@@ -93,8 +93,7 @@
     <div
       class="flex items-center justify-between gap-2.5 rounded-lg bg-(--bg) px-3.5 py-2.5"
     >
-      <span
-        class="font-mono text-xl font-semibold tracking-[2px]"
+      <span class="font-mono text-xl font-semibold tracking-[2px]"
         >{formatCode(me.friendCode)}</span
       >
       <div class="flex gap-0.5">

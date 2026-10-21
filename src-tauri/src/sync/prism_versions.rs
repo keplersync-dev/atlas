@@ -18,7 +18,10 @@ pub fn automatic(kind: LauncherKind) -> bool {
 /// What the review screen shows when versions differ (None when they match or are unknown).
 pub fn change(row: &InstanceRow, m: &Manifest) -> Option<LauncherChange> {
     let differs = |now: &Option<String>, want: &Option<String>| match (now, want) {
-        (Some(a), Some(b)) if a != b => Some(VersionChange { from: a.clone(), to: b.clone() }),
+        (Some(a), Some(b)) if a != b => Some(VersionChange {
+            from: a.clone(),
+            to: b.clone(),
+        }),
         _ => None,
     };
     let minecraft_version = differs(&row.minecraft_version, &Some(m.minecraft.version.clone()));
@@ -46,7 +49,9 @@ pub fn update_if_needed(row: &InstanceRow, m: &Manifest) {
     if !automatic(row.kind()) || change(row, m).is_none() {
         return;
     }
-    let Some(instance_dir) = Path::new(&row.game_dir).parent() else { return };
+    let Some(instance_dir) = Path::new(&row.game_dir).parent() else {
+        return;
+    };
     if let Err(e) = edit_pack(&instance_dir.join("mmc-pack.json"), m) {
         tracing::warn!(error = %e, "couldn't update Prism's versions");
     }
@@ -90,12 +95,27 @@ mod tests {
             r#"{"components":[{"uid":"org.lwjgl3","version":"3.3.3"},{"uid":"net.minecraft","version":"1.21"},{"uid":"net.fabricmc.fabric-loader","version":"0.15.0"}],"formatVersion":1}"#,
         )
         .unwrap();
-        let mut m: Manifest = serde_json::from_slice(&std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../docs/schema/manifest.example.json")).unwrap()).unwrap();
+        let mut m: Manifest = serde_json::from_slice(
+            &std::fs::read(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../docs/schema/manifest.example.json"
+            ))
+            .unwrap(),
+        )
+        .unwrap();
         m.minecraft.version = "1.21.1".into();
         m.minecraft.loader_version = Some("0.16.5".into());
         edit_pack(&file, &m).unwrap();
         let pack: Value = serde_json::from_slice(&std::fs::read(&file).unwrap()).unwrap();
-        let v = |uid: &str| pack["components"].as_array().unwrap().iter().find(|c| c["uid"] == uid).unwrap()["version"].clone();
+        let v = |uid: &str| {
+            pack["components"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|c| c["uid"] == uid)
+                .unwrap()["version"]
+                .clone()
+        };
         assert_eq!(v("net.minecraft"), "1.21.1");
         assert_eq!(v("net.fabricmc.fabric-loader"), "0.16.5");
         assert_eq!(v("org.lwjgl3"), "3.3.3");

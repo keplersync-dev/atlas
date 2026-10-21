@@ -34,18 +34,26 @@ pub fn undo(game_dir: &Path, journal: &Journal) {
 }
 
 fn ignore_missing(e: std::io::Error) -> std::io::Result<()> {
-    if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e) }
+    if e.kind() == std::io::ErrorKind::NotFound {
+        Ok(())
+    } else {
+        Err(e)
+    }
 }
 
 /// Recover every tracked instance that has leftover staging folders. Returns the ids of
 /// instances that were put back.
 pub async fn run(state: &AppState) -> Vec<String> {
-    let Ok(instances) = db::instances::list(&state.db).await else { return vec![] };
+    let Ok(instances) = db::instances::list(&state.db).await else {
+        return vec![];
+    };
     let mut recovered = Vec::new();
     for i in instances {
         let game_dir = Path::new(&i.game_dir);
         let staging_root = game_dir.join(STAGING);
-        let Ok(jobs) = std::fs::read_dir(&staging_root) else { continue };
+        let Ok(jobs) = std::fs::read_dir(&staging_root) else {
+            continue;
+        };
         for job in jobs.flatten() {
             let journal = std::fs::read(job.path().join("journal.json"))
                 .ok()

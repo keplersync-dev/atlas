@@ -42,8 +42,16 @@ pub struct Request {
 }
 
 /// sha256 of every config path either version mentions, as it is on disk now.
-fn config_hashes(game_dir: &Path, synced: Option<&Manifest>, target: &Manifest) -> HashMap<String, String> {
-    let paths = synced.into_iter().flat_map(|m| &m.overrides).chain(&target.overrides).map(|o| o.path.clone());
+fn config_hashes(
+    game_dir: &Path,
+    synced: Option<&Manifest>,
+    target: &Manifest,
+) -> HashMap<String, String> {
+    let paths = synced
+        .into_iter()
+        .flat_map(|m| &m.overrides)
+        .chain(&target.overrides)
+        .map(|o| o.path.clone());
     paths
         .filter_map(|p| {
             let bytes = std::fs::read(game_dir.join(&p)).ok()?;
@@ -80,14 +88,24 @@ pub async fn make_plan(
 }
 
 fn records(plan: &Plan) -> Vec<FileRecord> {
-    let rec = |path: &str, action| FileRecord { path: path.to_string(), action };
+    let rec = |path: &str, action| FileRecord {
+        path: path.to_string(),
+        action,
+    };
     plan.actions
         .iter()
         .map(|a| match a {
             Action::Remove { path } => rec(path, FileAction::Removed),
-            Action::Place { entry, replaces: true, .. } => rec(&entry.path, FileAction::Replaced),
+            Action::Place {
+                entry,
+                replaces: true,
+                ..
+            } => rec(&entry.path, FileAction::Replaced),
             Action::Place { entry, .. } => rec(&entry.path, FileAction::Added),
-            Action::WriteConfig { config, replaces: true } => rec(&config.path, FileAction::Replaced),
+            Action::WriteConfig {
+                config,
+                replaces: true,
+            } => rec(&config.path, FileAction::Replaced),
             Action::WriteConfig { config, .. } => rec(&config.path, FileAction::Added),
             Action::RemoveConfig { path } => rec(path, FileAction::Removed),
         })
@@ -110,7 +128,12 @@ impl Journal {
     }
 }
 
-pub async fn run<R: Runtime>(state: &AppState, progress: &Progress<R>, source: &Source, req: Request) -> AppResult<()> {
+pub async fn run<R: Runtime>(
+    state: &AppState,
+    progress: &Progress<R>,
+    source: &Source,
+    req: Request,
+) -> AppResult<()> {
     let id = progress.instance_id.clone();
 
     // 1. Never write under a running game.
@@ -121,19 +144,35 @@ pub async fn run<R: Runtime>(state: &AppState, progress: &Progress<R>, source: &
         }
     }
 
-    let row = db::instances::get(&state.db, &id).await?.ok_or_else(|| AppError::not_found("Instance not found"))?;
+    let row = db::instances::get(&state.db, &id)
+        .await?
+        .ok_or_else(|| AppError::not_found("Instance not found"))?;
     let game_dir = PathBuf::from(&row.game_dir);
     if !game_dir.is_dir() {
         return Err(AppError::conflict("The folder is missing"));
     }
-    let (plan, _, _) = make_plan(state, &row, &req.manifest, &req.install_optional, &req.config_choices).await?;
+    let (plan, _, _) = make_plan(
+        state,
+        &row,
+        &req.manifest,
+        &req.install_optional,
+        &req.config_choices,
+    )
+    .await?;
 
     if !plan.actions.is_empty() {
         // 2. Back up everything that will change.
         progress.stage(SyncStage::Backup);
         let from = row.synced_revision.filter(|r| *r > 0).map(|r| r as u32);
         let (_, backup_dir) = backup::create(
-            &state.db, &state.paths, &id, &game_dir, req.reason, from, Some(req.revision), records(&plan),
+            &state.db,
+            &state.paths,
+            &id,
+            &game_dir,
+            req.reason,
+            from,
+            Some(req.revision),
+            records(&plan),
         )
         .await?;
 
@@ -142,7 +181,12 @@ pub async fn run<R: Runtime>(state: &AppState, progress: &Progress<R>, source: &
 
         // 4. Stage, then move into place.
         progress.stage(SyncStage::Apply);
-        let (paths, actions, game, backup_dir2) = (state.paths.clone(), plan.actions.clone(), game_dir.clone(), backup_dir);
+        let (paths, actions, game, backup_dir2) = (
+            state.paths.clone(),
+            plan.actions.clone(),
+            game_dir.clone(),
+            backup_dir,
+        );
         tokio::task::spawn_blocking(move || apply_actions(&paths, &game, &actions, backup_dir2))
             .await
             .map_err(|e| AppError::unknown(e.to_string()))??;
@@ -170,7 +214,11 @@ async fn fetch_all<R: Runtime>(
         .places()
         .map(|(e, local)| (e, fetch::route(&state.paths, source, game_dir, e, local)))
         .collect();
-    let total: u64 = routes.iter().filter(|(_, r)| *r != Route::Cached).map(|(e, _)| e.size_bytes).sum();
+    let total: u64 = routes
+        .iter()
+        .filter(|(_, r)| *r != Route::Cached)
+        .map(|(e, _)| e.size_bytes)
+        .sum();
     progress.stage(SyncStage::Download);
     let mut done = 0u64;
     let mut manual = Vec::new();
@@ -232,7 +280,12 @@ async fn wait_for_manual_downloads<R: Runtime>(
 }
 
 /// Stage every file, then make the changes, journaling each one. Blocking.
-fn apply_actions(paths: &crate::state::AppPaths, game_dir: &Path, actions: &[Action], backup_dir: PathBuf) -> AppResult<()> {
+fn apply_actions(
+    paths: &crate::state::AppPaths,
+    game_dir: &Path,
+    actions: &[Action],
+    backup_dir: PathBuf,
+) -> AppResult<()> {
     let staging = game_dir.join(STAGING).join(new_id());
     std::fs::create_dir_all(&staging)?;
     hide(&game_dir.join(STAGING));
@@ -241,7 +294,9 @@ fn apply_actions(paths: &crate::state::AppPaths, game_dir: &Path, actions: &[Act
     for a in actions {
         let (path, from) = match a {
             Action::Place { entry, .. } => (&entry.path, fetch::cache_file(paths, &entry.sha1)),
-            Action::WriteConfig { config, .. } => (&config.path, fetch::blob_file(paths, &config.sha256)),
+            Action::WriteConfig { config, .. } => {
+                (&config.path, fetch::blob_file(paths, &config.sha256))
+            }
             _ => continue,
         };
         let to = staging.join("files").join(path);
@@ -249,16 +304,28 @@ fn apply_actions(paths: &crate::state::AppPaths, game_dir: &Path, actions: &[Act
         std::fs::copy(&from, &to)?;
     }
 
-    let mut journal = Journal { backup_dir, done: vec![] };
+    let mut journal = Journal {
+        backup_dir,
+        done: vec![],
+    };
     journal.save(&staging)?;
     let result = (|| -> AppResult<()> {
         for a in actions {
             match a {
                 Action::Remove { path } | Action::RemoveConfig { path } => {
                     remove(&game_dir.join(path))?;
-                    journal.done.push(FileRecord { path: path.clone(), action: FileAction::Removed });
+                    journal.done.push(FileRecord {
+                        path: path.clone(),
+                        action: FileAction::Removed,
+                    });
                 }
-                Action::Place { entry: _, replaces, .. } | Action::WriteConfig { config: _, replaces } => {
+                Action::Place {
+                    entry: _, replaces, ..
+                }
+                | Action::WriteConfig {
+                    config: _,
+                    replaces,
+                } => {
                     let path = match a {
                         Action::Place { entry, .. } => &entry.path,
                         Action::WriteConfig { config, .. } => &config.path,
@@ -267,12 +334,18 @@ fn apply_actions(paths: &crate::state::AppPaths, game_dir: &Path, actions: &[Act
                     let target = game_dir.join(path);
                     if *replaces && target.exists() {
                         remove(&target)?;
-                        journal.done.push(FileRecord { path: path.clone(), action: FileAction::Removed });
+                        journal.done.push(FileRecord {
+                            path: path.clone(),
+                            action: FileAction::Removed,
+                        });
                         journal.save(&staging)?;
                     }
                     std::fs::create_dir_all(target.parent().expect("relative path has a parent"))?;
                     std::fs::rename(staging.join("files").join(path), &target)?;
-                    journal.done.push(FileRecord { path: path.clone(), action: FileAction::Added });
+                    journal.done.push(FileRecord {
+                        path: path.clone(),
+                        action: FileAction::Added,
+                    });
                 }
             }
             journal.save(&staging)?;
@@ -302,7 +375,9 @@ fn remove(path: &Path) -> AppResult<()> {
             }
             Err(e) => {
                 tracing::warn!(error = %e, path = %path.display(), "couldn't remove file");
-                return Err(AppError::conflict("A file is in use. Close the launcher and try again."));
+                return Err(AppError::conflict(
+                    "A file is in use. Close the launcher and try again.",
+                ));
             }
         }
     }

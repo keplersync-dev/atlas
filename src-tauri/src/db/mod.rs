@@ -60,7 +60,14 @@ mod tests {
                 .await
                 .unwrap();
         let names: Vec<_> = tables.into_iter().map(|(n,)| n).collect();
-        for t in ["backup", "cloud_cache", "instance", "instance_content", "launcher", "setting"] {
+        for t in [
+            "backup",
+            "cloud_cache",
+            "instance",
+            "instance_content",
+            "launcher",
+            "setting",
+        ] {
             assert!(names.iter().any(|n| n == t), "missing table {t}: {names:?}");
         }
     }

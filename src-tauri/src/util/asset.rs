@@ -18,9 +18,18 @@ fn encode_component(s: &str) -> String {
     let mut out = String::with_capacity(s.len() * 3);
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'!' | b'~' | b'*' | b'\'' | b'(' | b')' => {
-                out.push(b as char)
-            }
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'!'
+            | b'~'
+            | b'*'
+            | b'\''
+            | b'('
+            | b')' => out.push(b as char),
             _ => out.push_str(&format!("%{b:02X}")),
         }
     }
@@ -32,10 +41,18 @@ mod tests {
     #[test]
     fn matches_convert_file_src() {
         assert_eq!(
-            super::url(r"file:C:\Users\me\AppData\Roaming\dev.keplerhaloxx.atlas\cache\icons\ab.png"),
+            super::url(
+                r"file:C:\Users\me\AppData\Roaming\dev.keplerhaloxx.atlas\cache\icons\ab.png"
+            ),
             "http://asset.localhost/C%3A%5CUsers%5Cme%5CAppData%5CRoaming%5Cdev.keplerhaloxx.atlas%5Ccache%5Cicons%5Cab.png"
         );
-        assert_eq!(super::url("file:C:\\a b\\é.png"), "http://asset.localhost/C%3A%5Ca%20b%5C%C3%A9.png");
-        assert_eq!(super::url("https://cdn.modrinth.com/x.png"), "https://cdn.modrinth.com/x.png");
+        assert_eq!(
+            super::url("file:C:\\a b\\é.png"),
+            "http://asset.localhost/C%3A%5Ca%20b%5C%C3%A9.png"
+        );
+        assert_eq!(
+            super::url("https://cdn.modrinth.com/x.png"),
+            "https://cdn.modrinth.com/x.png"
+        );
     }
 }

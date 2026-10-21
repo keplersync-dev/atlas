@@ -22,11 +22,16 @@ impl LauncherRow {
 }
 
 pub async fn list(db: &SqlitePool) -> sqlx::Result<Vec<LauncherRow>> {
-    sqlx::query_as("SELECT * FROM launcher ORDER BY created_at").fetch_all(db).await
+    sqlx::query_as("SELECT * FROM launcher ORDER BY created_at")
+        .fetch_all(db)
+        .await
 }
 
 pub async fn get(db: &SqlitePool, id: &str) -> sqlx::Result<Option<LauncherRow>> {
-    sqlx::query_as("SELECT * FROM launcher WHERE id = ?").bind(id).fetch_optional(db).await
+    sqlx::query_as("SELECT * FROM launcher WHERE id = ?")
+        .bind(id)
+        .fetch_optional(db)
+        .await
 }
 
 /// Windows paths are case-insensitive, so compare them that way.
@@ -57,6 +62,9 @@ pub async fn insert(
 }
 
 pub async fn delete(db: &SqlitePool, id: &str) -> sqlx::Result<bool> {
-    let done = sqlx::query("DELETE FROM launcher WHERE id = ?").bind(id).execute(db).await?;
+    let done = sqlx::query("DELETE FROM launcher WHERE id = ?")
+        .bind(id)
+        .execute(db)
+        .await?;
     Ok(done.rows_affected() > 0)
 }

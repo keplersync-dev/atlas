@@ -34,8 +34,12 @@ pub struct ModInfo {
 /// Read a jar's metadata. Anything unreadable gives an empty ModInfo (never an error):
 /// the file is still tracked under its file name.
 pub fn read_jar(path: &Path) -> ModInfo {
-    let Ok(file) = File::open(path) else { return ModInfo::default() };
-    let Ok(mut zip) = zip::ZipArchive::new(file) else { return ModInfo::default() };
+    let Ok(file) = File::open(path) else {
+        return ModInfo::default();
+    };
+    let Ok(mut zip) = zip::ZipArchive::new(file) else {
+        return ModInfo::default();
+    };
     read_archive(&mut zip)
 }
 
@@ -54,7 +58,9 @@ fn read_archive(zip: &mut zip::ZipArchive<File>) -> ModInfo {
         fabric(&t)
     } else if let Some(t) = text("quilt.mod.json") {
         quilt(&t)
-    } else if let Some(t) = text("META-INF/neoforge.mods.toml").or_else(|| text("META-INF/mods.toml")) {
+    } else if let Some(t) =
+        text("META-INF/neoforge.mods.toml").or_else(|| text("META-INF/mods.toml"))
+    {
         forge_toml(&t)
     } else if let Some(t) = text("mcmod.info") {
         mcmod_info(&t)
@@ -71,10 +77,18 @@ fn read_archive(zip: &mut zip::ZipArchive<File>) -> ModInfo {
 /// Copy a mod's or pack's icon out of its archive into `out` (a .png path). Returns
 /// false when it has none (or it isn't a PNG/JPEG under 2 MB). Blocking.
 pub fn extract_icon(archive: &Path, out: &Path) -> bool {
-    let Ok(file) = File::open(archive) else { return false };
-    let Ok(mut zip) = zip::ZipArchive::new(file) else { return false };
-    let inner = read_archive(&mut zip).icon.unwrap_or_else(|| "pack.png".into());
-    let Ok(mut entry) = zip.by_name(inner.trim_start_matches('/')) else { return false };
+    let Ok(file) = File::open(archive) else {
+        return false;
+    };
+    let Ok(mut zip) = zip::ZipArchive::new(file) else {
+        return false;
+    };
+    let inner = read_archive(&mut zip)
+        .icon
+        .unwrap_or_else(|| "pack.png".into());
+    let Ok(mut entry) = zip.by_name(inner.trim_start_matches('/')) else {
+        return false;
+    };
     if entry.size() > 2_000_000 {
         return false;
     }
@@ -117,23 +131,30 @@ fn join_names<'a>(names: impl Iterator<Item = &'a str>) -> Option<String> {
 
 /// Some mods ship slightly broken JSON (comments, stray control characters): be lenient.
 fn parse_json(text: &str) -> Option<Value> {
-    serde_json::from_str(text.trim_start_matches('\u{feff}')).ok().or_else(|| {
-        let cleaned: String = text
-            .lines()
-            .filter(|l| !l.trim_start().starts_with("//"))
-            .collect::<Vec<_>>()
-            .join("\n")
-            .chars()
-            .filter(|c| !c.is_control() || *c == '\n' || *c == '\t')
-            .collect();
-        serde_json::from_str(&cleaned).ok()
-    })
+    serde_json::from_str(text.trim_start_matches('\u{feff}'))
+        .ok()
+        .or_else(|| {
+            let cleaned: String = text
+                .lines()
+                .filter(|l| !l.trim_start().starts_with("//"))
+                .collect::<Vec<_>>()
+                .join("\n")
+                .chars()
+                .filter(|c| !c.is_control() || *c == '\n' || *c == '\t')
+                .collect();
+            serde_json::from_str(&cleaned).ok()
+        })
 }
 
 fn fabric(text: &str) -> ModInfo {
-    let Some(j) = parse_json(text) else { return ModInfo::default() };
+    let Some(j) = parse_json(text) else {
+        return ModInfo::default();
+    };
     let authors = j["authors"].as_array().and_then(|a| {
-        join_names(a.iter().filter_map(|x| x.as_str().or_else(|| x["name"].as_str())))
+        join_names(
+            a.iter()
+                .filter_map(|x| x.as_str().or_else(|| x["name"].as_str())),
+        )
     });
     ModInfo {
         mod_id: clean(j["id"].as_str()),
@@ -145,9 +166,13 @@ fn fabric(text: &str) -> ModInfo {
 }
 
 fn quilt(text: &str) -> ModInfo {
-    let Some(j) = parse_json(text) else { return ModInfo::default() };
+    let Some(j) = parse_json(text) else {
+        return ModInfo::default();
+    };
     let q = &j["quilt_loader"];
-    let authors = q["metadata"]["contributors"].as_object().and_then(|m| join_names(m.keys().map(String::as_str)));
+    let authors = q["metadata"]["contributors"]
+        .as_object()
+        .and_then(|m| join_names(m.keys().map(String::as_str)));
     ModInfo {
         mod_id: clean(q["id"].as_str()),
         name: clean(q["metadata"]["name"].as_str()),
@@ -158,8 +183,14 @@ fn quilt(text: &str) -> ModInfo {
 }
 
 fn forge_toml(text: &str) -> ModInfo {
-    let Ok(t) = text.parse::<toml::Table>() else { return ModInfo::default() };
-    let Some(m) = t.get("mods").and_then(|m| m.as_array()).and_then(|a| a.first()) else {
+    let Ok(t) = text.parse::<toml::Table>() else {
+        return ModInfo::default();
+    };
+    let Some(m) = t
+        .get("mods")
+        .and_then(|m| m.as_array())
+        .and_then(|a| a.first())
+    else {
         return ModInfo::default();
     };
     let get = |k: &str| clean(m.get(k).and_then(|v| v.as_str()));
@@ -173,15 +204,25 @@ fn forge_toml(text: &str) -> ModInfo {
 }
 
 fn mcmod_info(text: &str) -> ModInfo {
-    let Some(j) = parse_json(text) else { return ModInfo::default() };
+    let Some(j) = parse_json(text) else {
+        return ModInfo::default();
+    };
     // Either a list of mods, or { "modListVersion": 2, "modList": [...] }.
-    let first = j.as_array().or_else(|| j["modList"].as_array()).and_then(|a| a.first()).cloned();
-    let Some(m) = first else { return ModInfo::default() };
+    let first = j
+        .as_array()
+        .or_else(|| j["modList"].as_array())
+        .and_then(|a| a.first())
+        .cloned();
+    let Some(m) = first else {
+        return ModInfo::default();
+    };
     ModInfo {
         mod_id: clean(m["modid"].as_str()),
         name: clean(m["name"].as_str()),
         version: clean(m["version"].as_str()),
-        authors: m["authorList"].as_array().and_then(|a| join_names(a.iter().filter_map(Value::as_str))),
+        authors: m["authorList"]
+            .as_array()
+            .and_then(|a| join_names(a.iter().filter_map(Value::as_str))),
         icon: clean(m["logoFile"].as_str()).map(|p| p.trim_start_matches('/').to_string()),
     }
 }
@@ -255,7 +296,10 @@ mod tests {
                 "META-INF/neoforge.mods.toml",
                 "modLoader=\"javafml\"\nloaderVersion=\"[4,)\"\n[[mods]]\nmodId=\"jei\"\nversion=\"${file.jarVersion}\"\ndisplayName=\"Just Enough Items\"\nauthors=\"mezz\"\n",
             ),
-            ("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\r\nImplementation-Version: 19.21.0.247\r\n"),
+            (
+                "META-INF/MANIFEST.MF",
+                "Manifest-Version: 1.0\r\nImplementation-Version: 19.21.0.247\r\n",
+            ),
         ]);
         assert_eq!(info.mod_id.as_deref(), Some("jei"));
         assert_eq!(info.name.as_deref(), Some("Just Enough Items"));
@@ -271,15 +315,22 @@ mod tests {
         )]);
         assert_eq!(list.mod_id.as_deref(), Some("jei"));
         assert_eq!(list.version.as_deref(), Some("4.16.1"));
-        let v2 = read(&[("mcmod.info", r#"{ "modListVersion": 2, "modList": [{ "modid": "ic2", "name": "IndustrialCraft 2" }] }"#)]);
+        let v2 = read(&[(
+            "mcmod.info",
+            r#"{ "modListVersion": 2, "modList": [{ "modid": "ic2", "name": "IndustrialCraft 2" }] }"#,
+        )]);
         assert_eq!(v2.name.as_deref(), Some("IndustrialCraft 2"));
     }
 
     #[test]
     fn broken_or_missing_metadata_gives_nothing() {
         assert_eq!(read(&[("readme.txt", "hi")]), ModInfo::default());
-        assert_eq!(read(&[("fabric.mod.json", "{ not json")]), ModInfo::default());
-        let not_a_zip = std::env::temp_dir().join(format!("atlas-notzip-{}", crate::util::ids::new_id()));
+        assert_eq!(
+            read(&[("fabric.mod.json", "{ not json")]),
+            ModInfo::default()
+        );
+        let not_a_zip =
+            std::env::temp_dir().join(format!("atlas-notzip-{}", crate::util::ids::new_id()));
         std::fs::write(&not_a_zip, b"plain bytes").unwrap();
         assert_eq!(read_jar(&not_a_zip), ModInfo::default());
         std::fs::remove_file(not_a_zip).ok();
@@ -304,22 +355,45 @@ mod tests {
 
     #[test]
     fn icons_from_every_format() {
-        let out = std::env::temp_dir().join(format!("atlas-icon-out-{}", crate::util::ids::new_id()));
+        let out =
+            std::env::temp_dir().join(format!("atlas-icon-out-{}", crate::util::ids::new_id()));
         type Case<'a> = (&'a str, Vec<(&'a str, Vec<u8>)>);
         let cases: Vec<Case> = vec![
-            ("fabric sizes", vec![
-                ("fabric.mod.json", br#"{"id":"a","icon":{"16":"small.png","128":"assets/a/big.png"}}"#.to_vec()),
-                ("assets/a/big.png", png()),
-            ]),
-            ("forge logoFile", vec![
-                ("META-INF/mods.toml", b"[[mods]]\nmodId=\"b\"\nlogoFile=\"logo.png\"\n".to_vec()),
-                ("logo.png", png()),
-            ]),
-            ("mcmod.info", vec![
-                ("mcmod.info", br#"[{"modid":"c","logoFile":"/assets/c/logo.png"}]"#.to_vec()),
-                ("assets/c/logo.png", png()),
-            ]),
-            ("resource pack", vec![("pack.mcmeta", b"{}".to_vec()), ("pack.png", png())]),
+            (
+                "fabric sizes",
+                vec![
+                    (
+                        "fabric.mod.json",
+                        br#"{"id":"a","icon":{"16":"small.png","128":"assets/a/big.png"}}"#
+                            .to_vec(),
+                    ),
+                    ("assets/a/big.png", png()),
+                ],
+            ),
+            (
+                "forge logoFile",
+                vec![
+                    (
+                        "META-INF/mods.toml",
+                        b"[[mods]]\nmodId=\"b\"\nlogoFile=\"logo.png\"\n".to_vec(),
+                    ),
+                    ("logo.png", png()),
+                ],
+            ),
+            (
+                "mcmod.info",
+                vec![
+                    (
+                        "mcmod.info",
+                        br#"[{"modid":"c","logoFile":"/assets/c/logo.png"}]"#.to_vec(),
+                    ),
+                    ("assets/c/logo.png", png()),
+                ],
+            ),
+            (
+                "resource pack",
+                vec![("pack.mcmeta", b"{}".to_vec()), ("pack.png", png())],
+            ),
         ];
         for (what, files) in cases {
             let refs: Vec<(&str, &[u8])> = files.iter().map(|(n, b)| (*n, b.as_slice())).collect();
@@ -342,7 +416,10 @@ mod tests {
 
     #[test]
     fn lenient_json_with_comments() {
-        let info = read(&[("fabric.mod.json", "{\n  // a comment\n  \"id\": \"x\",\n  \"name\": \"X\"\n}")]);
+        let info = read(&[(
+            "fabric.mod.json",
+            "{\n  // a comment\n  \"id\": \"x\",\n  \"name\": \"X\"\n}",
+        )]);
         assert_eq!(info.mod_id.as_deref(), Some("x"));
     }
 }

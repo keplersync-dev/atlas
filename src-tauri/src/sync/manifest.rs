@@ -100,9 +100,24 @@ const MAX_OVERRIDE_BYTES: u64 = 1024 * 1024;
 const MAX_OVERRIDES_TOTAL: u64 = 20 * 1024 * 1024;
 const CONTENT_DIRS: [&str; 4] = ["mods/", "resourcepacks/", "shaderpacks/", "datapacks/"];
 const OVERRIDE_DIRS: [&str; 3] = ["config/", "defaultconfigs/", "kubejs/"];
-const OVERRIDE_EXTS: [&str; 11] =
-    ["json", "json5", "toml", "cfg", "properties", "txt", "yml", "yaml", "snbt", "js", "conf"];
-const DOWNLOAD_HOSTS: [&str; 3] = ["cdn.modrinth.com", "edge.forgecdn.net", "mediafilez.forgecdn.net"];
+const OVERRIDE_EXTS: [&str; 11] = [
+    "json",
+    "json5",
+    "toml",
+    "cfg",
+    "properties",
+    "txt",
+    "yml",
+    "yaml",
+    "snbt",
+    "js",
+    "conf",
+];
+const DOWNLOAD_HOSTS: [&str; 3] = [
+    "cdn.modrinth.com",
+    "edge.forgecdn.net",
+    "mediafilez.forgecdn.net",
+];
 
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 #[error("{0}")]
@@ -113,7 +128,8 @@ pub fn parse(bytes: &[u8]) -> Result<Manifest, Invalid> {
     if bytes.len() > MAX_BYTES {
         return Err(Invalid("manifest is larger than 2 MB".into()));
     }
-    let m: Manifest = serde_json::from_slice(bytes).map_err(|e| Invalid(format!("not a manifest: {e}")))?;
+    let m: Manifest =
+        serde_json::from_slice(bytes).map_err(|e| Invalid(format!("not a manifest: {e}")))?;
     validate(&m)?;
     Ok(m)
 }
@@ -129,7 +145,11 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
     let mut seen = HashSet::new();
     for e in &m.content {
         check_path(&e.path, &CONTENT_DIRS)?;
-        let ext = if e.kind == ContentKind::Mod { "jar" } else { "zip" };
+        let ext = if e.kind == ContentKind::Mod {
+            "jar"
+        } else {
+            "zip"
+        };
         if !e.path.to_ascii_lowercase().ends_with(&format!(".{ext}")) {
             return bad(format!("{}: a {:?} must be a .{ext} file", e.path, e.kind));
         }
@@ -142,7 +162,10 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
         if let Some(url) = &e.download_url
             && !allowed_download(url)
         {
-            return bad(format!("{}: downloads from that host aren't allowed", e.path));
+            return bad(format!(
+                "{}: downloads from that host aren't allowed",
+                e.path
+            ));
         }
         if !seen.insert(e.path.to_lowercase()) {
             return bad(format!("{}: listed twice", e.path));
@@ -177,10 +200,16 @@ fn check_path(path: &str, dirs: &[&str]) -> Result<(), Invalid> {
     if path.contains('\\') || path.starts_with('/') || path.contains(':') {
         return bad("must be a relative path with forward slashes");
     }
-    if path.split('/').any(|seg| seg.is_empty() || seg == "." || seg == "..") {
+    if path
+        .split('/')
+        .any(|seg| seg.is_empty() || seg == "." || seg == "..")
+    {
         return bad("empty, . or .. segment");
     }
-    if path.chars().any(|c| c.is_control() || "<>\"|?*".contains(c)) {
+    if path
+        .chars()
+        .any(|c| c.is_control() || "<>\"|?*".contains(c))
+    {
         return bad("characters Windows doesn't allow");
     }
     let lower = path.to_ascii_lowercase();
@@ -195,7 +224,9 @@ fn is_hex(s: &str, len: usize) -> bool {
 }
 
 fn allowed_download(url: &str) -> bool {
-    let Some(rest) = url.strip_prefix("https://") else { return false };
+    let Some(rest) = url.strip_prefix("https://") else {
+        return false;
+    };
     let host = rest.split(['/', '?', '#']).next().unwrap_or("");
     DOWNLOAD_HOSTS.contains(&host)
 }
@@ -219,7 +250,11 @@ mod tests {
     use super::*;
 
     fn example() -> Vec<u8> {
-        std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/../docs/schema/manifest.example.json")).unwrap()
+        std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../docs/schema/manifest.example.json"
+        ))
+        .unwrap()
     }
 
     #[test]

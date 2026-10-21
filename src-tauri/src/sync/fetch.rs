@@ -39,7 +39,13 @@ pub enum Route {
     Unavailable(String),
 }
 
-pub fn route(paths: &AppPaths, source: &Source, game_dir: &Path, entry: &Entry, local: Option<&String>) -> Route {
+pub fn route(
+    paths: &AppPaths,
+    source: &Source,
+    game_dir: &Path,
+    entry: &Entry,
+    local: Option<&String>,
+) -> Route {
     if cache_file(paths, &entry.sha1).is_file() {
         return Route::Cached;
     }
@@ -55,10 +61,18 @@ pub fn route(paths: &AppPaths, source: &Source, game_dir: &Path, entry: &Entry, 
     match (entry.source, &entry.page_url) {
         (ContentSource::Curseforge, Some(page)) => Route::Manual(ManualDownload {
             content_name: entry.name.clone(),
-            file_name: entry.path.rsplit('/').next().unwrap_or(&entry.path).to_string(),
+            file_name: entry
+                .path
+                .rsplit('/')
+                .next()
+                .unwrap_or(&entry.path)
+                .to_string(),
             page_url: page.clone(),
         }),
-        (ContentSource::Upload, _) => Route::Unavailable(format!("{} is stored on Atlas's servers, which aren't connected yet", entry.name)),
+        (ContentSource::Upload, _) => Route::Unavailable(format!(
+            "{} is stored on Atlas's servers, which aren't connected yet",
+            entry.name
+        )),
         _ => Route::Unavailable(format!("{} has no download link", entry.name)),
     }
 }
@@ -69,7 +83,9 @@ fn admit(from: &Path, to: &Path, sha1: Option<&str>, sha256: &str) -> AppResult<
     if sha1.is_some_and(|s| s != h.sha1) || h.sha256 != sha256 {
         return Err(AppError::conflict(format!(
             "{} doesn't match the shared version (it may be corrupt or a different file)",
-            from.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+            from.file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default()
         )));
     }
     std::fs::create_dir_all(to.parent().expect("cache files have a parent"))?;
@@ -91,7 +107,8 @@ pub async fn content(
     match route {
         Route::Cached => Ok(()),
         Route::Local(p) | Route::Source(p) => {
-            let (p, t, sha1, sha256) = (p.clone(), target, entry.sha1.clone(), entry.sha256.clone());
+            let (p, t, sha1, sha256) =
+                (p.clone(), target, entry.sha1.clone(), entry.sha256.clone());
             tokio::task::spawn_blocking(move || admit(&p, &t, Some(&sha1), &sha256))
                 .await
                 .map_err(|e| AppError::unknown(e.to_string()))??;
@@ -99,7 +116,10 @@ pub async fn content(
             Ok(())
         }
         Route::Download(url) => download(http, url, &target, entry, on_bytes).await,
-        Route::Manual(m) => Err(AppError::conflict(format!("{} has to be downloaded by hand", m.content_name))),
+        Route::Manual(m) => Err(AppError::conflict(format!(
+            "{} has to be downloaded by hand",
+            m.content_name
+        ))),
         Route::Unavailable(why) => Err(AppError::conflict(why.clone())),
     }
 }
@@ -117,7 +137,13 @@ async fn download(
     };
     std::fs::create_dir_all(target.parent().expect("cache files have a parent"))?;
     let tmp = target.with_extension("download");
-    let mut resp = http.get(url).send().await.map_err(offline)?.error_for_status().map_err(offline)?;
+    let mut resp = http
+        .get(url)
+        .send()
+        .await
+        .map_err(offline)?
+        .error_for_status()
+        .map_err(offline)?;
     {
         let mut file = std::fs::File::create(&tmp)?;
         while let Some(chunk) = resp.chunk().await.map_err(offline)? {
@@ -126,7 +152,12 @@ async fn download(
         }
         file.sync_all()?;
     }
-    let (tmp2, t, sha1, sha256) = (tmp.clone(), target.to_path_buf(), entry.sha1.clone(), entry.sha256.clone());
+    let (tmp2, t, sha1, sha256) = (
+        tmp.clone(),
+        target.to_path_buf(),
+        entry.sha1.clone(),
+        entry.sha256.clone(),
+    );
     let result = tokio::task::spawn_blocking(move || admit(&tmp2, &t, Some(&sha1), &sha256))
         .await
         .map_err(|e| AppError::unknown(e.to_string()))?;
@@ -153,19 +184,33 @@ pub async fn config(paths: &AppPaths, source: &Source, o: &Override) -> AppResul
 /// Look in the Downloads folder for files the user downloaded by hand since `since`,
 /// and take any whose sha1 matches a wanted entry into the cache. Returns how many arrived.
 pub fn pick_up_manual_downloads(paths: &AppPaths, wanted: &[&Entry], since: SystemTime) -> usize {
-    let Ok(dir) = std::fs::read_dir(&paths.downloads) else { return 0 };
+    let Ok(dir) = std::fs::read_dir(&paths.downloads) else {
+        return 0;
+    };
     let mut arrived = 0;
     for file in dir.flatten() {
         let Ok(meta) = file.metadata() else { continue };
-        let recent = meta.modified().is_ok_and(|t| t + Duration::from_secs(5) >= since);
+        let recent = meta
+            .modified()
+            .is_ok_and(|t| t + Duration::from_secs(5) >= since);
         if !meta.is_file() || !recent {
             continue;
         }
         // Cheap check first: only hash files of a size we're waiting for.
-        let Some(e) = wanted.iter().find(|e| e.size_bytes == meta.len() && !cache_file(paths, &e.sha1).is_file()) else {
+        let Some(e) = wanted
+            .iter()
+            .find(|e| e.size_bytes == meta.len() && !cache_file(paths, &e.sha1).is_file())
+        else {
             continue;
         };
-        if admit(&file.path(), &cache_file(paths, &e.sha1), Some(&e.sha1), &e.sha256).is_ok() {
+        if admit(
+            &file.path(),
+            &cache_file(paths, &e.sha1),
+            Some(&e.sha1),
+            &e.sha256,
+        )
+        .is_ok()
+        {
             arrived += 1;
         }
     }

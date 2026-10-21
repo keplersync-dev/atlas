@@ -31,7 +31,10 @@ pub type AppResult<T> = Result<T, AppError>;
 
 impl AppError {
     pub fn new(code: ErrorCode, message: impl Into<String>) -> Self {
-        Self { code, message: message.into() }
+        Self {
+            code,
+            message: message.into(),
+        }
     }
     pub fn not_found(m: impl Into<String>) -> Self {
         Self::new(ErrorCode::NotFound, m)

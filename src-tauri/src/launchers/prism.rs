@@ -40,7 +40,10 @@ impl Flavor {
 
 pub fn default_roots(flavor: Flavor) -> Vec<PathBuf> {
     match flavor {
-        Flavor::Prism => env_dir("APPDATA").map(|d| d.join("PrismLauncher")).into_iter().collect(),
+        Flavor::Prism => env_dir("APPDATA")
+            .map(|d| d.join("PrismLauncher"))
+            .into_iter()
+            .collect(),
         // MultiMC has no default location; users add it with its folder.
         Flavor::MultiMc => vec![],
     }
@@ -52,13 +55,20 @@ pub fn is_root(flavor: Flavor, path: &Path) -> bool {
 
 /// The program to start: next to the config for portable installs, else the default install.
 pub fn program(flavor: Flavor, root: &Path) -> Option<PathBuf> {
-    let installed = env_dir("LOCALAPPDATA").map(|d| d.join("Programs").join("PrismLauncher").join(flavor.exe()));
-    first_existing([Some(root.join(flavor.exe())), installed].into_iter().flatten())
+    let installed = env_dir("LOCALAPPDATA")
+        .map(|d| d.join("Programs").join("PrismLauncher").join(flavor.exe()));
+    first_existing(
+        [Some(root.join(flavor.exe())), installed]
+            .into_iter()
+            .flatten(),
+    )
 }
 
 fn instances_dir(flavor: Flavor, root: &Path) -> PathBuf {
     let cfg = std::fs::read_to_string(root.join(flavor.config_file())).unwrap_or_default();
-    let dir = parse_ini(&cfg).remove("InstanceDir").unwrap_or_else(|| "instances".into());
+    let dir = parse_ini(&cfg)
+        .remove("InstanceDir")
+        .unwrap_or_else(|| "instances".into());
     root.join(dir) // join keeps `dir` as is when it's already absolute
 }
 
@@ -79,7 +89,9 @@ pub fn list(flavor: Flavor, root: &Path) -> ReadResult<Vec<FoundInstance>> {
         }
         match read_instance(&path, &folder, &root.join("icons")) {
             Ok(i) => found.push(i),
-            Err(e) => tracing::warn!(instance = %folder, error = %e, "skipping unreadable Prism instance"),
+            Err(e) => {
+                tracing::warn!(instance = %folder, error = %e, "skipping unreadable Prism instance")
+            }
         }
     }
     Ok(found)
@@ -92,13 +104,24 @@ fn read_instance(dir: &Path, folder: &str, icons: &Path) -> ReadResult<FoundInst
         .unwrap_or_else(|| dir.join("minecraft"));
     Ok(FoundInstance {
         launcher_instance_id: folder.to_string(),
-        name: cfg.get("name").filter(|n| !n.is_empty()).cloned().unwrap_or_else(|| folder.to_string()),
+        name: cfg
+            .get("name")
+            .filter(|n| !n.is_empty())
+            .cloned()
+            .unwrap_or_else(|| folder.to_string()),
         game_dir,
         icon: cfg.get("iconKey").and_then(|key| custom_icon(icons, key)),
         minecraft_version: pack.minecraft,
-        loader: pack.loader.as_ref().map(|(l, _)| *l).or(Some(Loader::Vanilla)),
+        loader: pack
+            .loader
+            .as_ref()
+            .map(|(l, _)| *l)
+            .or(Some(Loader::Vanilla)),
         loader_version: pack.loader.and_then(|(_, v)| v),
-        last_played_at: cfg.get("lastLaunchTime").and_then(|v| v.parse().ok()).and_then(from_unix_millis),
+        last_played_at: cfg
+            .get("lastLaunchTime")
+            .and_then(|v| v.parse().ok())
+            .and_then(from_unix_millis),
         total_playtime_seconds: cfg.get("totalTimePlayed").and_then(|v| v.parse().ok()),
     })
 }
@@ -175,9 +198,19 @@ mod tests {
         assert_eq!(smp.minecraft_version.as_deref(), Some("1.21.1"));
         assert_eq!(smp.loader, Some(Loader::Fabric));
         assert_eq!(smp.loader_version.as_deref(), Some("0.16.5"));
-        assert_eq!(smp.last_played_at.as_deref(), Some("2026-10-19T00:00:00.000Z"));
+        assert_eq!(
+            smp.last_played_at.as_deref(),
+            Some("2026-10-19T00:00:00.000Z")
+        );
         assert_eq!(smp.total_playtime_seconds, Some(36_000));
-        assert_eq!(smp.icon, Some(format!("file:{}", root.join("icons").join("smp.png").display())), "custom icon file");
+        assert_eq!(
+            smp.icon,
+            Some(format!(
+                "file:{}",
+                root.join("icons").join("smp.png").display()
+            )),
+            "custom icon file"
+        );
 
         // older instance: .minecraft folder, vanilla, no play data
         let old = &list[0];

@@ -15,8 +15,11 @@ use serde_json::{Value, json};
 
 /// `call("name", { a, b: x })` → ("name", ["a", "b"]), in file order.
 fn commands_in_tauri_ts() -> Vec<(String, Vec<String>)> {
-    let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../src/lib/api/tauri.ts"))
-        .expect("read src/lib/api/tauri.ts");
+    let src = std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../src/lib/api/tauri.ts"
+    ))
+    .expect("read src/lib/api/tauri.ts");
     let call = regex::Regex::new(r#"call\(\s*"([a-z_]+)"\s*(?:,\s*\{([^}]*)\})?"#).unwrap();
     let key = regex::Regex::new(r"^\s*([A-Za-z_]\w*)").unwrap();
     call.captures_iter(&src)
@@ -71,14 +74,25 @@ fn sample(command: &str, key: &str) -> Value {
 }
 
 const ERROR_CODES: [&str; 9] = [
-    "not_found", "not_signed_in", "forbidden", "offline", "conflict",
-    "invalid_input", "rate_limited", "quota_exceeded", "unknown",
+    "not_found",
+    "not_signed_in",
+    "forbidden",
+    "offline",
+    "conflict",
+    "invalid_input",
+    "rate_limited",
+    "quota_exceeded",
+    "unknown",
 ];
 
 #[test]
 fn every_ui_call_reaches_a_command_that_accepts_its_arguments() {
     let calls = commands_in_tauri_ts();
-    assert!(calls.len() > 60, "parsed only {} calls from tauri.ts", calls.len());
+    assert!(
+        calls.len() > 60,
+        "parsed only {} calls from tauri.ts",
+        calls.len()
+    );
 
     let app = TestApp::new();
     let mut problems = BTreeMap::new();
@@ -88,20 +102,29 @@ fn every_ui_call_reaches_a_command_that_accepts_its_arguments() {
         match app.call(cmd, Value::Object(args)) {
             Ok(_) => {}
             // A stub's answer: { code, message } with a code the UI knows.
-            Err(Value::Object(e)) if e.get("code").and_then(Value::as_str).is_some_and(|c| ERROR_CODES.contains(&c)) => {}
+            Err(Value::Object(e))
+                if e.get("code")
+                    .and_then(Value::as_str)
+                    .is_some_and(|c| ERROR_CODES.contains(&c)) => {}
             // Anything else is Tauri saying the command is missing or the args don't fit.
             Err(other) => {
                 problems.insert(cmd.clone(), other.to_string());
             }
         }
     }
-    assert!(problems.is_empty(), "commands that don't match tauri.ts:\n{problems:#?}");
+    assert!(
+        problems.is_empty(),
+        "commands that don't match tauri.ts:\n{problems:#?}"
+    );
 }
 
 #[test]
 fn a_fresh_install_is_empty_and_signed_out() {
     let app = TestApp::new();
-    assert_eq!(app.ok("get_session", json!({})), json!({ "user": null, "online": true }));
+    assert_eq!(
+        app.ok("get_session", json!({})),
+        json!({ "user": null, "online": true })
+    );
     assert_eq!(app.ok("list_instances", json!({})), json!([]));
     assert_eq!(app.ok("list_launchers", json!({})), json!([]));
     assert_eq!(app.ok("list_detected_instances", json!({})), json!([]));
@@ -112,7 +135,14 @@ fn a_fresh_install_is_empty_and_signed_out() {
 fn wrong_argument_names_are_caught() {
     // Proves the first test can fail: snake_case keys are not what Tauri expects.
     let app = TestApp::new();
-    let err = app.call("set_share_mode", json!({ "instance_id": "a", "content_id": "b", "mode": "required" }))
+    let err = app
+        .call(
+            "set_share_mode",
+            json!({ "instance_id": "a", "content_id": "b", "mode": "required" }),
+        )
         .unwrap_err();
-    assert!(err.as_str().is_some_and(|s| s.contains("instanceId")), "{err}");
+    assert!(
+        err.as_str().is_some_and(|s| s.contains("instanceId")),
+        "{err}"
+    );
 }

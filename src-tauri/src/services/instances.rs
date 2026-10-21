@@ -29,7 +29,9 @@ fn not_found() -> AppError {
 }
 
 async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
-    db::instances::get(&state.db, id).await?.ok_or_else(not_found)
+    db::instances::get(&state.db, id)
+        .await?
+        .ok_or_else(not_found)
 }
 
 /// What the launcher says, as stored: its picture is copied into Atlas's cache first.
@@ -69,12 +71,19 @@ pub fn summary(
         name: row.name.clone(),
         // Local pictures are stored as "file:<path>"; the webview loads them via the asset protocol.
         icon: row.icon.as_deref().map(crate::util::asset::url),
-        launcher: LauncherRef { kind, name: launchers::display_name(kind).into() },
+        launcher: LauncherRef {
+            kind,
+            name: launchers::display_name(kind).into(),
+        },
         game_dir: row.game_dir.clone(),
         minecraft_version: row.minecraft_version.clone(),
         loader: row.loader(),
         loader_version: row.loader_version.clone(),
-        status: if job.is_some() { InstanceStatus::Syncing } else { row.status() },
+        status: if job.is_some() {
+            InstanceStatus::Syncing
+        } else {
+            row.status()
+        },
         is_favorite: row.is_favorite,
         hide_activity: row.hide_activity,
         content_count,
@@ -88,9 +97,19 @@ pub fn summary(
     }
 }
 
-async fn full_summary(state: &AppState, row: &InstanceRow, count: u32) -> AppResult<InstanceSummary> {
+async fn full_summary(
+    state: &AppState,
+    row: &InstanceRow,
+    count: u32,
+) -> AppResult<InstanceSummary> {
     let sync = super::sync::info(state, row).await?;
-    Ok(summary(row, count, state.is_running(&row.id), sync, state.jobs.status(&row.id)))
+    Ok(summary(
+        row,
+        count,
+        state.is_running(&row.id),
+        sync,
+        state.jobs.status(&row.id),
+    ))
 }
 
 pub async fn summary_of(state: &AppState, row: &InstanceRow) -> AppResult<InstanceSummary> {
@@ -114,10 +133,22 @@ pub async fn list(state: &AppState) -> AppResult<Vec<InstanceSummary>> {
 
 pub async fn detail(state: &AppState, id: &str) -> AppResult<InstanceDetail> {
     let row = row(state, id).await?;
-    let content: Vec<_> = db::content::list(&state.db, id).await?.iter().map(|c| c.to_dto()).collect();
-    let backups = db::backups::list(&state.db, id).await?.iter().map(|b| b.to_dto()).collect();
+    let content: Vec<_> = db::content::list(&state.db, id)
+        .await?
+        .iter()
+        .map(|c| c.to_dto())
+        .collect();
+    let backups = db::backups::list(&state.db, id)
+        .await?
+        .iter()
+        .map(|b| b.to_dto())
+        .collect();
     let count = content.iter().filter(|c| c.installed).count() as u32;
-    Ok(InstanceDetail { summary: full_summary(state, &row, count).await?, content, backups })
+    Ok(InstanceDetail {
+        summary: full_summary(state, &row, count).await?,
+        content,
+        backups,
+    })
 }
 
 /// Track instances found in launchers. Ones already tracked, or no longer in their
@@ -132,13 +163,17 @@ pub async fn track<R: Runtime>(
     let mut added = Vec::new();
     for r in refs {
         let Some((launcher, found)) =
-            launcher_service::find_instance(state, r.launcher_kind, &r.launcher_instance_id).await?
+            launcher_service::find_instance(state, r.launcher_kind, &r.launcher_instance_id)
+                .await?
         else {
             tracing::warn!(id = %r.launcher_instance_id, "instance to track not found in its launcher");
             continue;
         };
         let game_dir = clean_path(&found.game_dir);
-        if db::instances::find_by_game_dir(&state.db, &game_dir).await?.is_some() {
+        if db::instances::find_by_game_dir(&state.db, &game_dir)
+            .await?
+            .is_some()
+        {
             continue;
         }
         let row = db::instances::insert(
@@ -175,12 +210,19 @@ pub async fn track_folder<R: Runtime>(
     game_dir: &str,
 ) -> AppResult<InstanceSummary> {
     let path = Path::new(game_dir.trim());
-    let looks_like_game_dir = ["mods", "config", "resourcepacks"].iter().any(|d| path.join(d).is_dir());
+    let looks_like_game_dir = ["mods", "config", "resourcepacks"]
+        .iter()
+        .any(|d| path.join(d).is_dir());
     if !path.is_dir() || !looks_like_game_dir {
-        return Err(AppError::invalid_input("Choose a folder that contains mods or config"));
+        return Err(AppError::invalid_input(
+            "Choose a folder that contains mods or config",
+        ));
     }
     let game_dir = clean_path(path);
-    if db::instances::find_by_game_dir(&state.db, &game_dir).await?.is_some() {
+    if db::instances::find_by_game_dir(&state.db, &game_dir)
+        .await?
+        .is_some()
+    {
         return Err(AppError::conflict("That folder is already tracked"));
     }
     let name = Path::new(&game_dir)
@@ -230,7 +272,11 @@ pub async fn untrack(state: &AppState, id: &str) -> AppResult<()> {
     Ok(())
 }
 
-pub async fn update(state: &AppState, id: &str, patch: &UpdateInstanceInput) -> AppResult<InstanceSummary> {
+pub async fn update(
+    state: &AppState,
+    id: &str,
+    patch: &UpdateInstanceInput,
+) -> AppResult<InstanceSummary> {
     row(state, id).await?;
     db::instances::update_prefs(&state.db, id, patch.is_favorite, patch.hide_activity).await?;
     // T6: if hideActivity changed while this instance is running, resend presence.
@@ -243,9 +289,13 @@ async fn refresh_metadata(state: &AppState, id: &str) -> AppResult<(InstanceRow,
     let before = row(state, id).await?;
     let found = match (&before.launcher_id, &before.launcher_instance_id) {
         (Some(launcher_id), Some(lid)) => match db::launchers::get(&state.db, launcher_id).await? {
-            Some(launcher) => launcher_service::instances_in(&launcher).await.into_iter().find(|f| {
-                f.launcher_instance_id == *lid || clean_path(&f.game_dir).eq_ignore_ascii_case(&before.game_dir)
-            }),
+            Some(launcher) => launcher_service::instances_in(&launcher)
+                .await
+                .into_iter()
+                .find(|f| {
+                    f.launcher_instance_id == *lid
+                        || clean_path(&f.game_dir).eq_ignore_ascii_case(&before.game_dir)
+                }),
             None => None,
         },
         _ => None,
@@ -259,14 +309,19 @@ async fn refresh_metadata(state: &AppState, id: &str) -> AppResult<(InstanceRow,
         Some(f) => Some(metadata(state, f).await),
         None => None,
     };
-    let changed = status != before.status() || meta.as_ref().is_some_and(|m| *m != Metadata::of(&before));
+    let changed =
+        status != before.status() || meta.as_ref().is_some_and(|m| *m != Metadata::of(&before));
     db::instances::update_scan(&state.db, id, meta.as_ref(), status).await?;
     Ok((row(state, id).await?, changed))
 }
 
 /// Re-read an instance: launcher metadata, then its files. Sends `instance.changed`
 /// when anything differs, and keeps the folder watched while it exists.
-pub async fn rescan<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) -> AppResult<InstanceSummary> {
+pub async fn rescan<R: Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    id: &str,
+) -> AppResult<InstanceSummary> {
     if state.jobs.is_busy(id) {
         // An update is writing the folder; it rescans when it's done.
         return summary_by_id(state, id).await;
@@ -289,7 +344,12 @@ pub async fn rescan<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) 
         false
     };
     if meta_changed || files_changed {
-        emit(app, AtlasEvent::InstanceChanged { instance_id: id.to_string() });
+        emit(
+            app,
+            AtlasEvent::InstanceChanged {
+                instance_id: id.to_string(),
+            },
+        );
     }
     if row.status() == InstanceStatus::Ready {
         look_up_in_background(state, app, id);
@@ -300,7 +360,9 @@ pub async fn rescan<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) 
 /// Identify unknown files on Modrinth without holding up the scan. Sends
 /// `instance.changed` when names, versions or icons arrive.
 fn look_up_in_background<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) {
-    let Some(api) = state.modrinth_api.clone() else { return };
+    let Some(api) = state.modrinth_api.clone() else {
+        return;
+    };
     if !state.resolving.lock().unwrap().insert(id.to_string()) {
         return; // already looking
     }
@@ -308,7 +370,12 @@ fn look_up_in_background<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &
     tauri::async_runtime::spawn(async move {
         match crate::resolve::resolve_instance(&state.db, &state.http, &api, &id).await {
             Ok(0) => {}
-            Ok(_) => emit(&app, AtlasEvent::InstanceChanged { instance_id: id.clone() }),
+            Ok(_) => emit(
+                &app,
+                AtlasEvent::InstanceChanged {
+                    instance_id: id.clone(),
+                },
+            ),
             Err(e) => tracing::warn!(instance = %id, error = %e, "saving lookups failed"),
         }
         state.resolving.lock().unwrap().remove(&id);
@@ -324,7 +391,10 @@ pub async fn rescan_all<R: Runtime>(state: &AppState, app: &AppHandle<R>, older_
     };
     let cutoff = crate::util::time::iso(chrono::Utc::now() - older_than);
     for r in rows {
-        let stale = older_than.is_zero() || r.last_scanned_at.as_deref().is_none_or(|t| t < cutoff.as_str());
+        let stale = older_than.is_zero()
+            || r.last_scanned_at
+                .as_deref()
+                .is_none_or(|t| t < cutoff.as_str());
         if stale && let Err(e) = rescan(state, app, &r.id).await {
             tracing::warn!(instance = %r.name, error = %e, "rescan failed");
         }
@@ -338,7 +408,9 @@ pub async fn open_in_launcher(state: &AppState, id: &str) -> AppResult<()> {
     }
     let kind = row.kind();
     if kind == LauncherKind::Folder {
-        return Err(AppError::conflict("This folder isn't from a launcher Atlas knows"));
+        return Err(AppError::conflict(
+            "This folder isn't from a launcher Atlas knows",
+        ));
     }
     let name = launchers::display_name(kind);
     let launcher = match &row.launcher_id {
@@ -348,7 +420,9 @@ pub async fn open_in_launcher(state: &AppState, id: &str) -> AppResult<()> {
     .ok_or_else(|| AppError::conflict(format!("Atlas can't find {name} on this PC anymore")))?;
     let instance = row.launcher_instance_id.as_deref().unwrap_or_default();
     launchers::open(kind, Path::new(&launcher.root_path), instance).map_err(|e| match e {
-        OpenError::NoProgram => AppError::conflict(format!("Couldn't find {name}. Is it installed?")),
+        OpenError::NoProgram => {
+            AppError::conflict(format!("Couldn't find {name}. Is it installed?"))
+        }
         OpenError::Spawn(e) => {
             tracing::warn!(error = %e, "couldn't start launcher");
             AppError::unknown(format!("Couldn't start {name}"))
@@ -356,15 +430,21 @@ pub async fn open_in_launcher(state: &AppState, id: &str) -> AppResult<()> {
     })
 }
 
-pub async fn open_folder<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) -> AppResult<()> {
+pub async fn open_folder<R: Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    id: &str,
+) -> AppResult<()> {
     let row = row(state, id).await?;
     if row.status() == InstanceStatus::Missing || !Path::new(&row.game_dir).is_dir() {
         return Err(AppError::conflict("The folder is missing"));
     }
-    app.opener().open_path(&row.game_dir, None::<&str>).map_err(|e| {
-        tracing::warn!(error = %e, "couldn't open folder");
-        AppError::unknown("Couldn't open the folder")
-    })
+    app.opener()
+        .open_path(&row.game_dir, None::<&str>)
+        .map_err(|e| {
+            tracing::warn!(error = %e, "couldn't open folder");
+            AppError::unknown("Couldn't open the folder")
+        })
 }
 
 /// Turn a file on or off by renaming it to/from ".disabled", like every launcher does.
@@ -400,7 +480,12 @@ pub async fn set_content_enabled<R: Runtime>(
     }
     rename_with_retry(&from, &to).await?;
     db::content::set_enabled(&state.db, content_id, enabled).await?;
-    emit(app, AtlasEvent::InstanceChanged { instance_id: instance_id.to_string() });
+    emit(
+        app,
+        AtlasEvent::InstanceChanged {
+            instance_id: instance_id.to_string(),
+        },
+    );
     Ok(())
 }
 
@@ -416,11 +501,15 @@ async fn rename_with_retry(from: &Path, to: &Path) -> AppResult<()> {
                 tokio::time::sleep(Duration::from_millis(200)).await;
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Err(AppError::conflict("The file isn't there anymore. Atlas will rescan the folder."));
+                return Err(AppError::conflict(
+                    "The file isn't there anymore. Atlas will rescan the folder.",
+                ));
             }
             Err(e) => {
                 tracing::warn!(error = %e, from = %from.display(), "rename failed");
-                return Err(AppError::conflict("A file is in use. Close the launcher and try again."));
+                return Err(AppError::conflict(
+                    "A file is in use. Close the launcher and try again.",
+                ));
             }
         }
     }
@@ -436,12 +525,19 @@ pub async fn set_share_mode<R: Runtime>(
 ) -> AppResult<()> {
     let instance = row(state, instance_id).await?;
     if instance.shared_role.as_deref().and_then(from_wire) == Some(MemberRole::Viewer) {
-        return Err(AppError::forbidden("Only the owner and editors choose how files are shared"));
+        return Err(AppError::forbidden(
+            "Only the owner and editors choose how files are shared",
+        ));
     }
     db::content::get(&state.db, instance_id, content_id)
         .await?
         .ok_or_else(|| AppError::not_found("Content not found"))?;
     db::content::set_share_mode(&state.db, content_id, &to_wire(mode)).await?;
-    emit(app, AtlasEvent::InstanceChanged { instance_id: instance_id.to_string() });
+    emit(
+        app,
+        AtlasEvent::InstanceChanged {
+            instance_id: instance_id.to_string(),
+        },
+    );
     Ok(())
 }

@@ -27,7 +27,10 @@ pub fn parse_ini(text: &str) -> HashMap<String, String> {
         .filter_map(|l| l.split_once('='))
         .map(|(k, v)| {
             let v = v.trim();
-            let v = v.strip_prefix('"').and_then(|v| v.strip_suffix('"')).unwrap_or(v);
+            let v = v
+                .strip_prefix('"')
+                .and_then(|v| v.strip_suffix('"'))
+                .unwrap_or(v);
             (k.trim().to_string(), v.to_string())
         })
         .collect()
@@ -77,24 +80,41 @@ mod tests {
 
     #[test]
     fn times_in_every_launcher_format() {
-        assert_eq!(parse_time("2025-12-31T13:02:19.217Z").unwrap(), "2025-12-31T13:02:19.217Z");
+        assert_eq!(
+            parse_time("2025-12-31T13:02:19.217Z").unwrap(),
+            "2025-12-31T13:02:19.217Z"
+        );
         // official launcher, offset without a colon
-        assert_eq!(parse_time("2024-11-01T23:43:39+1100").unwrap(), "2024-11-01T12:43:39.000Z");
+        assert_eq!(
+            parse_time("2024-11-01T23:43:39+1100").unwrap(),
+            "2024-11-01T12:43:39.000Z"
+        );
         // CurseForge, 7 decimal places
-        assert_eq!(parse_time("2026-01-23T10:03:20.0904994Z").unwrap(), "2026-01-23T10:03:20.090Z");
+        assert_eq!(
+            parse_time("2026-01-23T10:03:20.0904994Z").unwrap(),
+            "2026-01-23T10:03:20.090Z"
+        );
         // no zone at all: taken as UTC
-        assert_eq!(parse_time("2026-01-23T10:03:20").unwrap(), "2026-01-23T10:03:20.000Z");
+        assert_eq!(
+            parse_time("2026-01-23T10:03:20").unwrap(),
+            "2026-01-23T10:03:20.000Z"
+        );
         // placeholders mean "never"
         assert_eq!(parse_time("0001-01-01T00:00:00"), None);
         assert_eq!(parse_time("1970-01-01T00:00:00.000Z"), None);
         assert_eq!(parse_time("not a date"), None);
-        assert_eq!(from_unix_seconds(1_782_206_545).unwrap(), "2026-06-23T09:22:25.000Z");
+        assert_eq!(
+            from_unix_seconds(1_782_206_545).unwrap(),
+            "2026-06-23T09:22:25.000Z"
+        );
         assert_eq!(from_unix_millis(0), None);
     }
 
     #[test]
     fn ini_with_sections_quotes_and_comments() {
-        let ini = parse_ini("[General]\n# comment\nname=\"Survival SMP\"\nInstanceType=OneSix\n\nbad line\n");
+        let ini = parse_ini(
+            "[General]\n# comment\nname=\"Survival SMP\"\nInstanceType=OneSix\n\nbad line\n",
+        );
         assert_eq!(ini["name"], "Survival SMP");
         assert_eq!(ini["InstanceType"], "OneSix");
         assert_eq!(ini.len(), 2);

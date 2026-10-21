@@ -8,7 +8,10 @@ use crate::error::{AppError, AppResult};
 /// signed-out state rather than an "offline" banner.
 #[tauri::command]
 pub async fn get_session() -> AppResult<Session> {
-    Ok(Session { user: None, online: true })
+    Ok(Session {
+        user: None,
+        online: true,
+    })
 }
 
 #[tauri::command]

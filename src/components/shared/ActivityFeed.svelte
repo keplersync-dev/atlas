@@ -45,7 +45,12 @@
       case "ownership_transferred":
         return { who, verb: "now owns", what, tail: "" };
       case "instance_frozen":
-        return { who: null, verb: "", what, tail: " was frozen: the owner left" };
+        return {
+          who: null,
+          verb: "",
+          what,
+          tail: " was frozen: the owner left",
+        };
       default:
         return { who, verb: "", what, tail: "" };
     }
@@ -112,9 +117,14 @@
           : ''}"
       >
         {@render avatar(a, 24)}
-        <span class="min-w-0 flex-1 text-(--text-muted)">{@render sentence(a)}</span>
-        <small class="flex shrink-0 items-center gap-1.5 pt-0.5 text-[11px] text-(--text-faint)">
-          {#if !a.readAt}<i class="size-1.5 rounded-full bg-(--accent)"></i>{/if}
+        <span class="min-w-0 flex-1 text-(--text-muted)"
+          >{@render sentence(a)}</span
+        >
+        <small
+          class="flex shrink-0 items-center gap-1.5 pt-0.5 text-[11px] text-(--text-faint)"
+        >
+          {#if !a.readAt}<i class="size-1.5 rounded-full bg-(--accent)"
+            ></i>{/if}
           {timeAgo(a.createdAt)}
         </small>
       </svelte:element>

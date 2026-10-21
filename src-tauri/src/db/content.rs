@@ -76,7 +76,6 @@ pub async fn list(db: &SqlitePool, instance_id: &str) -> sqlx::Result<Vec<Conten
 // ── Writes (the scanner and file commands). They take a connection so the scanner
 // can apply a whole scan in one transaction: pass `&mut *tx`.
 
-
 /// What the scanner read from a file: hashes plus what the file says about itself.
 pub struct FileFacts<'a> {
     pub enabled: bool,
@@ -130,7 +129,11 @@ pub async fn insert_file(c: &mut SqliteConnection, f: NewFile<'_>) -> sqlx::Resu
 
 /// The file at an existing row's path is a different file now (new hash): keep the
 /// row (and its share setting) but forget where it came from until it's resolved again.
-pub async fn replace_file(c: &mut SqliteConnection, id: &str, f: FileFacts<'_>) -> sqlx::Result<()> {
+pub async fn replace_file(
+    c: &mut SqliteConnection,
+    id: &str,
+    f: FileFacts<'_>,
+) -> sqlx::Result<()> {
     sqlx::query(
         "UPDATE instance_content SET enabled = ?, size_bytes = ?, mtime_ms = ?, sha1 = ?, sha256 = ?,
             murmur2 = ?, mod_id = ?, installed = 1, source = 'local', project_id = NULL, version_id = NULL,
@@ -182,7 +185,10 @@ pub async fn mark_not_installed(c: &mut SqliteConnection, id: &str) -> sqlx::Res
 }
 
 pub async fn delete(c: &mut SqliteConnection, id: &str) -> sqlx::Result<()> {
-    sqlx::query("DELETE FROM instance_content WHERE id = ?").bind(id).execute(c).await?;
+    sqlx::query("DELETE FROM instance_content WHERE id = ?")
+        .bind(id)
+        .execute(c)
+        .await?;
     Ok(())
 }
 

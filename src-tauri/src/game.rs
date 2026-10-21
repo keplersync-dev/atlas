@@ -57,7 +57,9 @@ pub fn spawn<R: Runtime>(state: AppState, app: AppHandle<R>) {
 }
 
 async fn update<R: Runtime>(state: &AppState, app: &AppHandle<R>, running_dirs: &HashSet<String>) {
-    let Ok(instances) = db::instances::list(&state.db).await else { return };
+    let Ok(instances) = db::instances::list(&state.db).await else {
+        return;
+    };
     let now: HashSet<String> = instances
         .into_iter()
         .filter(|i| running_dirs.contains(&key(Path::new(&i.game_dir))))
@@ -67,7 +69,13 @@ async fn update<R: Runtime>(state: &AppState, app: &AppHandle<R>, running_dirs: 
     for id in now.symmetric_difference(&before) {
         let is_running = now.contains(id);
         tracing::info!(instance = %id, is_running, "game running changed");
-        emit(app, AtlasEvent::InstanceRunning { instance_id: id.clone(), is_running });
+        emit(
+            app,
+            AtlasEvent::InstanceRunning {
+                instance_id: id.clone(),
+                is_running,
+            },
+        );
         // T6: send presence ("playing" + instance name unless hidden).
     }
 }
@@ -87,7 +95,11 @@ fn java_game_dirs(system: &mut System) -> HashSet<String> {
         if name != "java.exe" && name != "javaw.exe" {
             continue;
         }
-        let args: Vec<String> = process.cmd().iter().map(|a| a.to_string_lossy().into_owned()).collect();
+        let args: Vec<String> = process
+            .cmd()
+            .iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
         if let Some(dir) = game_dir_arg(&args) {
             dirs.insert(key(Path::new(&dir)));
         }
@@ -112,7 +124,9 @@ fn game_dir_arg(args: &[String]) -> Option<String> {
 /// Paths compared the way Windows does: canonical when possible, ignoring case.
 fn key(path: &Path) -> String {
     let p = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-    p.to_string_lossy().trim_end_matches(['\\', '/']).to_lowercase()
+    p.to_string_lossy()
+        .trim_end_matches(['\\', '/'])
+        .to_lowercase()
 }
 
 #[cfg(test)]
@@ -123,15 +137,29 @@ mod tests {
     fn finds_game_dir_in_either_form() {
         let args = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         assert_eq!(
-            game_dir_arg(&args(&["javaw", "-Xmx4G", "net.minecraft.client.main.Main", "--gameDir", r"C:\pack", "--version", "1.21.1"])),
+            game_dir_arg(&args(&[
+                "javaw",
+                "-Xmx4G",
+                "net.minecraft.client.main.Main",
+                "--gameDir",
+                r"C:\pack",
+                "--version",
+                "1.21.1"
+            ])),
             Some(r"C:\pack".into())
         );
-        assert_eq!(game_dir_arg(&args(&["java", r"--gameDir=C:\pack 2"])), Some(r"C:\pack 2".into()));
+        assert_eq!(
+            game_dir_arg(&args(&["java", r"--gameDir=C:\pack 2"])),
+            Some(r"C:\pack 2".into())
+        );
         assert_eq!(game_dir_arg(&args(&["java", "-jar", "server.jar"])), None);
     }
 
     #[test]
     fn keys_ignore_case_and_trailing_slashes() {
-        assert_eq!(key(Path::new(r"C:\Does\Not\Exist\")), key(Path::new(r"c:\does\not\exist")));
+        assert_eq!(
+            key(Path::new(r"C:\Does\Not\Exist\")),
+            key(Path::new(r"c:\does\not\exist"))
+        );
     }
 }

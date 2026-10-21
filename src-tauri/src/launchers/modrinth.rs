@@ -19,8 +19,13 @@ use super::util::{env_dir, first_existing, from_unix_seconds, loader_from};
 use super::{FoundInstance, ReadError, ReadResult};
 
 pub fn default_roots() -> Vec<PathBuf> {
-    let Some(appdata) = env_dir("APPDATA") else { return vec![] };
-    vec![appdata.join("ModrinthApp"), appdata.join("com.modrinth.theseus")]
+    let Some(appdata) = env_dir("APPDATA") else {
+        return vec![];
+    };
+    vec![
+        appdata.join("ModrinthApp"),
+        appdata.join("com.modrinth.theseus"),
+    ]
 }
 
 pub fn is_root(path: &Path) -> bool {
@@ -31,7 +36,10 @@ pub fn program() -> Option<PathBuf> {
     let local = env_dir("LOCALAPPDATA")?;
     first_existing([
         local.join("Modrinth App").join("Modrinth App.exe"),
-        local.join("Programs").join("Modrinth App").join("Modrinth App.exe"),
+        local
+            .join("Programs")
+            .join("Modrinth App")
+            .join("Modrinth App.exe"),
     ])
 }
 
@@ -95,11 +103,16 @@ async fn read(db: &Path, read_only: bool) -> ReadResult<Vec<Row>> {
         .read_only(read_only)
         .busy_timeout(Duration::from_secs(2));
     let mut conn = SqliteConnection::connect_with(&options).await?;
-    let has_instances: Option<(String,)> =
-        sqlx::query_as("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'instances'")
-            .fetch_optional(&mut conn)
-            .await?;
-    let sql = if has_instances.is_some() { CURRENT } else { LEGACY };
+    let has_instances: Option<(String,)> = sqlx::query_as(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'instances'",
+    )
+    .fetch_optional(&mut conn)
+    .await?;
+    let sql = if has_instances.is_some() {
+        CURRENT
+    } else {
+        LEGACY
+    };
     let rows = sqlx::query_as::<_, Row>(sql).fetch_all(&mut conn).await?;
     conn.close().await?;
     Ok(rows)
@@ -130,9 +143,12 @@ mod tests {
     /// A Modrinth root with the real table definitions (only the columns Atlas reads
     /// plus the NOT NULL ones) and two instances.
     async fn fixture() -> PathBuf {
-        let root = std::env::temp_dir().join(format!("atlas-mr-test-{}", crate::util::ids::new_id()));
+        let root =
+            std::env::temp_dir().join(format!("atlas-mr-test-{}", crate::util::ids::new_id()));
         std::fs::create_dir_all(root.join("profiles/Better MC [FABRIC] - BMC2")).unwrap();
-        let options = SqliteConnectOptions::new().filename(root.join("app.db")).create_if_missing(true);
+        let options = SqliteConnectOptions::new()
+            .filename(root.join("app.db"))
+            .create_if_missing(true);
         let mut c = SqliteConnection::connect_with(&options).await.unwrap();
         for sql in [
             "CREATE TABLE instances (id TEXT NOT NULL, path TEXT NOT NULL, applied_content_set_id TEXT NULL,
@@ -166,11 +182,17 @@ mod tests {
         assert_eq!(list.len(), 2);
         let bmc = &list[0];
         assert_eq!(bmc.launcher_instance_id, "Better MC [FABRIC] - BMC2");
-        assert_eq!(bmc.game_dir, root.join("profiles/Better MC [FABRIC] - BMC2"));
+        assert_eq!(
+            bmc.game_dir,
+            root.join("profiles/Better MC [FABRIC] - BMC2")
+        );
         assert_eq!(bmc.minecraft_version.as_deref(), Some("1.20.1"));
         assert_eq!(bmc.loader, Some(Loader::Fabric));
         assert_eq!(bmc.loader_version.as_deref(), Some("0.16.9"));
-        assert_eq!(bmc.last_played_at.as_deref(), Some("2026-06-04T07:54:51.000Z"));
+        assert_eq!(
+            bmc.last_played_at.as_deref(),
+            Some("2026-06-04T07:54:51.000Z")
+        );
         assert_eq!(bmc.total_playtime_seconds, Some(3653));
         assert_eq!(bmc.icon.as_deref(), Some("file:C:\\icons\\bmc.png"));
 

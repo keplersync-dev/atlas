@@ -77,7 +77,11 @@ const M: u32 = 0x5bd1_e995;
 
 impl Murmur2 {
     fn new(len: u32) -> Self {
-        Self { h: 1 ^ len, block: [0; 4], filled: 0 }
+        Self {
+            h: 1 ^ len,
+            block: [0; 4],
+            filled: 0,
+        }
     }
 
     fn push(&mut self, b: u8) {
@@ -136,7 +140,10 @@ mod tests {
     fn sha_hashes_match_known_values() {
         let (_, h) = file_with(b"abc");
         assert_eq!(h.sha1, "a9993e364706816aba3e25717850c26c9cd0d89d");
-        assert_eq!(h.sha256, "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        assert_eq!(
+            h.sha256,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
     }
 
     #[test]
@@ -147,7 +154,11 @@ mod tests {
         assert_eq!(murmur(b"abcd"), 0xc93f_7a16);
         assert_eq!(murmur(b"abcdefg"), 0x0afa_6525);
         assert_eq!(murmur(b"hello world\n"), 0xa85c_bded);
-        assert_eq!(murmur(b"abc"), murmur(b"a b\tc\r\n"), "whitespace is ignored");
+        assert_eq!(
+            murmur(b"abc"),
+            murmur(b"a b\tc\r\n"),
+            "whitespace is ignored"
+        );
         assert_ne!(murmur(b"abc"), murmur(b"abd"));
         // Every tail length (0–3 leftover bytes) goes through a different branch.
         let lens: Vec<u32> = (4..8).map(|n| murmur(&b"abcdefg"[..n])).collect();
@@ -158,7 +169,9 @@ mod tests {
     #[test]
     fn file_hash_matches_in_memory_murmur_across_chunks() {
         // Bigger than one chunk, with whitespace spread through it.
-        let data: Vec<u8> = (0..200_000u32).map(|i| if i % 7 == 0 { b' ' } else { (i % 251) as u8 }).collect();
+        let data: Vec<u8> = (0..200_000u32)
+            .map(|i| if i % 7 == 0 { b' ' } else { (i % 251) as u8 })
+            .collect();
         let (_, h) = file_with(&data);
         assert_eq!(h.murmur2, murmur(&data));
     }

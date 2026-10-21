@@ -171,7 +171,9 @@
       role="alert"
       class="mb-5 flex items-start gap-3 rounded-lg border border-(--danger)/30 bg-(--danger)/8 px-4 py-3 text-[12.5px]"
     >
-      <span class="mt-0.5 text-(--danger)"><Icon name="warn" class="size-4" /></span>
+      <span class="mt-0.5 text-(--danger)"
+        ><Icon name="warn" class="size-4" /></span
+      >
       <span class="min-w-0 flex-1">
         <b class="font-semibold">The last update didn't finish.</b>
         {instances.failures[id]} Your files weren't changed.

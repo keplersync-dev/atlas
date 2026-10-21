@@ -32,7 +32,11 @@ fn mode(s: &str) -> Option<ShareMode> {
 /// Owners/editors: their folder is the source of the next version, so anything that would
 /// change it counts. Viewers: only disabling or deleting a *required* file counts; their own
 /// extras are theirs, and skipping or removing optional items is their choice.
-pub fn local_changes<'a>(role: MemberRole, rows: &'a [ContentRow], synced: Option<&Manifest>) -> LocalChanges<'a> {
+pub fn local_changes<'a>(
+    role: MemberRole,
+    rows: &'a [ContentRow],
+    synced: Option<&Manifest>,
+) -> LocalChanges<'a> {
     let live: Vec<&ContentRow> = rows.iter().filter(|r| r.installed).collect();
     let viewer = role == MemberRole::Viewer;
     let mut out = LocalChanges::default();
@@ -69,7 +73,12 @@ pub fn local_changes<'a>(role: MemberRole, rows: &'a [ContentRow], synced: Optio
     out
 }
 
-pub fn sync_state(frozen: bool, synced_revision: u32, latest_revision: u32, local_change_count: u32) -> SyncState {
+pub fn sync_state(
+    frozen: bool,
+    synced_revision: u32,
+    latest_revision: u32,
+    local_change_count: u32,
+) -> SyncState {
     let behind = synced_revision < latest_revision;
     match (frozen, local_change_count > 0, behind) {
         (true, _, _) => SyncState::Frozen,
@@ -83,11 +92,17 @@ pub fn sync_state(frozen: bool, synced_revision: u32, latest_revision: u32, loca
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::sync::manifest::{Entry, MinecraftSpec};
     use crate::dto::{ContentKind, ContentSource, Loader, Side};
+    use crate::sync::manifest::{Entry, MinecraftSpec};
 
     /// A row as the scanner would leave it, after a publish/sync marked it.
-    fn row(name: &str, managed: bool, enabled: bool, mode: &str, published: Option<&str>) -> ContentRow {
+    fn row(
+        name: &str,
+        managed: bool,
+        enabled: bool,
+        mode: &str,
+        published: Option<&str>,
+    ) -> ContentRow {
         ContentRow {
             id: name.into(),
             instance_id: "i".into(),
@@ -124,7 +139,11 @@ mod tests {
             name: "m".into(),
             description: None,
             icon: None,
-            minecraft: MinecraftSpec { version: "1.21.1".into(), loader: Loader::Fabric, loader_version: None },
+            minecraft: MinecraftSpec {
+                version: "1.21.1".into(),
+                loader: Loader::Fabric,
+                loader_version: None,
+            },
             recommended_memory_mb: None,
             content: entries
                 .iter()
@@ -174,11 +193,23 @@ mod tests {
         let m = manifest(&[("sodium", true), ("iris", false), ("lithium", true)]); // lithium deleted
         let c = local_changes(MemberRole::Owner, &rows, Some(&m));
         assert_eq!(c.removed, ["sodium", "lithium"]);
-        assert_eq!(c.mode_changed.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(), ["iris"]);
-        assert_eq!(c.added.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(), ["new"]);
+        assert_eq!(
+            c.mode_changed
+                .iter()
+                .map(|r| r.name.as_str())
+                .collect::<Vec<_>>(),
+            ["iris"]
+        );
+        assert_eq!(
+            c.added.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(),
+            ["new"]
+        );
         assert_eq!(c.count(), 4);
         // Editors follow the same rules.
-        assert_eq!(local_changes(MemberRole::Editor, &rows, Some(&m)).count(), 4);
+        assert_eq!(
+            local_changes(MemberRole::Editor, &rows, Some(&m)).count(),
+            4
+        );
     }
 
     #[test]
@@ -187,11 +218,17 @@ mod tests {
         skipped.installed = false; // chose not to download it
         let rows = [
             row("sodium", true, false, "required", Some("required")), // disabled required: counts
-            row("fa", true, false, "optional", Some("optional")),     // disabled optional: their choice
+            row("fa", true, false, "optional", Some("optional")), // disabled optional: their choice
             skipped,
             row("extra", false, true, "private", None), // their own extra
         ];
-        let m = manifest(&[("sodium", true), ("fa", false), ("iris", false), ("lithium", true), ("zoom", false)]);
+        let m = manifest(&[
+            ("sodium", true),
+            ("fa", false),
+            ("iris", false),
+            ("lithium", true),
+            ("zoom", false),
+        ]);
         let c = local_changes(MemberRole::Viewer, &rows, Some(&m));
         // lithium (required) deleted counts; zoom (optional) gone doesn't.
         assert_eq!(c.removed, ["sodium", "lithium"]);

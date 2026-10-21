@@ -22,7 +22,9 @@ pub fn default_roots() -> Vec<PathBuf> {
     // Microsoft Store / Xbox app version of the launcher.
     if let Some(local) = env_dir("LOCALAPPDATA") {
         roots.push(
-            local.join(r"Packages\Microsoft.4297127D64EC6_8wekyb3d8bbwe\LocalCache\Roaming\.minecraft"),
+            local.join(
+                r"Packages\Microsoft.4297127D64EC6_8wekyb3d8bbwe\LocalCache\Roaming\.minecraft",
+            ),
         );
     }
     roots
@@ -33,11 +35,17 @@ pub fn is_root(path: &Path) -> bool {
 }
 
 pub fn program() -> Option<PathBuf> {
-    let x86 = env_dir("ProgramFiles(x86)").map(|d| d.join(r"Minecraft Launcher\MinecraftLauncher.exe"));
+    let x86 =
+        env_dir("ProgramFiles(x86)").map(|d| d.join(r"Minecraft Launcher\MinecraftLauncher.exe"));
     first_existing(
-        [Some(PathBuf::from(r"C:\XboxGames\Minecraft Launcher\Content\Minecraft.exe")), x86]
-            .into_iter()
-            .flatten(),
+        [
+            Some(PathBuf::from(
+                r"C:\XboxGames\Minecraft Launcher\Content\Minecraft.exe",
+            )),
+            x86,
+        ]
+        .into_iter()
+        .flatten(),
     )
 }
 
@@ -116,7 +124,10 @@ fn display_name(p: &Profile) -> String {
     match p.kind.as_str() {
         "latest-release" => "Latest release".into(),
         "latest-snapshot" => "Latest snapshot".into(),
-        _ => p.last_version_id.clone().unwrap_or_else(|| "Minecraft".into()),
+        _ => p
+            .last_version_id
+            .clone()
+            .unwrap_or_else(|| "Minecraft".into()),
     }
 }
 
@@ -127,14 +138,20 @@ fn parse_version_id(id: &str) -> (Option<String>, Option<(Loader, Option<String>
     if id.starts_with("latest-") {
         return (None, Some((Loader::Vanilla, None)));
     }
-    for (prefix, loader) in [("fabric-loader-", Loader::Fabric), ("quilt-loader-", Loader::Quilt)] {
+    for (prefix, loader) in [
+        ("fabric-loader-", Loader::Fabric),
+        ("quilt-loader-", Loader::Quilt),
+    ] {
         if let Some(rest) = id.strip_prefix(prefix) {
             let (version, mc) = rest.split_once('-').unwrap_or((rest, ""));
             return (some(mc), Some((loader, some(version))));
         }
     }
     if let Some(version) = id.strip_prefix("neoforge-") {
-        return (neoforge_minecraft(version), Some((Loader::Neoforge, some(version))));
+        return (
+            neoforge_minecraft(version),
+            Some((Loader::Neoforge, some(version))),
+        );
     }
     // "1.20.1-forge-47.2.0", older "1.12.2-forge1.12.2-14.23.5.2860"
     if let Some((mc, rest)) = id.split_once("-forge") {
@@ -164,7 +181,11 @@ fn neoforge_minecraft(version: &str) -> Option<String> {
     if !(20..26).contains(&major) {
         return None;
     }
-    Some(if minor == 0 { format!("1.{major}") } else { format!("1.{major}.{minor}") })
+    Some(if minor == 0 {
+        format!("1.{major}")
+    } else {
+        format!("1.{major}.{minor}")
+    })
 }
 
 #[cfg(test)]
@@ -191,7 +212,10 @@ mod tests {
         assert_eq!(main.minecraft_version, None);
         assert_eq!(main.loader, Some(Loader::Vanilla));
         assert_eq!(main.icon, None, "built-in icon name");
-        assert_eq!(main.last_played_at.as_deref(), Some("2025-12-31T13:02:19.217Z"));
+        assert_eq!(
+            main.last_played_at.as_deref(),
+            Some("2025-12-31T13:02:19.217Z")
+        );
 
         // its own game dir and a custom (embedded) picture
         let fabric = &list[0];
@@ -200,31 +224,58 @@ mod tests {
         assert_eq!(fabric.minecraft_version.as_deref(), Some("1.21.1"));
         assert_eq!(fabric.loader, Some(Loader::Fabric));
         assert_eq!(fabric.loader_version.as_deref(), Some("0.16.9"));
-        assert_eq!(fabric.icon.as_deref(), Some("data:image/png;base64,iVBORw0KGgo="));
-        assert_eq!(fabric.last_played_at.as_deref(), Some("2024-11-01T12:43:39.000Z"));
+        assert_eq!(
+            fabric.icon.as_deref(),
+            Some("data:image/png;base64,iVBORw0KGgo=")
+        );
+        assert_eq!(
+            fabric.last_played_at.as_deref(),
+            Some("2024-11-01T12:43:39.000Z")
+        );
     }
 
     #[test]
     fn version_ids() {
         let v = |id| parse_version_id(id);
-        assert_eq!(v("1.21.1"), (Some("1.21.1".into()), Some((Loader::Vanilla, None))));
-        assert_eq!(v("24w39a"), (Some("24w39a".into()), Some((Loader::Vanilla, None))));
-        assert_eq!(v("1.21.2-pre3"), (Some("1.21.2-pre3".into()), Some((Loader::Vanilla, None))));
+        assert_eq!(
+            v("1.21.1"),
+            (Some("1.21.1".into()), Some((Loader::Vanilla, None)))
+        );
+        assert_eq!(
+            v("24w39a"),
+            (Some("24w39a".into()), Some((Loader::Vanilla, None)))
+        );
+        assert_eq!(
+            v("1.21.2-pre3"),
+            (Some("1.21.2-pre3".into()), Some((Loader::Vanilla, None)))
+        );
         assert_eq!(
             v("quilt-loader-0.26.0-1.20.1"),
-            (Some("1.20.1".into()), Some((Loader::Quilt, Some("0.26.0".into()))))
+            (
+                Some("1.20.1".into()),
+                Some((Loader::Quilt, Some("0.26.0".into())))
+            )
         );
         assert_eq!(
             v("1.20.1-forge-47.2.0"),
-            (Some("1.20.1".into()), Some((Loader::Forge, Some("47.2.0".into()))))
+            (
+                Some("1.20.1".into()),
+                Some((Loader::Forge, Some("47.2.0".into())))
+            )
         );
         assert_eq!(
             v("1.12.2-forge1.12.2-14.23.5.2860"),
-            (Some("1.12.2".into()), Some((Loader::Forge, Some("14.23.5.2860".into()))))
+            (
+                Some("1.12.2".into()),
+                Some((Loader::Forge, Some("14.23.5.2860".into())))
+            )
         );
         assert_eq!(
             v("neoforge-21.1.77"),
-            (Some("1.21.1".into()), Some((Loader::Neoforge, Some("21.1.77".into()))))
+            (
+                Some("1.21.1".into()),
+                Some((Loader::Neoforge, Some("21.1.77".into())))
+            )
         );
         assert_eq!(v("neoforge-21.0.10").0, Some("1.21".into()));
         assert_eq!(v("1.20.1-OptiFine_HD_U_I6"), (Some("1.20.1".into()), None));

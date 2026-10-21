@@ -39,7 +39,8 @@
     decoding="async"
     draggable="false"
     onerror={() => (failed = true)}
-    onload={(e) => (pixelated = (e.currentTarget as HTMLImageElement).naturalWidth <= 32)}
+    onload={(e) =>
+      (pixelated = (e.currentTarget as HTMLImageElement).naturalWidth <= 32)}
     class="shrink-0 bg-(--bg-raise-2) object-cover {className}"
     style:image-rendering={pixelated ? "pixelated" : "auto"}
   />

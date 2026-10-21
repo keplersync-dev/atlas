@@ -32,7 +32,9 @@
   });
   // Only real image URLs; icon keys ("leaf") aren't pictures.
   const showIcon = $derived(
-    !!instance.icon && /^(https?:|data:image\/)/.test(instance.icon) && !iconFailed,
+    !!instance.icon &&
+      /^(https?:|data:image\/)/.test(instance.icon) &&
+      !iconFailed,
   );
   const open = () => go({ page: "instance", id: instance.id });
 

@@ -12,7 +12,11 @@ pub async fn get<T: DeserializeOwned>(db: &SqlitePool, key: &str) -> sqlx::Resul
     Ok(row.and_then(|(v,)| serde_json::from_str(&v).ok()))
 }
 
-pub async fn get_or<T: DeserializeOwned>(db: &SqlitePool, key: &str, default: T) -> sqlx::Result<T> {
+pub async fn get_or<T: DeserializeOwned>(
+    db: &SqlitePool,
+    key: &str,
+    default: T,
+) -> sqlx::Result<T> {
     Ok(get(db, key).await?.unwrap_or(default))
 }
 
@@ -27,6 +31,9 @@ pub async fn set<T: Serialize>(db: &SqlitePool, key: &str, value: &T) -> sqlx::R
 }
 
 pub async fn delete(db: &SqlitePool, key: &str) -> sqlx::Result<()> {
-    sqlx::query("DELETE FROM setting WHERE key = ?").bind(key).execute(db).await?;
+    sqlx::query("DELETE FROM setting WHERE key = ?")
+        .bind(key)
+        .execute(db)
+        .await?;
     Ok(())
 }

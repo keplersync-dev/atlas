@@ -95,7 +95,10 @@ pub fn detect(kind: LauncherKind) -> Vec<PathBuf> {
         LauncherKind::Official => official::default_roots(),
         LauncherKind::Folder => vec![],
     };
-    candidates.into_iter().filter(|p| is_root(kind, p)).collect()
+    candidates
+        .into_iter()
+        .filter(|p| is_root(kind, p))
+        .collect()
 }
 
 /// Is this folder an install of that launcher? (For "Add launcher" with a custom path.)

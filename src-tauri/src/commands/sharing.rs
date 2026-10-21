@@ -41,7 +41,10 @@ pub async fn prepare_publish(instance_id: Id) -> AppResult<PublishPlan> {
 }
 
 #[tauri::command]
-pub async fn share_instance(instance_id: Id, input: ShareInstanceInput) -> AppResult<SharedInstance> {
+pub async fn share_instance(
+    instance_id: Id,
+    input: ShareInstanceInput,
+) -> AppResult<SharedInstance> {
     Err(AppError::not_signed_in())
 }
 

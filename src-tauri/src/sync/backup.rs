@@ -100,22 +100,34 @@ pub async fn create(
 /// Keep the newest `backups_to_keep` (default 3) backups of an instance.
 pub async fn prune(db: &SqlitePool, paths: &AppPaths, instance_id: &str) -> AppResult<()> {
     let keep: usize = db::settings::get_or(db, "backups_to_keep", 3usize).await?;
-    for old in db::backups::list(db, instance_id).await?.into_iter().skip(keep) {
+    for old in db::backups::list(db, instance_id)
+        .await?
+        .into_iter()
+        .skip(keep)
+    {
         let _ = std::fs::remove_dir_all(dir(paths, instance_id, &old.id));
-        sqlx::query("DELETE FROM backup WHERE id = ?").bind(&old.id).execute(db).await?;
+        sqlx::query("DELETE FROM backup WHERE id = ?")
+            .bind(&old.id)
+            .execute(db)
+            .await?;
     }
     Ok(())
 }
 
 pub fn read_snapshot(folder: &Path) -> AppResult<Snapshot> {
-    Ok(serde_json::from_slice(&std::fs::read(folder.join("state.json"))?)?)
+    Ok(serde_json::from_slice(&std::fs::read(
+        folder.join("state.json"),
+    )?)?)
 }
 
 /// Put the database back the way the snapshot recorded it. The caller rescans afterwards,
 /// which brings the rows in line with the files while keeping their settings.
 pub async fn restore_snapshot(db: &SqlitePool, instance_id: &str, s: &Snapshot) -> AppResult<()> {
     let mut tx = db.begin().await?;
-    sqlx::query("DELETE FROM instance_content WHERE instance_id = ?").bind(instance_id).execute(&mut *tx).await?;
+    sqlx::query("DELETE FROM instance_content WHERE instance_id = ?")
+        .bind(instance_id)
+        .execute(&mut *tx)
+        .await?;
     for r in &s.rows {
         sqlx::query(
             "INSERT INTO instance_content (id, instance_id, kind, path, enabled, size_bytes, mtime_ms, sha1, sha256,

@@ -23,12 +23,17 @@ use crate::sync::{adopt, apply, prism_versions, state as sync_state};
 use crate::util::ids::new_id;
 
 async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
-    db::instances::get(&state.db, id).await?.ok_or_else(|| AppError::not_found("Instance not found"))
+    db::instances::get(&state.db, id)
+        .await?
+        .ok_or_else(|| AppError::not_found("Instance not found"))
 }
 
 /// The instance's source, or `conflict` if it isn't shared.
 async fn linked(state: &AppState, row: &InstanceRow) -> AppResult<Source> {
-    let shared = row.shared_instance_id.as_deref().ok_or_else(|| AppError::conflict("Instance is not shared"))?;
+    let shared = row
+        .shared_instance_id
+        .as_deref()
+        .ok_or_else(|| AppError::conflict("Instance is not shared"))?;
     source::for_shared(&state.db, shared)
         .await?
         // T7: the Atlas server. Until then a shared instance without a dev source can't sync.
@@ -42,7 +47,10 @@ pub async fn info(state: &AppState, row: &InstanceRow) -> AppResult<Option<Insta
     };
     let synced = row.synced_revision.unwrap_or(0).max(0) as u32;
     let src = source::for_shared(&state.db, shared).await?;
-    let latest = src.as_ref().map_or(synced, Source::latest_revision).max(synced);
+    let latest = src
+        .as_ref()
+        .map_or(synced, Source::latest_revision)
+        .max(synced);
     let frozen = src.as_ref().is_some_and(Source::is_frozen);
     let rows = db::content::list(&state.db, &row.id).await?;
     let manifest = row.synced_manifest();
@@ -63,7 +71,10 @@ fn first_difference(mine: &str, theirs: &str) -> (String, String) {
     let trim = |s: &str| s.trim().chars().take(200).collect::<String>();
     let (a, b): (Vec<_>, Vec<_>) = (mine.lines().collect(), theirs.lines().collect());
     for i in 0..a.len().max(b.len()) {
-        let (x, y) = (a.get(i).copied().unwrap_or(""), b.get(i).copied().unwrap_or(""));
+        let (x, y) = (
+            a.get(i).copied().unwrap_or(""),
+            b.get(i).copied().unwrap_or(""),
+        );
         if x != y {
             return (trim(x), trim(y));
         }
@@ -77,7 +88,8 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
     let latest = src.latest_revision();
     let target = src.manifest(latest)?;
     let none = HashSet::new();
-    let (plan, rows, _) = apply::make_plan(state, &row, &target, &none, &Default::default()).await?;
+    let (plan, rows, _) =
+        apply::make_plan(state, &row, &target, &none, &Default::default()).await?;
     let game_dir = PathBuf::from(&row.game_dir);
 
     let mut download_bytes = 0;
@@ -92,9 +104,16 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
     let mut config_conflicts = Vec::new();
     for c in &plan.conflicts {
         let mine = std::fs::read_to_string(game_dir.join(&c.path)).unwrap_or_default();
-        let theirs = src.local_copy(&c.path).and_then(|p| std::fs::read_to_string(p).ok()).unwrap_or_default();
+        let theirs = src
+            .local_copy(&c.path)
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .unwrap_or_default();
         let (mine, theirs) = first_difference(&mine, &theirs);
-        config_conflicts.push(ConfigConflict { path: c.path.clone(), mine, theirs });
+        config_conflicts.push(ConfigConflict {
+            path: c.path.clone(),
+            mine,
+            theirs,
+        });
     }
     let role = row.role().unwrap_or(MemberRole::Viewer);
     let synced = row.synced_manifest();
@@ -113,7 +132,12 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
 }
 
 /// Start an update to the latest version. Returns once the job has started.
-pub async fn sync<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str, options: SyncOptions) -> AppResult<()> {
+pub async fn sync<R: Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    id: &str,
+    options: SyncOptions,
+) -> AppResult<()> {
     let row = row(state, id).await?;
     let src = linked(state, &row).await?;
     if src.is_frozen() {
@@ -146,7 +170,9 @@ pub async fn revert<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) 
         return Err(AppError::conflict("Close the game first"));
     }
     let revision = row.synced_revision.unwrap_or(0).max(0) as u32;
-    let manifest = row.synced_manifest().ok_or_else(|| AppError::conflict("Nothing to revert to yet"))?;
+    let manifest = row
+        .synced_manifest()
+        .ok_or_else(|| AppError::conflict("Nothing to revert to yet"))?;
     jobs::run(state, app, id, |progress| async move {
         let req = apply::Request {
             revision,
@@ -177,7 +203,9 @@ pub async fn set_optional_installed<R: Runtime>(
         .await?
         .ok_or_else(|| AppError::not_found("Content not found"))?;
     if !item.is_managed || item.share_mode != "optional" {
-        return Err(AppError::invalid_input("Only optional items can be added or removed this way"));
+        return Err(AppError::invalid_input(
+            "Only optional items can be added or removed this way",
+        ));
     }
     if installed == item.installed {
         return Ok(());
@@ -186,15 +214,28 @@ pub async fn set_optional_installed<R: Runtime>(
         // Their choice: delete the file, keep the row so it can be downloaded again.
         let _scanning = state.scan_lock(id).await;
         let path = Path::new(&row.game_dir).join(crate::sync::plan::disk_path(&item));
-        std::fs::remove_file(&path).or_else(|e| if e.kind() == std::io::ErrorKind::NotFound { Ok(()) } else { Err(e) })?;
+        std::fs::remove_file(&path).or_else(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                Ok(())
+            } else {
+                Err(e)
+            }
+        })?;
         let mut c = state.db.acquire().await?;
         db::content::mark_not_installed(&mut c, content_id).await?;
-        emit(app, AtlasEvent::InstanceChanged { instance_id: id.to_string() });
+        emit(
+            app,
+            AtlasEvent::InstanceChanged {
+                instance_id: id.to_string(),
+            },
+        );
         return Ok(());
     }
     let src = linked(state, &row).await?;
     let revision = row.synced_revision.unwrap_or(0).max(0) as u32;
-    let manifest = row.synced_manifest().ok_or_else(|| AppError::conflict("Instance is not shared"))?;
+    let manifest = row
+        .synced_manifest()
+        .ok_or_else(|| AppError::conflict("Instance is not shared"))?;
     let key = manifest
         .content
         .iter()
@@ -216,12 +257,19 @@ pub async fn set_optional_installed<R: Runtime>(
 }
 
 /// Undo exactly what a backup recorded, and put the database back too. Returns once started.
-pub async fn restore<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str, backup_id: &str) -> AppResult<()> {
+pub async fn restore<R: Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    id: &str,
+    backup_id: &str,
+) -> AppResult<()> {
     let row = row(state, id).await?;
     if !Path::new(&row.game_dir).is_dir() {
         return Err(AppError::conflict(format!("Instance is {}", "missing")));
     }
-    let b = db::backups::get(&state.db, id, backup_id).await?.ok_or_else(|| AppError::not_found("Backup not found"))?;
+    let b = db::backups::get(&state.db, id, backup_id)
+        .await?
+        .ok_or_else(|| AppError::not_found("Backup not found"))?;
     let records: Vec<FileRecord> = serde_json::from_str(&b.files)?;
     let from_dir = backup::dir(&state.paths, id, backup_id);
     let state2 = state.clone();
@@ -258,12 +306,25 @@ async fn restore_job<R: Runtime>(
                 (_, true) => FileAction::Replaced,
                 (_, false) => FileAction::Added,
             };
-            FileRecord { path: r.path.clone(), action }
+            FileRecord {
+                path: r.path.clone(),
+                action,
+            }
         })
         .collect();
     let to = snapshot.synced_revision.map(|r| r.max(0) as u32);
     let from = row.synced_revision.map(|r| r.max(0) as u32);
-    backup::create(&state.db, &state.paths, &id, &game_dir, BackupReason::BeforeRestore, from, to, now).await?;
+    backup::create(
+        &state.db,
+        &state.paths,
+        &id,
+        &game_dir,
+        BackupReason::BeforeRestore,
+        from,
+        to,
+        now,
+    )
+    .await?;
 
     progress.stage(SyncStage::Apply);
     let (game, dir, recs) = (game_dir.clone(), from_dir.clone(), records.clone());
@@ -278,7 +339,9 @@ async fn restore_job<R: Runtime>(
                 FileAction::Replaced | FileAction::Removed => {
                     let copy = dir.join(&r.path);
                     if copy.is_file() {
-                        std::fs::create_dir_all(target.parent().expect("relative path has a parent"))?;
+                        std::fs::create_dir_all(
+                            target.parent().expect("relative path has a parent"),
+                        )?;
                         std::fs::copy(&copy, &target)?;
                     }
                 }
@@ -315,7 +378,9 @@ pub async fn dev_link(
     let folder = PathBuf::from(folder);
     let src = Source::Dev(folder.clone());
     if src.latest_revision() == 0 {
-        return Err(AppError::invalid_input("That folder has no revisions/<n>.json"));
+        return Err(AppError::invalid_input(
+            "That folder has no revisions/<n>.json",
+        ));
     }
     let shared_id = format!("dev:{}", new_id());
     source::save_dev(&state.db, &shared_id, &folder).await?;
@@ -333,7 +398,10 @@ pub async fn unlink(state: &AppState, id: &str) -> AppResult<()> {
         source::forget(&state.db, shared).await?;
     }
     db::instances::set_link(&state.db, id, None).await?;
-    sqlx::query("DELETE FROM instance_content WHERE instance_id = ? AND installed = 0").bind(id).execute(&state.db).await?;
+    sqlx::query("DELETE FROM instance_content WHERE instance_id = ? AND installed = 0")
+        .bind(id)
+        .execute(&state.db)
+        .await?;
     sqlx::query("UPDATE instance_content SET is_managed = 0, published_share_mode = NULL WHERE instance_id = ?")
         .bind(id)
         .execute(&state.db)

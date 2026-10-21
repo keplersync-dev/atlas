@@ -33,7 +33,12 @@ pub async fn for_shared(db: &SqlitePool, shared_instance_id: &str) -> AppResult<
 }
 
 pub async fn save_dev(db: &SqlitePool, shared_instance_id: &str, folder: &Path) -> AppResult<()> {
-    db::settings::set(db, &setting_key(shared_instance_id), &folder.to_string_lossy()).await?;
+    db::settings::set(
+        db,
+        &setting_key(shared_instance_id),
+        &folder.to_string_lossy(),
+    )
+    .await?;
     Ok(())
 }
 
@@ -61,11 +66,14 @@ impl Source {
         match self {
             Source::Dev(folder) => {
                 let file = folder.join("revisions").join(format!("{revision}.json"));
-                let bytes = std::fs::read(&file)
-                    .map_err(|_| AppError::not_found(format!("Revision {revision} isn't available")))?;
+                let bytes = std::fs::read(&file).map_err(|_| {
+                    AppError::not_found(format!("Revision {revision} isn't available"))
+                })?;
                 manifest::parse(&bytes).map_err(|e| {
                     tracing::warn!(revision, error = %e, "refused manifest");
-                    AppError::invalid_input("This shared instance contains files Atlas won't install")
+                    AppError::invalid_input(
+                        "This shared instance contains files Atlas won't install",
+                    )
                 })
             }
         }

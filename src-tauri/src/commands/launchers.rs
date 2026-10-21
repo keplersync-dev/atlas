@@ -38,6 +38,8 @@ pub async fn remove_launcher<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn list_detected_instances(state: State<'_, AppState>) -> AppResult<Vec<DetectedInstance>> {
+pub async fn list_detected_instances(
+    state: State<'_, AppState>,
+) -> AppResult<Vec<DetectedInstance>> {
     launchers::detected_instances(&state).await
 }

@@ -36,14 +36,21 @@ pub fn cache_instance_icon(icons_dir: &Path, icon: &str) -> Option<String> {
     } else {
         // Embedded picture ("data:image/png;base64,…"); anything else isn't an image.
         let (_, encoded) = icon.strip_prefix("data:image/")?.split_once(";base64,")?;
-        base64::engine::general_purpose::STANDARD.decode(encoded.trim()).ok()?
+        base64::engine::general_purpose::STANDARD
+            .decode(encoded.trim())
+            .ok()?
     };
-    let is_image = bytes.starts_with(b"\x89PNG") || bytes.starts_with(&[0xFF, 0xD8, 0xFF]) || bytes.starts_with(b"GIF8")
+    let is_image = bytes.starts_with(b"\x89PNG")
+        || bytes.starts_with(&[0xFF, 0xD8, 0xFF])
+        || bytes.starts_with(b"GIF8")
         || (bytes.len() > 12 && &bytes[8..12] == b"WEBP");
     if !is_image {
         return None;
     }
-    let file = icons_dir.join(format!("instance-{}.png", hex::encode(Sha1::digest(&bytes))));
+    let file = icons_dir.join(format!(
+        "instance-{}.png",
+        hex::encode(Sha1::digest(&bytes))
+    ));
     if !file.is_file() {
         std::fs::create_dir_all(icons_dir).ok()?;
         let tmp = file.with_extension("part");
@@ -63,7 +70,12 @@ fn none_marker(dir: &Path, sha1: &str) -> PathBuf {
 
 /// Give every row without an icon the one from its file, if it has one. Returns how many
 /// rows got an icon. Each file is opened at most once ever (the result is cached by sha1).
-pub async fn fill(db: &SqlitePool, icons_dir: &Path, instance_id: &str, game_dir: &Path) -> AppResult<usize> {
+pub async fn fill(
+    db: &SqlitePool,
+    icons_dir: &Path,
+    instance_id: &str,
+    game_dir: &Path,
+) -> AppResult<usize> {
     let rows: Vec<ContentRow> = content::list(db, instance_id)
         .await?
         .into_iter()
@@ -83,7 +95,8 @@ pub async fn fill(db: &SqlitePool, icons_dir: &Path, instance_id: &str, game_dir
                     }
                     let on_disk = game.join(crate::sync::plan::disk_path(r));
                     if !extract_icon(&on_disk, &png) {
-                        let _ = std::fs::create_dir_all(&dir).and_then(|_| std::fs::write(none_marker(&dir, &r.sha1), b""));
+                        let _ = std::fs::create_dir_all(&dir)
+                            .and_then(|_| std::fs::write(none_marker(&dir, &r.sha1), b""));
                         return None;
                     }
                 }
@@ -118,7 +131,8 @@ mod tests {
 
     #[test]
     fn instance_icons_are_cached_by_content() {
-        let dir = std::env::temp_dir().join(format!("atlas-insticons-{}", crate::util::ids::new_id()));
+        let dir =
+            std::env::temp_dir().join(format!("atlas-insticons-{}", crate::util::ids::new_id()));
         std::fs::create_dir_all(&dir).unwrap();
         let src = dir.join("launcher-icon.png");
         std::fs::write(&src, PNG).unwrap();
@@ -126,7 +140,8 @@ mod tests {
 
         let from_file = cache_instance_icon(&cache, &format!("file:{}", src.display())).unwrap();
         let encoded = base64::engine::general_purpose::STANDARD.encode(PNG);
-        let from_data = cache_instance_icon(&cache, &format!("data:image/png;base64,{encoded}")).unwrap();
+        let from_data =
+            cache_instance_icon(&cache, &format!("data:image/png;base64,{encoded}")).unwrap();
         assert_eq!(from_file, from_data, "same picture, same cached file");
         let cached = PathBuf::from(from_file.strip_prefix("file:").unwrap());
         assert!(cached.starts_with(&cache));
@@ -135,9 +150,15 @@ mod tests {
         let url = "https://media.forgecdn.net/avatars/thumbnails/1/2/256/256/3";
         assert_eq!(cache_instance_icon(&cache, url).as_deref(), Some(url));
         assert_eq!(cache_instance_icon(&cache, "Grass"), None);
-        assert_eq!(cache_instance_icon(&cache, "file:C:/does/not/exist.png"), None);
+        assert_eq!(
+            cache_instance_icon(&cache, "file:C:/does/not/exist.png"),
+            None
+        );
         std::fs::write(&src, b"not an image").unwrap();
-        assert_eq!(cache_instance_icon(&cache, &format!("file:{}", src.display())), None);
+        assert_eq!(
+            cache_instance_icon(&cache, &format!("file:{}", src.display())),
+            None
+        );
         std::fs::remove_dir_all(dir).ok();
     }
 }

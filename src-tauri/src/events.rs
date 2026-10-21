@@ -93,7 +93,10 @@ mod tests {
             json!({ "type": "instance.progress", "instanceId": "i1", "status": "ready", "progress": null })
         );
         assert_eq!(
-            to_json(AtlasEvent::InstanceRunning { instance_id: "i1".into(), is_running: true }),
+            to_json(AtlasEvent::InstanceRunning {
+                instance_id: "i1".into(),
+                is_running: true
+            }),
             json!({ "type": "instance.running", "instanceId": "i1", "isRunning": true })
         );
         assert_eq!(
@@ -105,7 +108,9 @@ mod tests {
             json!({ "type": "groups.changed", "groupId": null })
         );
         assert_eq!(
-            to_json(AtlasEvent::SharedChanged { shared_instance_id: "s1".into() }),
+            to_json(AtlasEvent::SharedChanged {
+                shared_instance_id: "s1".into()
+            }),
             json!({ "type": "shared.changed", "sharedInstanceId": "s1" })
         );
     }

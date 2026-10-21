@@ -1,7 +1,8 @@
 use tauri::{AppHandle, Runtime, State};
 
 use crate::dto::{
-    Id, InstanceDetail, InstanceSummary, MemberRole, ShareMode, TrackInstanceRef, UpdateInstanceInput,
+    Id, InstanceDetail, InstanceSummary, MemberRole, ShareMode, TrackInstanceRef,
+    UpdateInstanceInput,
 };
 use crate::error::AppResult;
 use crate::events::{AtlasEvent, emit};
@@ -137,7 +138,12 @@ pub async fn dev_link_manifest<R: Runtime>(
     adopt_revision: Option<u32>,
 ) -> AppResult<InstanceSummary> {
     sync::dev_link(&state, &instance_id, &folder, role, adopt_revision).await?;
-    emit(&app, AtlasEvent::InstanceChanged { instance_id: instance_id.clone() });
+    emit(
+        &app,
+        AtlasEvent::InstanceChanged {
+            instance_id: instance_id.clone(),
+        },
+    );
     instances::summary_by_id(&state, &instance_id).await
 }
 
@@ -149,6 +155,11 @@ pub async fn dev_unlink_manifest<R: Runtime>(
     instance_id: Id,
 ) -> AppResult<InstanceSummary> {
     sync::unlink(&state, &instance_id).await?;
-    emit(&app, AtlasEvent::InstanceChanged { instance_id: instance_id.clone() });
+    emit(
+        &app,
+        AtlasEvent::InstanceChanged {
+            instance_id: instance_id.clone(),
+        },
+    );
     instances::summary_by_id(&state, &instance_id).await
 }

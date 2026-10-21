@@ -89,14 +89,22 @@ pub struct NewInstance {
 }
 
 pub async fn list(db: &SqlitePool) -> sqlx::Result<Vec<InstanceRow>> {
-    sqlx::query_as("SELECT * FROM instance ORDER BY tracked_at").fetch_all(db).await
+    sqlx::query_as("SELECT * FROM instance ORDER BY tracked_at")
+        .fetch_all(db)
+        .await
 }
 
 pub async fn get(db: &SqlitePool, id: &str) -> sqlx::Result<Option<InstanceRow>> {
-    sqlx::query_as("SELECT * FROM instance WHERE id = ?").bind(id).fetch_optional(db).await
+    sqlx::query_as("SELECT * FROM instance WHERE id = ?")
+        .bind(id)
+        .fetch_optional(db)
+        .await
 }
 
-pub async fn find_by_game_dir(db: &SqlitePool, game_dir: &str) -> sqlx::Result<Option<InstanceRow>> {
+pub async fn find_by_game_dir(
+    db: &SqlitePool,
+    game_dir: &str,
+) -> sqlx::Result<Option<InstanceRow>> {
     sqlx::query_as("SELECT * FROM instance WHERE game_dir = ? COLLATE NOCASE")
         .bind(game_dir)
         .fetch_optional(db)
@@ -189,7 +197,10 @@ pub async fn update_prefs(
 }
 
 pub async fn delete(db: &SqlitePool, id: &str) -> sqlx::Result<bool> {
-    let done = sqlx::query("DELETE FROM instance WHERE id = ?").bind(id).execute(db).await?;
+    let done = sqlx::query("DELETE FROM instance WHERE id = ?")
+        .bind(id)
+        .execute(db)
+        .await?;
     Ok(done.rows_affected() > 0)
 }
 

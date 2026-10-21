@@ -25,7 +25,11 @@ pub enum Action {
     /// Put a manifest file at `entry.path`. `replaces`: a file already at that exact path
     /// (backed up, then overwritten). `local`: a file on disk with these exact bytes that
     /// can be used instead of downloading (re-enabling a disabled mod).
-    Place { entry: Entry, replaces: bool, local: Option<String> },
+    Place {
+        entry: Entry,
+        replaces: bool,
+        local: Option<String>,
+    },
     /// Write a config file from the target version.
     WriteConfig { config: Override, replaces: bool },
     /// Delete a config file the target version no longer has (only if the user didn't edit it).
@@ -72,11 +76,17 @@ pub struct Input<'a> {
 
 /// The file name on disk for a row (disabled files end in ".disabled").
 pub fn disk_path(row: &ContentRow) -> String {
-    if row.enabled { row.path.clone() } else { format!("{}.disabled", row.path) }
+    if row.enabled {
+        row.path.clone()
+    } else {
+        format!("{}.disabled", row.path)
+    }
 }
 
 fn label(e: &Entry) -> String {
-    e.version_label.clone().unwrap_or_else(|| e.path.rsplit('/').next().unwrap_or(&e.path).to_string())
+    e.version_label
+        .clone()
+        .unwrap_or_else(|| e.path.rsplit('/').next().unwrap_or(&e.path).to_string())
 }
 
 fn kind_label(required: bool) -> &'static str {
@@ -84,10 +94,16 @@ fn kind_label(required: bool) -> &'static str {
 }
 
 pub fn plan(input: &Input) -> Plan {
-    let rows: HashMap<String, &ContentRow> = input.rows.iter().map(|r| (r.path.to_lowercase(), r)).collect();
+    let rows: HashMap<String, &ContentRow> = input
+        .rows
+        .iter()
+        .map(|r| (r.path.to_lowercase(), r))
+        .collect();
     let row_at = |path: &str| rows.get(&path.to_lowercase()).copied();
-    let synced_by_key: HashMap<&str, &Entry> =
-        input.synced.map(|m| m.content.iter().map(|e| (e.key(), e)).collect()).unwrap_or_default();
+    let synced_by_key: HashMap<&str, &Entry> = input
+        .synced
+        .map(|m| m.content.iter().map(|e| (e.key(), e)).collect())
+        .unwrap_or_default();
     let target_keys: HashSet<&str> = input.target.content.iter().map(Entry::key).collect();
 
     let mut out = Plan::default();
@@ -103,9 +119,11 @@ pub fn plan(input: &Input) -> Plan {
         match before {
             None if e.required => out.changes.added.push(e.name.clone()),
             None => {}
-            Some(b) if b.sha1 != e.sha1 => {
-                out.changes.updated.push(UpdatedItem { name: e.name.clone(), from: label(b), to: label(e) })
-            }
+            Some(b) if b.sha1 != e.sha1 => out.changes.updated.push(UpdatedItem {
+                name: e.name.clone(),
+                from: label(b),
+                to: label(e),
+            }),
             Some(b) if b.required != e.required => out.changes.updated.push(UpdatedItem {
                 name: e.name.clone(),
                 from: kind_label(b.required).into(),
@@ -137,12 +155,18 @@ pub fn plan(input: &Input) -> Plan {
             if !r.enabled {
                 // Disabled by the user: enable it again, reusing its own bytes.
                 removes.push(Action::Remove { path: disk_path(r) });
-                places.push(Action::Place { entry: e.clone(), replaces: false, local: Some(disk_path(r)) });
+                places.push(Action::Place {
+                    entry: e.clone(),
+                    replaces: false,
+                    local: Some(disk_path(r)),
+                });
             }
             continue;
         }
         // The old version under a different name goes.
-        if let Some(r) = old_row.filter(|r| r.installed && r.is_managed && !r.path.eq_ignore_ascii_case(&e.path)) {
+        if let Some(r) =
+            old_row.filter(|r| r.installed && r.is_managed && !r.path.eq_ignore_ascii_case(&e.path))
+        {
             removes.push(Action::Remove { path: disk_path(r) });
         }
         // Something else at this exact path: replace it (disabled copies are removed first).
@@ -154,12 +178,20 @@ pub fn plan(input: &Input) -> Plan {
             }
             None => false,
         };
-        places.push(Action::Place { entry: e.clone(), replaces, local: None });
+        places.push(Action::Place {
+            entry: e.clone(),
+            replaces,
+            local: None,
+        });
     }
 
     // Shared files the target no longer has.
     if let Some(synced) = input.synced {
-        for b in synced.content.iter().filter(|b| !target_keys.contains(b.key())) {
+        for b in synced
+            .content
+            .iter()
+            .filter(|b| !target_keys.contains(b.key()))
+        {
             out.changes.removed.push(b.name.clone());
             if let Some(r) = row_at(&b.path).filter(|r| r.installed && r.is_managed) {
                 removes.push(Action::Remove { path: disk_path(r) });
@@ -170,33 +202,60 @@ pub fn plan(input: &Input) -> Plan {
     // Configs, three ways.
     let base: HashMap<String, &Override> = input
         .synced
-        .map(|m| m.overrides.iter().map(|o| (o.path.to_lowercase(), o)).collect())
+        .map(|m| {
+            m.overrides
+                .iter()
+                .map(|o| (o.path.to_lowercase(), o))
+                .collect()
+        })
         .unwrap_or_default();
     let mut configs = Vec::new();
     for o in &input.target.overrides {
         let mine = (input.config_on_disk)(&o.path);
         let base_sha = base.get(&o.path.to_lowercase()).map(|b| b.sha256.as_str());
         let Some(mine) = mine else {
-            configs.push(Action::WriteConfig { config: o.clone(), replaces: false });
+            configs.push(Action::WriteConfig {
+                config: o.clone(),
+                replaces: false,
+            });
             continue;
         };
         if mine == o.sha256 || base_sha == Some(o.sha256.as_str()) {
             continue; // already the same, or only the user changed it: keep the user's
         }
         if base_sha == Some(mine.as_str()) {
-            configs.push(Action::WriteConfig { config: o.clone(), replaces: true }); // only they changed it
+            configs.push(Action::WriteConfig {
+                config: o.clone(),
+                replaces: true,
+            }); // only they changed it
             continue;
         }
         // Both changed (or the user already had their own file there).
-        out.conflicts.push(Conflict { path: o.path.clone(), mine, theirs: o.sha256.clone() });
+        out.conflicts.push(Conflict {
+            path: o.path.clone(),
+            mine,
+            theirs: o.sha256.clone(),
+        });
         if input.config_choices.get(&o.path) != Some(&ConfigChoice::Mine) {
-            configs.push(Action::WriteConfig { config: o.clone(), replaces: true });
+            configs.push(Action::WriteConfig {
+                config: o.clone(),
+                replaces: true,
+            });
         }
     }
-    let target_configs: HashSet<String> = input.target.overrides.iter().map(|o| o.path.to_lowercase()).collect();
+    let target_configs: HashSet<String> = input
+        .target
+        .overrides
+        .iter()
+        .map(|o| o.path.to_lowercase())
+        .collect();
     for (path, b) in &base {
-        if !target_configs.contains(path) && (input.config_on_disk)(&b.path).as_deref() == Some(b.sha256.as_str()) {
-            configs.push(Action::RemoveConfig { path: b.path.clone() });
+        if !target_configs.contains(path)
+            && (input.config_on_disk)(&b.path).as_deref() == Some(b.sha256.as_str())
+        {
+            configs.push(Action::RemoveConfig {
+                path: b.path.clone(),
+            });
         }
     }
 
@@ -236,7 +295,11 @@ mod tests {
             name: "m".into(),
             description: None,
             icon: None,
-            minecraft: MinecraftSpec { version: "1.21.1".into(), loader: Loader::Fabric, loader_version: None },
+            minecraft: MinecraftSpec {
+                version: "1.21.1".into(),
+                loader: Loader::Fabric,
+                loader_version: None,
+            },
             recommended_memory_mb: None,
             content,
             overrides,
@@ -274,7 +337,12 @@ mod tests {
         }
     }
 
-    fn run(synced: Option<&Manifest>, target: &Manifest, rows: &[ContentRow], ticked: &[&str]) -> Plan {
+    fn run(
+        synced: Option<&Manifest>,
+        target: &Manifest,
+        rows: &[ContentRow],
+        ticked: &[&str],
+    ) -> Plan {
         run_with(synced, target, rows, ticked, &HashMap::new(), &|_| None)
     }
 
@@ -287,7 +355,14 @@ mod tests {
         disk: &dyn Fn(&str) -> Option<String>,
     ) -> Plan {
         let ticked: HashSet<String> = ticked.iter().map(|s| s.to_string()).collect();
-        plan(&Input { synced, target, rows, install_optional: &ticked, config_choices: choices, config_on_disk: disk })
+        plan(&Input {
+            synced,
+            target,
+            rows,
+            install_optional: &ticked,
+            config_choices: choices,
+            config_on_disk: disk,
+        })
     }
 
     fn paths(p: &Plan) -> Vec<String> {
@@ -295,10 +370,23 @@ mod tests {
             .iter()
             .map(|a| match a {
                 Action::Remove { path } => format!("- {path}"),
-                Action::Place { entry, replaces, local } => {
-                    format!("+ {}{}{}", entry.path, if *replaces { " (replace)" } else { "" }, if local.is_some() { " (local)" } else { "" })
+                Action::Place {
+                    entry,
+                    replaces,
+                    local,
+                } => {
+                    format!(
+                        "+ {}{}{}",
+                        entry.path,
+                        if *replaces { " (replace)" } else { "" },
+                        if local.is_some() { " (local)" } else { "" }
+                    )
                 }
-                Action::WriteConfig { config, replaces } => format!("cfg {}{}", config.path, if *replaces { " (replace)" } else { "" }),
+                Action::WriteConfig { config, replaces } => format!(
+                    "cfg {}{}",
+                    config.path,
+                    if *replaces { " (replace)" } else { "" }
+                ),
                 Action::RemoveConfig { path } => format!("cfg- {path}"),
             })
             .collect()
@@ -306,11 +394,24 @@ mod tests {
 
     #[test]
     fn first_install_puts_required_files_and_ticked_optional_ones() {
-        let target = manifest(vec![entry("sodium", "sodium-1", 'a', true), entry("iris", "iris-1", 'b', false), entry("zoom", "zoom-1", 'c', false)], vec![]);
+        let target = manifest(
+            vec![
+                entry("sodium", "sodium-1", 'a', true),
+                entry("iris", "iris-1", 'b', false),
+                entry("zoom", "zoom-1", 'c', false),
+            ],
+            vec![],
+        );
         let p = run(None, &target, &[], &["iris"]);
         assert_eq!(paths(&p), ["+ mods/sodium-1.jar", "+ mods/iris-1.jar"]);
         assert_eq!(p.changes.added, ["sodium"]);
-        assert_eq!(p.new_optional.iter().map(|o| o.key.as_str()).collect::<Vec<_>>(), ["iris", "zoom"]);
+        assert_eq!(
+            p.new_optional
+                .iter()
+                .map(|o| o.key.as_str())
+                .collect::<Vec<_>>(),
+            ["iris", "zoom"]
+        );
     }
 
     #[test]
@@ -321,12 +422,31 @@ mod tests {
         let s2 = entry("sodium", "sodium-2", 'c', true); // new version, new file name
         let target = manifest(vec![s2, entry("ferrite", "ferrite-1", 'd', true)], vec![]); // lithium dropped
         let extra = entry("minimap", "minimap", 'e', true);
-        let rows = [row(&s1, true, true, true), row(&l1, true, true, true), row(&extra, false, true, true)];
+        let rows = [
+            row(&s1, true, true, true),
+            row(&l1, true, true, true),
+            row(&extra, false, true, true),
+        ];
         let p = run(Some(&synced), &target, &rows, &[]);
-        assert_eq!(paths(&p), ["- mods/sodium-1.jar", "- mods/lithium-1.jar", "+ mods/sodium-2.jar", "+ mods/ferrite-1.jar"]);
+        assert_eq!(
+            paths(&p),
+            [
+                "- mods/sodium-1.jar",
+                "- mods/lithium-1.jar",
+                "+ mods/sodium-2.jar",
+                "+ mods/ferrite-1.jar"
+            ]
+        );
         assert_eq!(p.changes.added, ["ferrite"]);
         assert_eq!(p.changes.removed, ["lithium"]);
-        assert_eq!(p.changes.updated, [UpdatedItem { name: "sodium".into(), from: "sodium-1".into(), to: "sodium-2".into() }]);
+        assert_eq!(
+            p.changes.updated,
+            [UpdatedItem {
+                name: "sodium".into(),
+                from: "sodium-1".into(),
+                to: "sodium-2".into()
+            }]
+        );
         // The user's minimap is never touched.
         assert!(!paths(&p).iter().any(|a| a.contains("minimap")));
     }
@@ -335,7 +455,11 @@ mod tests {
     fn up_to_date_is_nothing_to_do() {
         let s = entry("sodium", "sodium-1", 'a', true);
         let m = manifest(vec![s.clone()], vec![]);
-        assert!(run(Some(&m), &m, &[row(&s, true, true, true)], &[]).actions.is_empty());
+        assert!(
+            run(Some(&m), &m, &[row(&s, true, true, true)], &[])
+                .actions
+                .is_empty()
+        );
     }
 
     #[test]
@@ -345,7 +469,14 @@ mod tests {
         let m = manifest(vec![s.clone(), l], vec![]);
         // sodium disabled, lithium deleted (no row): a revert to the same revision.
         let p = run(Some(&m), &m, &[row(&s, true, false, true)], &[]);
-        assert_eq!(paths(&p), ["- mods/sodium-1.jar.disabled", "+ mods/sodium-1.jar (local)", "+ mods/lithium-1.jar"]);
+        assert_eq!(
+            paths(&p),
+            [
+                "- mods/sodium-1.jar.disabled",
+                "+ mods/sodium-1.jar (local)",
+                "+ mods/lithium-1.jar"
+            ]
+        );
     }
 
     #[test]
@@ -355,7 +486,10 @@ mod tests {
         let synced = manifest(vec![iris.clone(), fa.clone()], vec![]);
         let iris2 = entry("iris", "iris-2", 'c', false);
         let fa2 = entry("fa", "fa-2", 'd', false);
-        let target = manifest(vec![iris2, fa2, entry("zoom", "zoom-1", 'e', false)], vec![]);
+        let target = manifest(
+            vec![iris2, fa2, entry("zoom", "zoom-1", 'e', false)],
+            vec![],
+        );
         // iris installed, fa skipped (row with installed = 0), zoom new and not ticked.
         let rows = [row(&iris, true, true, true), row(&fa, true, true, false)];
         let p = run(Some(&synced), &target, &rows, &[]);
@@ -373,24 +507,56 @@ mod tests {
         let mut theirs = row(&s, false, true, true);
         theirs.sha1 = "f".repeat(40); // their own different sodium.jar
         let target = manifest(vec![s], vec![]);
-        assert_eq!(paths(&run(None, &target, &[theirs], &[])), ["+ mods/sodium.jar (replace)"]);
+        assert_eq!(
+            paths(&run(None, &target, &[theirs], &[])),
+            ["+ mods/sodium.jar (replace)"]
+        );
     }
 
     #[test]
     fn configs_merge_three_ways() {
-        let o = |path: &str, sha: char| Override { path: path.into(), sha256: sha.to_string().repeat(64), size_bytes: 1 };
-        let synced = manifest(vec![], vec![o("config/a.json", '1'), o("config/b.json", '1'), o("config/c.json", '1'), o("config/gone.json", '1'), o("config/kept.json", '1')]);
-        let target = manifest(vec![], vec![o("config/a.json", '2'), o("config/b.json", '1'), o("config/c.json", '2'), o("config/new.json", '1')]);
+        let o = |path: &str, sha: char| Override {
+            path: path.into(),
+            sha256: sha.to_string().repeat(64),
+            size_bytes: 1,
+        };
+        let synced = manifest(
+            vec![],
+            vec![
+                o("config/a.json", '1'),
+                o("config/b.json", '1'),
+                o("config/c.json", '1'),
+                o("config/gone.json", '1'),
+                o("config/kept.json", '1'),
+            ],
+        );
+        let target = manifest(
+            vec![],
+            vec![
+                o("config/a.json", '2'),
+                o("config/b.json", '1'),
+                o("config/c.json", '2'),
+                o("config/new.json", '1'),
+            ],
+        );
         let disk: HashMap<&str, char> = HashMap::from([
-            ("config/a.json", '1'),    // untouched by the user, changed by them: take theirs
-            ("config/b.json", '9'),    // changed by the user only: keep
-            ("config/c.json", '9'),    // both changed: conflict
+            ("config/a.json", '1'), // untouched by the user, changed by them: take theirs
+            ("config/b.json", '9'), // changed by the user only: keep
+            ("config/c.json", '9'), // both changed: conflict
             ("config/gone.json", '1'), // dropped by them, untouched here: remove
             ("config/kept.json", '9'), // dropped by them, edited here: keep
         ]);
         let lookup = |p: &str| disk.get(p).map(|c| c.to_string().repeat(64));
         let p = run_with(Some(&synced), &target, &[], &[], &HashMap::new(), &lookup);
-        assert_eq!(paths(&p), ["cfg config/a.json (replace)", "cfg config/c.json (replace)", "cfg config/new.json", "cfg- config/gone.json"]);
+        assert_eq!(
+            paths(&p),
+            [
+                "cfg config/a.json (replace)",
+                "cfg config/c.json (replace)",
+                "cfg config/new.json",
+                "cfg- config/gone.json"
+            ]
+        );
         assert_eq!(p.conflicts.len(), 1);
         assert_eq!(p.conflicts[0].path, "config/c.json");
 

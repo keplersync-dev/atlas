@@ -173,7 +173,9 @@ fn on_window_event<R: Runtime>(window: &tauri::Window<R>, event: &tauri::WindowE
     if let tauri::WindowEvent::Focused(true) = event {
         let app = window.app_handle().clone();
         tauri::async_runtime::spawn(async move {
-            let Some(state) = app.try_state::<AppState>().map(|s| s.inner().clone()) else { return };
+            let Some(state) = app.try_state::<AppState>().map(|s| s.inner().clone()) else {
+                return;
+            };
             services::instances::rescan_all(&state, &app, std::time::Duration::from_secs(30)).await;
         });
     }

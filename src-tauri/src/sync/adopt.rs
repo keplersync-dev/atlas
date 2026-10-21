@@ -16,14 +16,24 @@ use crate::dto::{ShareMode, to_wire};
 use crate::error::AppResult;
 use crate::util::ids::new_id;
 
-pub async fn adopt(db: &SqlitePool, instance_id: &str, revision: u32, m: &Manifest) -> AppResult<()> {
+pub async fn adopt(
+    db: &SqlitePool,
+    instance_id: &str,
+    revision: u32,
+    m: &Manifest,
+) -> AppResult<()> {
     let rows = content::list(db, instance_id).await?;
-    let by_path: HashMap<String, &ContentRow> = rows.iter().map(|r| (r.path.to_lowercase(), r)).collect();
+    let by_path: HashMap<String, &ContentRow> =
+        rows.iter().map(|r| (r.path.to_lowercase(), r)).collect();
     let in_manifest: HashSet<String> = m.content.iter().map(|e| e.path.to_lowercase()).collect();
 
     let mut tx = db.begin().await?;
     for e in &m.content {
-        let mode = to_wire(if e.required { ShareMode::Required } else { ShareMode::Optional });
+        let mode = to_wire(if e.required {
+            ShareMode::Required
+        } else {
+            ShareMode::Optional
+        });
         match by_path.get(&e.path.to_lowercase()) {
             Some(r) => {
                 sqlx::query(
@@ -76,7 +86,10 @@ pub async fn adopt(db: &SqlitePool, instance_id: &str, revision: u32, m: &Manife
             None => {}
         }
     }
-    for r in rows.iter().filter(|r| !in_manifest.contains(&r.path.to_lowercase())) {
+    for r in rows
+        .iter()
+        .filter(|r| !in_manifest.contains(&r.path.to_lowercase()))
+    {
         if !r.installed {
             content::delete(&mut tx, &r.id).await?; // no file and no longer offered
         } else if r.is_managed {

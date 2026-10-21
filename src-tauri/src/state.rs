@@ -67,7 +67,13 @@ impl AppState {
 
     /// Hold this while scanning an instance.
     pub async fn scan_lock(&self, instance_id: &str) -> tokio::sync::OwnedMutexGuard<()> {
-        let lock = self.scan_locks.lock().unwrap().entry(instance_id.to_string()).or_default().clone();
+        let lock = self
+            .scan_locks
+            .lock()
+            .unwrap()
+            .entry(instance_id.to_string())
+            .or_default()
+            .clone();
         lock.lock_owned().await
     }
 }
@@ -109,7 +115,13 @@ impl AppPaths {
     }
 
     pub fn create_all(&self) -> std::io::Result<()> {
-        for dir in [&self.root, &self.cache, &self.backups, &self.manifests, &self.logs] {
+        for dir in [
+            &self.root,
+            &self.cache,
+            &self.backups,
+            &self.manifests,
+            &self.logs,
+        ] {
             std::fs::create_dir_all(dir)?;
         }
         Ok(())

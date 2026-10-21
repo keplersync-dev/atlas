@@ -63,8 +63,19 @@ pub struct Progress<R: Runtime> {
 
 impl<R: Runtime> Progress<R> {
     fn new(app: AppHandle<R>, jobs: Jobs, instance_id: String) -> Self {
-        let p = SyncProgress { stage: SyncStage::Backup, percent: 0, bytes_done: 0, bytes_total: 0, manual_downloads: vec![] };
-        Self { app, jobs, instance_id, current: Mutex::new((p, Instant::now() - Duration::from_secs(1))) }
+        let p = SyncProgress {
+            stage: SyncStage::Backup,
+            percent: 0,
+            bytes_done: 0,
+            bytes_total: 0,
+            manual_downloads: vec![],
+        };
+        Self {
+            app,
+            jobs,
+            instance_id,
+            current: Mutex::new((p, Instant::now() - Duration::from_secs(1))),
+        }
     }
 
     /// Move to a stage (always sent right away).
@@ -84,7 +95,9 @@ impl<R: Runtime> Progress<R> {
         self.update(force, |p| {
             p.bytes_done = done;
             p.bytes_total = total;
-            p.percent = (done * 100).checked_div(total).map_or(100, |pct| pct.min(100) as u8);
+            p.percent = (done * 100)
+                .checked_div(total)
+                .map_or(100, |pct| pct.min(100) as u8);
         });
     }
 
@@ -116,7 +129,12 @@ impl<R: Runtime> Progress<R> {
 
 /// Start `work` in the background as this instance's job. Returns right away;
 /// Err(conflict) if the instance already has one.
-pub fn spawn<R, F, Fut>(state: &AppState, app: &AppHandle<R>, instance_id: &str, work: F) -> AppResult<()>
+pub fn spawn<R, F, Fut>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    instance_id: &str,
+    work: F,
+) -> AppResult<()>
 where
     R: Runtime,
     F: FnOnce(Progress<R>) -> Fut + Send + 'static,
@@ -132,7 +150,12 @@ where
 }
 
 /// Run `work` as this instance's job and wait for it (the caller gets the error itself).
-pub async fn run<R, F, Fut>(state: &AppState, app: &AppHandle<R>, instance_id: &str, work: F) -> AppResult<()>
+pub async fn run<R, F, Fut>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    instance_id: &str,
+    work: F,
+) -> AppResult<()>
 where
     R: Runtime,
     F: FnOnce(Progress<R>) -> Fut,
@@ -144,18 +167,36 @@ where
     result
 }
 
-fn begin<R: Runtime>(state: &AppState, app: &AppHandle<R>, instance_id: &str) -> AppResult<Progress<R>> {
+fn begin<R: Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    instance_id: &str,
+) -> AppResult<Progress<R>> {
     if !state.jobs.claim(instance_id) {
         return Err(AppError::conflict("Wait for the current update to finish"));
     }
     emit(
         app,
-        AtlasEvent::InstanceProgress { instance_id: instance_id.into(), status: InstanceStatus::Syncing, progress: None },
+        AtlasEvent::InstanceProgress {
+            instance_id: instance_id.into(),
+            status: InstanceStatus::Syncing,
+            progress: None,
+        },
     );
-    Ok(Progress::new(app.clone(), state.jobs.clone(), instance_id.to_string()))
+    Ok(Progress::new(
+        app.clone(),
+        state.jobs.clone(),
+        instance_id.to_string(),
+    ))
 }
 
-async fn finish<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str, result: &AppResult<()>, report_failure: bool) {
+async fn finish<R: Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    id: &str,
+    result: &AppResult<()>,
+    report_failure: bool,
+) {
     state.jobs.release(id);
     let status = match db::instances::get(&state.db, id).await {
         Ok(Some(row)) if !Path::new(&row.game_dir).is_dir() => InstanceStatus::Missing,
@@ -164,9 +205,27 @@ async fn finish<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str, resu
     if let Err(e) = result {
         tracing::warn!(instance = %id, error = %e.message, "job failed");
         if report_failure {
-            emit(app, AtlasEvent::InstanceJobFailed { instance_id: id.into(), message: e.message.clone() });
+            emit(
+                app,
+                AtlasEvent::InstanceJobFailed {
+                    instance_id: id.into(),
+                    message: e.message.clone(),
+                },
+            );
         }
     }
-    emit(app, AtlasEvent::InstanceProgress { instance_id: id.into(), status, progress: None });
-    emit(app, AtlasEvent::InstanceChanged { instance_id: id.into() });
+    emit(
+        app,
+        AtlasEvent::InstanceProgress {
+            instance_id: id.into(),
+            status,
+            progress: None,
+        },
+    );
+    emit(
+        app,
+        AtlasEvent::InstanceChanged {
+            instance_id: id.into(),
+        },
+    );
 }
