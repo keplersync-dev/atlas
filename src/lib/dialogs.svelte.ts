@@ -1,4 +1,4 @@
-import type { Id } from "$lib/types";
+import type { Id, OpenedLink } from "$lib/types";
 
 /** Every app-wide dialog and the data it needs. Add a variant here when you add a dialog. */
 export type ActiveDialog =
@@ -7,7 +7,8 @@ export type ActiveDialog =
   | { kind: "publish"; instanceId: Id }
   | { kind: "accept"; sharedInstanceId: Id }
   | { kind: "track" }
-  | { kind: "account" };
+  | { kind: "account" }
+  | { kind: "link"; link: OpenedLink };
 
 const state = $state<{ active: ActiveDialog | null }>({ active: null });
 

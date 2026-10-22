@@ -3,6 +3,7 @@
 
 pub mod accept;
 pub mod friends;
+pub mod groups;
 pub mod instances;
 pub mod launchers;
 pub mod presence;

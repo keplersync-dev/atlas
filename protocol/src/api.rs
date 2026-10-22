@@ -4,8 +4,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::enums::{
-    ActivityType, AuthProvider, ContentKind, InviteRole, Loader, MemberRole, MemberStatus,
-    PresenceState, RequestDirection,
+    ActivityType, AuthProvider, ContentKind, GroupMemberRole, GroupRole, InviteRole, Loader,
+    MemberRole, MemberStatus, PresenceState, RequestDirection,
 };
 use crate::manifest::Manifest;
 use crate::{Id, IsoDate};
@@ -297,6 +297,116 @@ pub struct Transfer {
 #[serde(rename_all = "camelCase")]
 pub struct Synced {
     pub revision: u32,
+}
+
+/// `POST /shared-instances/{id}/groups`: share with everyone in a group you're in.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShareToGroup {
+    pub group_id: Id,
+    pub role: InviteRole,
+}
+
+// ── Groups ─────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupMember {
+    pub user: PublicUser,
+    pub role: GroupRole,
+    pub joined_at: IsoDate,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupInvite {
+    pub code: String,
+    /// A web page that opens the invite in Atlas.
+    pub link: String,
+    /// None if they deleted their account.
+    pub created_by: Option<PublicUser>,
+    pub max_uses: Option<u32>,
+    pub uses: u32,
+    pub expires_at: Option<IsoDate>,
+    pub created_at: IsoDate,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Group {
+    pub id: Id,
+    pub name: String,
+    pub icon: Option<String>,
+    pub my_role: GroupRole,
+    pub members: Vec<GroupMember>,
+    /// Shared instances available to the group.
+    pub shared_instance_ids: Vec<Id>,
+    pub created_at: IsoDate,
+}
+
+/// `GET /groups/{id}`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupDetail {
+    #[serde(flatten)]
+    pub group: Group,
+    /// Only filled for the owner and admins.
+    pub invites: Vec<GroupInvite>,
+}
+
+/// `GET /group-invites/{code}`: what an invite leads to, before joining.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupInvitePreview {
+    pub code: String,
+    pub group_id: Id,
+    pub group_name: String,
+    pub group_icon: Option<String>,
+    pub member_count: u32,
+    pub invited_by: Option<PublicUser>,
+    pub already_member: bool,
+}
+
+/// `POST /groups`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateGroup {
+    pub name: String,
+    #[serde(default)]
+    pub icon: Option<String>,
+}
+
+/// `PATCH /groups/{id}`. Missing fields stay; `icon: null` clears it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateGroup {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "double_option"
+    )]
+    pub icon: Option<Option<String>>,
+}
+
+/// `POST /groups/{id}/invites`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateGroupInvite {
+    /// None = any number of people.
+    #[serde(default)]
+    pub max_uses: Option<u32>,
+    /// None = never expires.
+    #[serde(default)]
+    pub expires_in_hours: Option<u32>,
+}
+
+/// `PATCH /groups/{id}/members/{userId}`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetGroupRole {
+    pub role: GroupMemberRole,
 }
 
 /// Missing = `None`, null = `Some(None)`, value = `Some(Some(v))`.

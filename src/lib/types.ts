@@ -63,6 +63,13 @@ export type SyncState =
 // ── People ─────────────────────────────────────────────────────────────
 
 /** Any Atlas user as seen by others. */
+/** A friend or group link Atlas was opened with (`atlas://friend/<code>`). */
+export interface OpenedLink {
+  kind: "friend" | "group";
+  /** Normalized: a friend code or a group invite code. */
+  code: string;
+}
+
 export interface PublicUser {
   id: Id;
   username: string;
@@ -135,7 +142,8 @@ export interface GroupInvite {
   code: string;
   /** e.g. "https://atlas.example/g/K3M9PQ2XRT" */
   link: string;
-  createdBy: PublicUser;
+  /** null if they deleted their account. */
+  createdBy: PublicUser | null;
   maxUses: number | null;
   uses: number;
   expiresAt: IsoDate | null;
@@ -494,7 +502,9 @@ export type AtlasEvent =
   | { type: "friends.changed" }
   | { type: "shared.changed"; sharedInstanceId: Id }
   | { type: "groups.changed"; groupId: Id | null }
-  | { type: "activity.new"; item: ActivityItem };
+  | { type: "activity.new"; item: ActivityItem }
+  /** Atlas was opened with a friend or group link: take it with `takeOpenedLink`. */
+  | { type: "link.opened" };
 
 // ── Inputs ─────────────────────────────────────────────────────────────
 

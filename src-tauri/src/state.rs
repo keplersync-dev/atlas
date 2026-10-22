@@ -11,6 +11,7 @@ use tokio::sync::OnceCell;
 
 use crate::cloud::Cloud;
 use crate::cloud::tokens::CredentialManager;
+use crate::dto::OpenedLink;
 use crate::game::Running;
 use crate::jobs::Jobs;
 use crate::scan::watcher::Watcher;
@@ -43,6 +44,8 @@ pub struct AppState {
     pub resolving: Arc<Mutex<HashSet<String>>>,
     /// The Atlas server and the signed-in session.
     pub cloud: Arc<Cloud>,
+    /// A friend or group link waiting for the UI (crate::links).
+    pub opened_link: Arc<Mutex<Option<OpenedLink>>>,
 }
 
 impl AppState {
@@ -72,6 +75,7 @@ impl AppState {
                 Cloud::server_url_from_env(),
                 Arc::new(CredentialManager::new(dev_profile().as_deref())),
             )),
+            opened_link: Arc::default(),
             db,
         }
     }

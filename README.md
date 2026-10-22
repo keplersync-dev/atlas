@@ -2,7 +2,7 @@
 
 Keep your friends on the same mods. Atlas is a Windows companion app for Minecraft: Java Edition that keeps a modpack in sync between friends, alongside the launcher you already use (Prism Launcher, Modrinth App, CurseForge, the Minecraft Launcher).
 
-**Status:** in development. Launcher detection, mod scanning, Discord sign-in, friends with live presence, and sharing instances (publish, accept, update, with uploads for files that aren't on Modrinth or CurseForge) work. Groups and CurseForge matching are still to come.
+**Status:** in development. Launcher detection, mod scanning, Discord sign-in, friends with live presence, groups, friend and group links (`atlas://`), and sharing instances (publish, accept, update, with uploads for files that aren't on Modrinth or CurseForge) work. CurseForge matching is still to come.
 
 ## Running
 

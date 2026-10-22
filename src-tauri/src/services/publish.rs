@@ -460,11 +460,6 @@ pub async fn share<R: Runtime>(
     if row.shared_instance_id.is_some() {
         return Err(AppError::conflict("This instance is already shared"));
     }
-    if !input.group_ids.is_empty() {
-        return Err(AppError::invalid_input(
-            "Sharing with groups isn't available yet",
-        ));
-    }
     let rows = db::content::list(&state.db, id).await?;
     let modes = modes(&rows, &input.share_modes);
     let description = input.description.flatten();
@@ -478,7 +473,7 @@ pub async fn share<R: Runtime>(
         description,
         manifest: m.clone(),
         friend_ids: input.friend_ids,
-        group_ids: Vec::new(),
+        group_ids: input.group_ids,
         role: input.role,
     };
     let shared: SharedInstance = state

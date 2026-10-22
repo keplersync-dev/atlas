@@ -1507,6 +1507,9 @@ export const mockApi: AtlasApi = {
     return respond(undefined);
   },
 
+  // The browser mock is never opened with a link.
+  takeOpenedLink: async () => null,
+
   // ── Groups ───────────────────────────────────────────────────────────
 
   listGroups: async () => {

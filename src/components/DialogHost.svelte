@@ -2,6 +2,7 @@
   import { closeDialog, dialogs } from "$lib/dialogs.svelte";
   import AcceptInviteDialog from "./dialogs/AcceptInviteDialog.svelte";
   import AccountDialog from "./dialogs/AccountDialog.svelte";
+  import LinkDialog from "./dialogs/LinkDialog.svelte";
   import PublishDialog from "./dialogs/PublishDialog.svelte";
   import ShareDialog from "./dialogs/ShareDialog.svelte";
   import TrackDialog from "./dialogs/TrackDialog.svelte";
@@ -30,5 +31,7 @@
     <TrackDialog onclose={closeDialog} />
   {:else if active?.kind === "account"}
     <AccountDialog onclose={closeDialog} />
+  {:else if active?.kind === "link"}
+    <LinkDialog link={active.link} onclose={closeDialog} />
   {/if}
 {/key}

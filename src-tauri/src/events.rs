@@ -43,6 +43,10 @@ pub enum AtlasEvent {
     GroupsChanged { group_id: Option<Id> },
     #[serde(rename = "activity.new")]
     ActivityNew { item: ActivityItem },
+    /// Atlas was opened with a friend or group link: the UI takes it with
+    /// `take_opened_link`.
+    #[serde(rename = "link.opened")]
+    LinkOpened {},
 }
 
 /// Send an event to the UI. A closed window isn't an error worth handling.
@@ -101,6 +105,10 @@ mod tests {
         assert_eq!(
             to_json(AtlasEvent::SessionChanged {}),
             json!({ "type": "session.changed" })
+        );
+        assert_eq!(
+            to_json(AtlasEvent::LinkOpened {}),
+            json!({ "type": "link.opened" })
         );
         assert_eq!(
             to_json(AtlasEvent::GroupsChanged { group_id: None }),

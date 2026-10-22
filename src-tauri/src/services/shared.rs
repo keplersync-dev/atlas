@@ -11,8 +11,9 @@ use tauri::{AppHandle, Runtime};
 
 use crate::db::{self, instances::InstanceRow};
 use crate::dto::{
-    AddMembers, Id, InviteInput, InviteRole, MemberStatus, SetMemberRole, SharedInstance,
-    SharedInstanceDetail, Synced, Transfer, UpdateSharedInstance, UpdateSharedInstanceInput,
+    AddMembers, Id, InviteInput, InviteRole, MemberStatus, SetMemberRole, ShareToGroup,
+    SharedInstance, SharedInstanceDetail, Synced, Transfer, UpdateSharedInstance,
+    UpdateSharedInstanceInput,
 };
 use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
@@ -105,17 +106,42 @@ pub async fn invite<R: Runtime>(
     id: &Id,
     input: InviteInput,
 ) -> AppResult<SharedInstance> {
-    if !input.group_ids.is_empty() {
-        return Err(AppError::invalid_input(
-            "Sharing with groups isn't available yet",
-        ));
+    let mut shared: Option<SharedInstance> = None;
+    if !input.friend_ids.is_empty() {
+        let body = AddMembers {
+            user_ids: input.friend_ids,
+            role: input.role,
+        };
+        let path = format!("/shared-instances/{}/members", segment(id)?);
+        shared = Some(state.cloud.call(Method::POST, &path, Some(&body)).await?);
     }
-    let body = AddMembers {
-        user_ids: input.friend_ids,
-        role: input.role,
+    for group_id in input.group_ids {
+        let body = ShareToGroup {
+            group_id,
+            role: input.role,
+        };
+        let path = format!("/shared-instances/{}/groups", segment(id)?);
+        shared = Some(state.cloud.call(Method::POST, &path, Some(&body)).await?);
+    }
+    let Some(shared) = shared else {
+        return Err(AppError::invalid_input("Pick someone to share it with"));
     };
-    let path = format!("/shared-instances/{}/members", segment(id)?);
-    let shared = state.cloud.call(Method::POST, &path, Some(&body)).await?;
+    finish(state, app, id, shared).await
+}
+
+/// Stop sharing with a group. Members who only had it through the group lose it.
+pub async fn unshare_from_group<R: Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    id: &Id,
+    group_id: &Id,
+) -> AppResult<SharedInstance> {
+    let path = format!(
+        "/shared-instances/{}/groups/{}",
+        segment(id)?,
+        segment(group_id)?
+    );
+    let shared = state.cloud.call(Method::DELETE, &path, None::<&()>).await?;
     finish(state, app, id, shared).await
 }
 

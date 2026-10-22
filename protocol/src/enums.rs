@@ -71,6 +71,15 @@ wire_enum!(
     /// A group role you can give someone: any but owner.
     GroupMemberRole { Admin, Member }
 );
+
+impl From<GroupMemberRole> for GroupRole {
+    fn from(role: GroupMemberRole) -> Self {
+        match role {
+            GroupMemberRole::Admin => GroupRole::Admin,
+            GroupMemberRole::Member => GroupRole::Member,
+        }
+    }
+}
 wire_enum!(PresenceState {
     Offline,
     Online,

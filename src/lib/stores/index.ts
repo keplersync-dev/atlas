@@ -1,4 +1,5 @@
 import { api } from "$lib/api";
+import { openDialog } from "$lib/dialogs.svelte";
 import { instances } from "./instances.svelte";
 import { social } from "./social.svelte";
 
@@ -11,6 +12,8 @@ export { instances, social };
 export function connectStores() {
   instances.load();
   social.load();
+  // A link may have started Atlas before the page was ready to hear about it.
+  showOpenedLink();
 
   return api.subscribe((e) => {
     switch (e.type) {
@@ -43,6 +46,9 @@ export function connectStores() {
       case "activity.new":
         social.activity.unshift(e.item);
         break;
+      case "link.opened":
+        showOpenedLink();
+        break;
       case "friends.changed":
       case "groups.changed":
       case "session.changed":
@@ -51,4 +57,10 @@ export function connectStores() {
         break;
     }
   });
+}
+
+/** Ask about a friend or group link Atlas was opened with, if one is waiting. */
+async function showOpenedLink() {
+  const link = await api.takeOpenedLink().catch(() => null);
+  if (link) openDialog({ kind: "link", link });
 }

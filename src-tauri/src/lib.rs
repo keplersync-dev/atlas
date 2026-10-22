@@ -10,6 +10,7 @@ pub mod events;
 pub mod game;
 pub mod jobs;
 pub mod launchers;
+pub mod links;
 pub mod resolve;
 pub mod scan;
 pub mod services;
@@ -18,6 +19,7 @@ pub mod sync;
 pub mod util;
 
 use tauri::{Manager, Runtime};
+use tauri_plugin_deep_link::DeepLinkExt;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::state::{AppPaths, AppState};
@@ -87,6 +89,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::friends::cancel_friend_request,
         commands::friends::remove_friend,
         commands::friends::block_user,
+        commands::friends::take_opened_link,
         // Groups
         commands::groups::list_groups,
         commands::groups::get_group,
@@ -148,6 +151,28 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     let db = tauri::async_runtime::block_on(db::open(&paths.database()))?;
     let state = AppState::new(db, paths);
     app.manage(state.clone());
+
+    // Friend and group links. A development build registers the scheme for this exe (an
+    // installed Atlas registers it when installed); a profile copy leaves it to the main one.
+    #[cfg(debug_assertions)]
+    if profile.is_none()
+        && let Err(e) = app.deep_link().register_all()
+    {
+        tracing::warn!(error = %e, "couldn't register atlas:// links");
+    }
+    {
+        let handle = app.handle().clone();
+        app.deep_link().on_open_url(move |event| {
+            for url in event.urls() {
+                links::open(&handle, url.as_str());
+            }
+        });
+    }
+    if let Ok(Some(urls)) = app.deep_link().get_current() {
+        for url in urls {
+            links::open(app.handle(), url.as_str());
+        }
+    }
 
     let handle = app.handle().clone();
 
@@ -226,7 +251,17 @@ fn on_window_event<R: Runtime>(window: &tauri::Window<R>, event: &tauri::WindowE
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+    // One Atlas at a time: opening Atlas or a link again goes to the copy that's running
+    // (the deep-link feature passes links along). A development profile copy runs
+    // alongside instead.
+    if state::dev_profile().is_none() {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            links::show_window(app);
+        }));
+    }
+    builder
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .setup(setup)
         .on_window_event(on_window_event)

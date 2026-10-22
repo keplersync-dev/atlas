@@ -1,7 +1,7 @@
 use reqwest::Method;
 use tauri::{AppHandle, Runtime, State};
 
-use crate::dto::{Friend, FriendRequest, Id, PublicUser};
+use crate::dto::{Friend, FriendRequest, Id, OpenedLink, PublicUser};
 use crate::error::AppResult;
 use crate::services::friends;
 use crate::state::AppState;
@@ -68,4 +68,10 @@ pub async fn block_user<R: Runtime>(
     user_id: Id,
 ) -> AppResult<()> {
     friends::change(&state, &app, Method::POST, "/blocks", &user_id).await
+}
+
+/// The friend or group link Atlas was opened with, if the UI hasn't taken it yet.
+#[tauri::command]
+pub fn take_opened_link(state: State<'_, AppState>) -> Option<OpenedLink> {
+    state.opened_link.lock().unwrap().take()
 }

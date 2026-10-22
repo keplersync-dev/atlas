@@ -1,6 +1,5 @@
 use tauri::{AppHandle, Runtime, State};
 
-use super::not_ready;
 use crate::dto::{
     Id, InstanceSummary, InviteInput, InviteRole, PublishInput, PublishPlan, ShareInstanceInput,
     SharedInstance, SharedInstanceDetail, SyncOptions, SyncPreview, UpdateSharedInstanceInput,
@@ -170,17 +169,14 @@ pub async fn remove_shared_member<R: Runtime>(
     shared::remove_member(&state, &app, &id, &user_id).await
 }
 
-/// Groups aren't on the server yet.
 #[tauri::command]
-pub async fn unshare_from_group(
+pub async fn unshare_from_group<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
-    #[allow(unused_variables)] id: Id,
-    #[allow(unused_variables)] group_id: Id,
+    id: Id,
+    group_id: Id,
 ) -> AppResult<SharedInstance> {
-    Err(not_ready(
-        &state,
-        "Groups aren't available yet. They're coming in a later update.",
-    ))
+    shared::unshare_from_group(&state, &app, &id, &group_id).await
 }
 
 #[tauri::command]

@@ -19,6 +19,7 @@ import type {
   LauncherKind,
   Me,
   MemberRole,
+  OpenedLink,
   PublicUser,
   PublishInput,
   PublishPlan,
@@ -181,6 +182,8 @@ export interface AtlasApi {
   cancelFriendRequest(userId: Id): Promise<void>;
   removeFriend(userId: Id): Promise<void>;
   blockUser(userId: Id): Promise<void>;
+  /** The friend or group link Atlas was opened with, once (null if none is waiting). */
+  takeOpenedLink(): Promise<OpenedLink | null>;
 
   // ── Groups ───────────────────────────────────────────────────────────
   listGroups(): Promise<Group[]>;
