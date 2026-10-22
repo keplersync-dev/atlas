@@ -8,6 +8,8 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+pub use atlas_protocol::api::UpdateProfileInput;
+
 use super::{ConfigChoice, Id, InviteRole, LauncherKind, ShareMode};
 
 /// Lets `Option<Option<T>>` tell "field missing" (outer None) from "field is null" (Some(None)).
@@ -46,17 +48,6 @@ pub struct SyncOptions {
     /// Keys from SyncPreview.newOptional to download. Missing = don't.
     #[serde(default)]
     pub install_optional: Vec<String>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateProfileInput {
-    #[serde(default)]
-    pub username: Option<String>,
-    #[serde(default)]
-    pub display_name: Option<String>,
-    #[serde(default)]
-    pub appear_offline: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

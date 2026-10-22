@@ -19,11 +19,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+atlas-protocol = { path = "../protocol" }
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tokio = { version = "1.54.0", features = ["sync", "time", "macros", "rt"] }
+tokio = { version = "1.54.0", features = ["sync", "time", "macros", "rt", "net", "io-util"] }
 sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
 uuid = { version = "1.28.0", features = ["v7"] }
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
@@ -41,6 +42,10 @@ zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 toml = "1.1.8"
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "native-tls", "query"] }
 base64 = "0.23.1"
+keyring-core = "1.0.1"
+windows-native-keyring-store = "1.1.0"
+url = "2.5.8"
+rand = "0.10.3"
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

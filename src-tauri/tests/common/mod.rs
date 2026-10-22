@@ -31,6 +31,11 @@ impl TestApp {
         let mut state = AppState::new(db, AppPaths::new(&dir.0.join("appdata")));
         state.auto_detect = false;
         state.modrinth_api = None; // never call Modrinth from tests
+        state.cloud = std::sync::Arc::new(atlas_lib::cloud::Cloud::new(
+            state.db.clone(),
+            None,
+            std::sync::Arc::new(atlas_lib::cloud::tokens::MemoryStore::default()),
+        ));
         app.manage(state);
         let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()

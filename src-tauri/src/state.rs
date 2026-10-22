@@ -9,6 +9,8 @@ use std::sync::{Arc, Mutex};
 use sqlx::SqlitePool;
 use tokio::sync::OnceCell;
 
+use crate::cloud::Cloud;
+use crate::cloud::tokens::CredentialManager;
 use crate::game::Running;
 use crate::jobs::Jobs;
 use crate::scan::watcher::Watcher;
@@ -36,12 +38,13 @@ pub struct AppState {
     pub modrinth_api: Option<String>,
     /// Instances with a lookup in flight, so a burst of scans doesn't ask twice.
     pub resolving: Arc<Mutex<HashSet<String>>>,
+    /// The Atlas server and the signed-in session.
+    pub cloud: Arc<Cloud>,
 }
 
 impl AppState {
     pub fn new(db: SqlitePool, paths: AppPaths) -> Self {
         Self {
-            db,
             paths,
             auto_detect: true,
             detected: Arc::new(OnceCell::new()),
@@ -56,6 +59,12 @@ impl AppState {
                 .expect("http client"),
             modrinth_api: Some(crate::resolve::modrinth::API.to_string()),
             resolving: Arc::default(),
+            cloud: Arc::new(Cloud::new(
+                db.clone(),
+                Cloud::server_url_from_env(),
+                Arc::new(CredentialManager::new()),
+            )),
+            db,
         }
     }
 

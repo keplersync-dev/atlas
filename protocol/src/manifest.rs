@@ -1,13 +1,13 @@
 //! The manifest: a shareable description of an instance (see
-//! tests/fixtures/manifest.example.json). Will move into a crate shared with the server,
-//! so the server validates and hashes exactly the same way.
+//! tests/fixtures/manifest.example.json). The server validates every manifest it stores
+//! and the app validates every one it applies, both with this code.
 
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::dto::{ContentKind, ContentSource, Loader, Side};
+use crate::enums::{ContentKind, ContentSource, Loader, Side};
 
 pub const SCHEMA_VERSION: u32 = 1;
 

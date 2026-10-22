@@ -3,6 +3,7 @@
 
 pub mod instances;
 pub mod launchers;
+pub mod session;
 pub mod sync;
 
 /// Path as stored and shown: canonical (real case, no `\\?\` prefix) when it exists.

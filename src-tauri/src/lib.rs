@@ -1,6 +1,7 @@
 //! Atlas desktop backend. The contract with the UI:
 //! src/lib/types.ts (shapes) and src/lib/api/api.ts (commands).
 
+pub mod cloud;
 pub mod commands;
 pub mod db;
 pub mod dto;
@@ -156,6 +157,15 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
 
     game::spawn(state.clone(), handle.clone());
 
+    // Session and connection changes go to the UI; the saved session is checked in the
+    // background.
+    {
+        let handle = handle.clone();
+        state.cloud.on_event(move |e| events::emit(&handle, e));
+        let cloud = state.cloud.clone();
+        tauri::async_runtime::spawn(async move { cloud.restore().await });
+    }
+
     // Background work that mustn't hold up the window: find launchers, then rescan
     // every tracked instance (metadata and files; this also starts watching them).
     tauri::async_runtime::spawn(async move {
@@ -176,6 +186,9 @@ fn on_window_event<R: Runtime>(window: &tauri::Window<R>, event: &tauri::WindowE
             let Some(state) = app.try_state::<AppState>().map(|s| s.inner().clone()) else {
                 return;
             };
+            if state.cloud.is_signed_in() && !state.cloud.is_online() {
+                state.cloud.restore().await;
+            }
             services::instances::rescan_all(&state, &app, std::time::Duration::from_secs(30)).await;
         });
     }

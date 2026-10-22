@@ -2,7 +2,7 @@
 
 Keep your friends on the same mods. Atlas is a Windows companion app for Minecraft: Java Edition that keeps a modpack in sync between friends, alongside the launcher you already use (Prism Launcher, Modrinth App, CurseForge, the Minecraft Launcher).
 
-**Status:** in development. Launcher detection, mod scanning and the local sync engine work; accounts, friends and sharing are still to come.
+**Status:** in development. Launcher detection, mod scanning, the local sync engine and Discord sign-in work; friends and sharing are still to come.
 
 ## Running
 
@@ -19,12 +19,20 @@ The UI runs on mock data by default. To use the real backend:
 $env:VITE_ATLAS_API = "tauri"; pnpm tauri dev
 ```
 
+Signing in needs an Atlas server. Point the app at one with `ATLAS_SERVER_URL`:
+
+```powershell
+$env:VITE_ATLAS_API = "tauri"; $env:ATLAS_SERVER_URL = "http://localhost:8080"; pnpm tauri dev
+```
+
 ## Tests
 
 ```powershell
 cd src-tauri
 cargo test
 ```
+
+`protocol/` holds the types and rules the app shares with the server (manifests, API bodies, friend codes). Test it with `cargo test` in that folder.
 
 ## License
 

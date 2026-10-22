@@ -8,6 +8,8 @@
   import Icon from "./Icon.svelte";
 
   let signingIn = $state(false);
+  let signInError = $state<string | null>(null);
+  let signInAttempt = 0;
 
   const links: { view: View; label: string; icon: string }[] = [
     { view: { page: "home" }, label: "Home", icon: "home" },
@@ -26,12 +28,18 @@
   const needsYou = (i: InstanceSummary) =>
     instances.needingAttention.includes(i);
 
+  /** Opens the browser. Calling it again while waiting starts over. */
   async function signIn() {
+    const attempt = ++signInAttempt;
     signingIn = true;
+    signInError = null;
     try {
-      await social.signIn("minecraft");
+      await social.signIn("discord");
+    } catch (err) {
+      // Starting over rejects the earlier call; only the latest one counts.
+      if (attempt === signInAttempt) signInError = (err as Error).message;
     } finally {
-      signingIn = false;
+      if (attempt === signInAttempt) signingIn = false;
     }
   }
 </script>
@@ -163,8 +171,20 @@
         disabled={signingIn}
         class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg-raise-2) font-medium hover:bg-[#252b33] disabled:opacity-50"
       >
-        {signingIn ? "Signing in…" : "Sign in to share"}
+        {signingIn ? "Waiting for your browser…" : "Sign in with Discord"}
       </button>
+      {#if signingIn}
+        <p class="mt-2 text-center text-[11.5px] text-(--text-faint)">
+          Finish signing in there.
+          <button onclick={signIn} class="underline hover:text-(--text-primary)"
+            >Start again</button
+          >
+        </p>
+      {:else if signInError}
+        <p class="mt-2 text-center text-[11.5px] text-(--danger)" role="alert">
+          {signInError}
+        </p>
+      {/if}
     </div>
   {/if}
 </aside>

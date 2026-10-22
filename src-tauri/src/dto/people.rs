@@ -1,48 +1,8 @@
 use serde::{Deserialize, Serialize};
 
-use super::{AuthProvider, Id, IsoDate, PresenceState, RequestDirection};
+pub use atlas_protocol::api::{LinkedIdentity, Me, PublicUser, Storage};
 
-/// Any Atlas user as seen by others.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PublicUser {
-    pub id: Id,
-    pub username: String,
-    pub display_name: String,
-    pub avatar_url: Option<String>,
-    pub minecraft_uuid: Option<String>,
-    pub minecraft_username: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct LinkedIdentity {
-    pub provider: AuthProvider,
-    pub username: String,
-    pub linked_at: IsoDate,
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Storage {
-    pub used_bytes: u64,
-    pub quota_bytes: u64,
-    pub max_file_bytes: u64,
-}
-
-/// The signed-in Atlas user, with private fields. `extends PublicUser` in types.ts.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Me {
-    #[serde(flatten)]
-    pub user: PublicUser,
-    pub friend_code: String,
-    pub friend_link: String,
-    pub identities: Vec<LinkedIdentity>,
-    pub appear_offline: bool,
-    pub username_change_available_at: Option<IsoDate>,
-    pub storage: Storage,
-}
+use super::{Id, IsoDate, PresenceState, RequestDirection};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

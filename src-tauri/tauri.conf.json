@@ -23,7 +23,7 @@
         "default-src": "'self'",
         "script-src": "'self'",
         "style-src": "'self' 'unsafe-inline'",
-        "img-src": "'self' data: asset: http://asset.localhost https://cdn.modrinth.com https://media.forgecdn.net",
+        "img-src": "'self' data: asset: http://asset.localhost https://cdn.modrinth.com https://media.forgecdn.net https://cdn.discordapp.com",
         "font-src": "'self' data:",
         "connect-src": "ipc: http://ipc.localhost"
       },
