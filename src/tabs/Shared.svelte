@@ -5,13 +5,13 @@
 </script>
 
 <script lang="ts">
+  import { api } from "$lib/api";
   import { plural } from "$lib/format";
   import { social } from "$lib/stores";
   import type { SharedInstance } from "$lib/types";
   import AttentionBadges from "../components/AttentionBadges.svelte";
   import Button from "../components/Button.svelte";
   import Icon from "../components/Icon.svelte";
-  import PageHeader from "../components/PageHeader.svelte";
   import SharedRow, {
     byAttention,
     localFor,
@@ -75,6 +75,54 @@
     shown.filter((s) => s.myRole !== "owner").toSorted(byAttention),
   );
 
+  // ── Update all: shared instances on this PC with an update and nothing to decide ──
+  const updatable = $derived(
+    all.flatMap((s) => {
+      const local = localFor(s);
+      return local?.sync?.state === "update_available" && !local.isRunning
+        ? [{ shared: s, local }]
+        : [];
+    }),
+  );
+  let updating = $state(false);
+  let updateNote = $state<{ text: string; ok: boolean } | null>(null);
+
+  // Updates that ask nothing of the user go ahead; any with a question (config files
+  // you changed, manual downloads, a launcher change) are left for their own Review page.
+  async function updateAll() {
+    updating = true;
+    updateNote = null;
+    const asks: string[] = [];
+    let done = 0;
+    let failed = 0;
+    for (const { shared, local } of updatable) {
+      try {
+        const p = await api.previewSync(local.id);
+        const needsYou =
+          p.configConflicts.length > 0 ||
+          p.manualDownloads.length > 0 ||
+          p.overwrittenLocalChanges.length > 0 ||
+          (!!p.launcherChange && !p.launcherChange.automatic);
+        if (needsYou) {
+          asks.push(shared.name);
+          continue;
+        }
+        await api.syncInstance(local.id);
+        done++;
+      } catch {
+        failed++;
+      }
+    }
+    updating = false;
+    const parts = [
+      done && `Updating ${plural(done, "instance")}`,
+      asks.length &&
+        `${asks.join(", ")} need${asks.length === 1 ? "s" : ""} a look first`,
+      failed && `${plural(failed, "update")} didn't start`,
+    ].filter(Boolean);
+    updateNote = { text: parts.join(" · "), ok: !failed };
+  }
+
   const activity = $derived(
     social.activity.filter((a) => SHARING_TYPES.has(a.type)),
   );
@@ -115,7 +163,7 @@
 <!-- Snippets keep the markup below short: tools, then the two lists. -->
 
 {#snippet search()}
-  <label class="relative block w-72">
+  <label class="relative block max-w-72 min-w-36 flex-1">
     <span
       class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-(--text-faint)"
     >
@@ -186,17 +234,6 @@
   </div>
 {/snippet}
 
-<PageHeader
-  title="Shared"
-  subtitle={social.signedIn
-    ? `${plural(all.filter((s) => s.myRole === "owner").length, "instance")} shared by you · ${all.filter((s) => s.myRole !== "owner").length} with you`
-    : undefined}
->
-  {#snippet actions()}
-    {#if social.signedIn}<ShareButton />{/if}
-  {/snippet}
-</PageHeader>
-
 {#if !social.signedIn}
   <div class="py-12 text-center text-(--text-muted)">
     <b class="block text-sm text-(--text-primary)">Sign in to share instances</b
@@ -219,7 +256,44 @@
       <div class="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
         {@render search()}
         {@render chips()}
+        <ShareButton class="ml-auto" />
       </div>
+      {#if updatable.length > 1 || updating || updateNote}
+        <div
+          class="mb-5 flex items-center gap-3 rounded-xl bg-(--warn)/10 px-4 py-2.5"
+        >
+          <span class="size-2 shrink-0 rounded-full bg-(--warn)"></span>
+          <span class="min-w-0 flex-1 truncate">
+            {#if updateNote}
+              <span class={updateNote.ok ? "" : "text-(--danger)"}
+                >{updateNote.text}</span
+              >
+            {:else}
+              <b class="font-semibold"
+                >{plural(updatable.length, "update")} ready</b
+              >
+              <span class="text-(--text-muted)">
+                · {updatable.map((u) => u.shared.name).join(", ")}</span
+              >
+            {/if}
+          </span>
+          {#if updateNote}
+            <Button
+              size="sm"
+              variant="ghost"
+              onclick={() => (updateNote = null)}>Dismiss</Button
+            >
+          {:else}
+            <Button
+              size="sm"
+              variant="warn"
+              disabled={updating}
+              onclick={updateAll}
+              >{updating ? "Updating…" : "Update all"}</Button
+            >
+          {/if}
+        </div>
+      {/if}
       {@render cards()}
     </div>
     <aside class="flex flex-col gap-4">

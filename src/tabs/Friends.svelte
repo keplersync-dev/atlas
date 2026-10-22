@@ -2,6 +2,9 @@
   // Which friends' dropdowns the user opened or closed. Module-level, so it survives
   // leaving the page. A friend with no entry opens by itself when something needs you.
   let expanded = $state<Record<string, boolean>>({});
+  // Search and filter survive leaving the page too.
+  let query = $state("");
+  let filter = $state<"all" | "playing" | "online">("all");
 </script>
 
 <script lang="ts">
@@ -13,34 +16,63 @@
   import Head from "../components/Head.svelte";
   import Icon from "../components/Icon.svelte";
   import Menu from "../components/Menu.svelte";
-  import PageHeader from "../components/PageHeader.svelte";
   import SharedRow, {
     attentionOf,
     byAttention,
   } from "../components/SharedRow.svelte";
-  import AddFriendCard from "../components/friends/AddFriendCard.svelte";
   import GroupsCard from "../components/friends/GroupsCard.svelte";
   import RequestsCard from "../components/friends/RequestsCard.svelte";
+  import YouCard from "../components/friends/YouCard.svelte";
+
+  const FILTERS = [
+    { key: "all", label: "All", test: () => true },
+    {
+      key: "playing",
+      label: "Playing",
+      test: (f) => f.presence.state === "playing",
+    },
+    {
+      key: "online",
+      label: "Online",
+      test: (f) => f.presence.state !== "offline",
+    },
+  ] as const satisfies readonly {
+    key: typeof filter;
+    label: string;
+    test: (f: Friend) => boolean;
+  }[];
+
+  const matchesQuery = (f: Friend) => {
+    const q = query.trim().toLowerCase();
+    return (
+      !q ||
+      [f.user.displayName, f.user.username].some((t) =>
+        t.toLowerCase().includes(q),
+      )
+    );
+  };
+  const shown = $derived(
+    social.friends.filter(
+      (f) => matchesQuery(f) && FILTERS.find((x) => x.key === filter)!.test(f),
+    ),
+  );
 
   // Three sections from one list. Order matters: playing first, then online, then offline.
   const sections = $derived(
     [
       {
         title: "Playing",
-        list: social.friends.filter((f) => f.presence.state === "playing"),
+        list: shown.filter((f) => f.presence.state === "playing"),
       },
       {
         title: "Online",
-        list: social.friends.filter((f) => f.presence.state === "online"),
+        list: shown.filter((f) => f.presence.state === "online"),
       },
       {
         title: "Offline",
-        list: social.friends.filter((f) => f.presence.state === "offline"),
+        list: shown.filter((f) => f.presence.state === "offline"),
       },
     ].filter((s) => s.list.length > 0),
-  );
-  const onlineCount = $derived(
-    social.friends.filter((f) => f.presence.state !== "offline").length,
   );
 
   /** What this friend shared with you (or a group you're in), needs-you first. */
@@ -85,13 +117,6 @@
   }
 </script>
 
-<PageHeader
-  title="Friends"
-  subtitle={social.signedIn
-    ? `${plural(social.friends.length, "friend")} · ${onlineCount} online`
-    : undefined}
-/>
-
 {#if !social.signedIn}
   <div class="py-12 text-center text-(--text-muted)">
     <b class="block text-sm text-(--text-primary)">Sign in to add friends</b>
@@ -105,10 +130,42 @@
     </div>
   </div>
 {:else}
+  <YouCard />
   <div
-    class="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-10 max-[1150px]:grid-cols-1"
+    class="mt-6 grid grid-cols-[minmax(0,1fr)_320px] items-start gap-10 max-[1150px]:grid-cols-1"
   >
     <div>
+      <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-3">
+        <label class="relative block w-64">
+          <span
+            class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-(--text-faint)"
+          >
+            <Icon name="search" class="size-3.5" />
+          </span>
+          <input
+            bind:value={query}
+            placeholder="Search friends"
+            class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg-raise) pr-2.5 pl-8 text-[12.5px] placeholder:text-(--text-faint) focus:border-(--accent) focus:outline-none"
+          />
+        </label>
+        <div class="flex gap-1.5" role="radiogroup" aria-label="Filter">
+          {#each FILTERS as f (f.key)}
+            <button
+              role="radio"
+              aria-checked={filter === f.key}
+              onclick={() => (filter = f.key)}
+              class="h-7 rounded-full px-3 text-xs {filter === f.key
+                ? 'bg-(--accent)/15 font-semibold text-(--accent)'
+                : 'text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)'}"
+            >
+              {f.label}
+              <span class="ml-0.5 opacity-70"
+                >{social.friends.filter(f.test).length}</span
+              >
+            </button>
+          {/each}
+        </div>
+      </div>
       {#if error}<p class="mb-2 text-xs text-(--danger)" role="alert">
           {error}
         </p>{/if}
@@ -200,13 +257,21 @@
         {/each}
       {:else}
         <p class="py-12 text-center text-(--text-muted)">
-          No friends yet. Send your friend code to someone, or enter theirs.
+          {#if !social.friends.length}
+            No friends yet. Send your friend code to someone, or paste theirs
+            above.
+          {:else if query.trim()}
+            Nobody matches “{query.trim()}”.
+          {:else if filter === "playing"}
+            None of your friends are playing right now.
+          {:else}
+            None of your friends are online right now.
+          {/if}
         </p>
       {/each}
     </div>
 
     <aside class="flex flex-col gap-4">
-      <AddFriendCard />
       <RequestsCard />
       <GroupsCard />
     </aside>
