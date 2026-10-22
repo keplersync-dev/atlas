@@ -50,8 +50,14 @@
   let error = $state<string | null>(null);
 
   // People who already have it (invite mode) can't be picked again.
-  const memberIds = $derived(
-    new Set(shared.data?.members.map((m) => m.user.id) ?? []),
+  // People already in, or with an invite they haven't answered. Someone who declined
+  // can be invited again.
+  const memberStatus = $derived(
+    new Map(
+      (shared.data?.members ?? [])
+        .filter((m) => m.status !== "declined")
+        .map((m) => [m.user.id, m.status]),
+    ),
   );
   const linkedGroupIds = $derived(
     new Set(shared.data?.groups.map((g) => g.group.id) ?? []),
@@ -140,7 +146,8 @@
       People
     </h3>
     {#each social.friends as f (f.user.id)}
-      {@const member = memberIds.has(f.user.id)}
+      {@const status = memberStatus.get(f.user.id)}
+      {@const member = !!status}
       <label
         class="-mx-2 flex items-center gap-3 rounded-md px-2 py-1.5 {member
           ? 'opacity-50'
@@ -157,7 +164,11 @@
         <span class="min-w-0 flex-1">
           <b class="block font-medium">{f.user.displayName}</b>
           <small class="block text-[11.5px] text-(--text-faint)"
-            >{member ? "Already a member" : `@${f.user.username}`}</small
+            >{status === "invited"
+              ? "Invite pending"
+              : member
+                ? "Already a member"
+                : `@${f.user.username}`}</small
           >
         </span>
       </label>
