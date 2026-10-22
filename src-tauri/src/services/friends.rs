@@ -6,13 +6,25 @@ use atlas_protocol::codes::{self, FRIEND_CODE_LEN};
 use reqwest::Method;
 use tauri::{AppHandle, Runtime};
 
-use crate::dto::{ActivityIds, ActivityItem, Friend, FriendRequest, Id, PublicUser};
+use crate::dto::{ActivityIds, ActivityItem, Friend, FriendRequest, Id, PresenceState, PublicUser};
 use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
 use crate::state::AppState;
 
+/// Offline, the cached list comes back with everyone shown offline: their last known
+/// presence would be out of date.
 pub async fn list(state: &AppState) -> AppResult<Vec<Friend>> {
-    state.cloud.cached_get("friends", "/friends").await
+    let mut friends: Vec<Friend> = state.cloud.cached_get("friends", "/friends").await?;
+    if !state.cloud.is_online() {
+        for friend in &mut friends {
+            let p = &mut friend.presence;
+            p.state = PresenceState::Offline;
+            p.instance_name = None;
+            p.minecraft_version = None;
+            p.shared_instance_id = None;
+        }
+    }
+    Ok(friends)
 }
 
 pub async fn requests(state: &AppState) -> AppResult<Vec<FriendRequest>> {

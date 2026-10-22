@@ -983,6 +983,60 @@ export const mockApi: AtlasApi = {
     return respond(toSummary(inst));
   },
 
+  async acceptInviteInto(sharedInstanceId, instanceId, installOptional) {
+    const user = online();
+    const s = findShared(sharedInstanceId);
+    if (s.myStatus !== "invited")
+      throw new ApiError("conflict", "No pending invite");
+    const inst = findInstance(instanceId);
+    if (inst.sync)
+      throw new ApiError(
+        "conflict",
+        "That instance is already shared. Pick another one.",
+      );
+    const self = s.members.find((m) => m.user.id === user.id);
+    s.myStatus = "active";
+    if (self)
+      Object.assign(self, {
+        status: "active",
+        lastSyncedRevision: s.latestRevision,
+      });
+    inst.status = "syncing";
+    inst.sync = {
+      sharedInstanceId: s.id,
+      role: s.myRole,
+      owner: s.owner,
+      syncedRevision: s.latestRevision,
+      latestRevision: s.latestRevision,
+      state: "up_to_date",
+      localChangeCount: 0,
+    };
+    s.localInstanceId = inst.id;
+    simulateSync(inst, () => {
+      const optionalNames = new Set(s.optionalItems.map((o) => o.name));
+      const required = [
+        ...new Set(s.revisions.flatMap((r) => r.changes.added)),
+      ].filter((n) => !n.endsWith(" (optional)") && !optionalNames.has(n));
+      // The user's own files stay; the shared ones are added next to them.
+      inst.content = [
+        ...inst.content,
+        ...required.map((n) => receivedItem(n, "required", true)),
+        ...s.optionalItems.map((o) =>
+          receivedItem(
+            o.name,
+            "optional",
+            installOptional.includes(o.key),
+            o.kind,
+            o.sizeBytes,
+          ),
+        ),
+      ];
+      inst.contentCount = inst.content.filter((c) => c.installed).length;
+    });
+    emit({ type: "shared.changed", sharedInstanceId });
+    return respond(toSummary(inst));
+  },
+
   async declineInvite(sharedInstanceId) {
     const user = online();
     const s = findShared(sharedInstanceId);

@@ -2,11 +2,12 @@
 //! tests/fixtures/manifest.example.json). The server validates every manifest it stores
 //! and the app validates every one it applies, both with this code.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::api::{RevisionChanges, UpdatedItem};
 use crate::enums::{ContentKind, ContentSource, Loader, Side};
 
 pub const SCHEMA_VERSION: u32 = 1;
@@ -245,6 +246,47 @@ pub fn hash(m: &Manifest) -> String {
     hex::encode(Sha256::digest(bytes))
 }
 
+// ── Changes between versions ───────────────────────────────────────────
+
+/// What changed from `old` to `new`, by content key, for revision summaries.
+pub fn changes(old: Option<&Manifest>, new: &Manifest) -> RevisionChanges {
+    let label = |e: &Entry| {
+        e.version_label
+            .clone()
+            .unwrap_or_else(|| e.path.rsplit('/').next().unwrap_or(&e.path).to_string())
+    };
+    let kind = |required: bool| if required { "Required" } else { "Optional" };
+    let before: HashMap<&str, &Entry> = old
+        .map(|m| m.content.iter().map(|e| (e.key(), e)).collect())
+        .unwrap_or_default();
+    let after: HashSet<&str> = new.content.iter().map(Entry::key).collect();
+    let mut out = RevisionChanges::default();
+    for e in &new.content {
+        match before.get(e.key()) {
+            None => out.added.push(e.name.clone()),
+            Some(b) if b.sha1 != e.sha1 => out.updated.push(UpdatedItem {
+                name: e.name.clone(),
+                from: label(b),
+                to: label(e),
+            }),
+            Some(b) if b.required != e.required => out.updated.push(UpdatedItem {
+                name: e.name.clone(),
+                from: kind(b.required).into(),
+                to: kind(e.required).into(),
+            }),
+            Some(_) => {}
+        }
+    }
+    if let Some(old) = old {
+        for e in &old.content {
+            if !after.contains(e.key()) {
+                out.removed.push(e.name.clone());
+            }
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -325,6 +367,23 @@ mod tests {
 
         assert!(parse(b"{}").is_err());
         assert!(parse(&vec![b' '; MAX_BYTES + 1]).is_err());
+    }
+
+    #[test]
+    fn changes_between_versions() {
+        let a = parse(&example()).unwrap();
+        let first = changes(None, &a);
+        assert_eq!(first.added.len(), a.content.len());
+        let mut b = a.clone();
+        b.content.remove(0);
+        b.content[0].sha1 = "f".repeat(40);
+        b.content[0].version_label = Some("2.0".into());
+        b.content[1].required = !b.content[1].required;
+        let c = changes(Some(&a), &b);
+        assert_eq!(c.removed, vec![a.content[0].name.clone()]);
+        assert_eq!(c.updated.len(), 2);
+        assert_eq!(c.updated[0].to, "2.0");
+        assert!(c.added.is_empty());
     }
 
     #[test]

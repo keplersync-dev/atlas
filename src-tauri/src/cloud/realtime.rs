@@ -12,8 +12,10 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::header::{AUTHORIZATION, USER_AGENT};
 
 use super::Cloud;
+use crate::dto::SharedInstance;
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::events::AtlasEvent;
+use crate::services::shared::CACHE_KEY as SHARED_CACHE_KEY;
 
 const MAX_BACKOFF: Duration = Duration::from_secs(30);
 
@@ -141,6 +143,7 @@ impl Cloud {
                     };
                     match ServerMessage::parse(&text) {
                         ServerMessage::Hello { .. } => {
+                            tracing::info!("connected to the Atlas server");
                             self.set_online(true);
                             self.emit(AtlasEvent::FriendsChanged {});
                             let now = presence.borrow_and_update().clone();
@@ -149,7 +152,7 @@ impl Cloud {
                             }
                         }
                         ServerMessage::SessionRevoked {} => return End::Revoked,
-                        other => self.forward(other),
+                        other => self.forward(other).await,
                     }
                 }
                 changed = presence.changed() => {
@@ -170,8 +173,9 @@ impl Cloud {
         }
     }
 
-    /// Server hints → UI events.
-    fn forward(&self, msg: ServerMessage) {
+    /// Server hints → UI events. A shared instance change refreshes the cached list
+    /// first, so instance summaries already see the new latest revision.
+    async fn forward(&self, msg: ServerMessage) {
         let event = match msg {
             ServerMessage::PresenceChanged { user_id, presence } => {
                 AtlasEvent::PresenceChanged { user_id, presence }
@@ -180,7 +184,15 @@ impl Cloud {
             ServerMessage::NotificationNew { item } => AtlasEvent::ActivityNew { item },
             ServerMessage::SharedChanged {
                 shared_instance_id, ..
-            } => AtlasEvent::SharedChanged { shared_instance_id },
+            } => {
+                let refreshed = self
+                    .cached_get::<Vec<SharedInstance>>(SHARED_CACHE_KEY, "/shared-instances")
+                    .await;
+                if let Err(e) = refreshed {
+                    tracing::info!(error = %e, "couldn't refresh shared instances");
+                }
+                AtlasEvent::SharedChanged { shared_instance_id }
+            }
             ServerMessage::GroupsChanged { group_id } => AtlasEvent::GroupsChanged {
                 group_id: Some(group_id),
             },

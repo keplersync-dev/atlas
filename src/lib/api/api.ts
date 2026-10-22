@@ -119,6 +119,15 @@ export interface AtlasApi {
     launcherId: Id,
     installOptional: string[],
   ): Promise<InstanceSummary>;
+  /**
+   * Like acceptInvite, but into an instance already tracked here (any launcher, not shared yet).
+   * The shared files are added; the user's own files stay.
+   */
+  acceptInviteInto(
+    sharedInstanceId: Id,
+    instanceId: Id,
+    installOptional: string[],
+  ): Promise<InstanceSummary>;
   declineInvite(sharedInstanceId: Id): Promise<void>;
   /** Step 1 of sharing/publishing: what would be shared, and which files need a decision. */
   preparePublish(instanceId: Id): Promise<PublishPlan>;

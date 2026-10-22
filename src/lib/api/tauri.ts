@@ -58,6 +58,12 @@ export const tauriApi: AtlasApi = {
   getSharedInstance: (id) => call("get_shared_instance", { id }),
   acceptInvite: (sharedInstanceId, launcherId, installOptional) =>
     call("accept_invite", { sharedInstanceId, launcherId, installOptional }),
+  acceptInviteInto: (sharedInstanceId, instanceId, installOptional) =>
+    call("accept_invite_into", {
+      sharedInstanceId,
+      instanceId,
+      installOptional,
+    }),
   declineInvite: (sharedInstanceId) =>
     call("decline_invite", { sharedInstanceId }),
   preparePublish: (instanceId) => call("prepare_publish", { instanceId }),

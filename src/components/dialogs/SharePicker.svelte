@@ -191,14 +191,13 @@
           {#if was && was !== "private" && mode !== was}· was {SHARE_MODES.find(
               (m) => m.id === was,
             )?.label}{/if}
-          {#if item.needsUpload && !item.alreadyUploaded && mode !== "private"}
-            · <span class="text-(--warn)"
-              >not on Modrinth or CurseForge, uploads {fileSize(
-                item.sizeBytes,
-              )}</span
-            >
-          {/if}
         </small>
+        <!-- Its own line, so the warning is never the part that gets cut off. -->
+        {#if item.needsUpload && !item.alreadyUploaded && mode !== "private"}
+          <small class="block text-[11.5px] text-(--warn)">
+            Not on Modrinth or CurseForge · uploads {fileSize(item.sizeBytes)}
+          </small>
+        {/if}
       </div>
       <ShareModeSelect
         value={mode}

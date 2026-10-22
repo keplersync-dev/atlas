@@ -48,6 +48,15 @@ wire_enum!(
     /// A role you can give someone: any but owner.
     InviteRole { Editor, Viewer }
 );
+impl From<InviteRole> for MemberRole {
+    fn from(role: InviteRole) -> Self {
+        match role {
+            InviteRole::Editor => MemberRole::Editor,
+            InviteRole::Viewer => MemberRole::Viewer,
+        }
+    }
+}
+
 wire_enum!(MemberStatus {
     Invited,
     Active,

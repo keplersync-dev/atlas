@@ -3,7 +3,11 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::enums::{ActivityType, AuthProvider, PresenceState, RequestDirection};
+use crate::enums::{
+    ActivityType, AuthProvider, ContentKind, InviteRole, Loader, MemberRole, MemberStatus,
+    PresenceState, RequestDirection,
+};
+use crate::manifest::Manifest;
 use crate::{Id, IsoDate};
 
 // ── Users ──────────────────────────────────────────────────────────────
@@ -103,6 +107,217 @@ pub struct FriendRequest {
 pub struct SendFriendRequest {
     /// Normalized friend code ("7KQ29XMB").
     pub code: String,
+}
+
+// ── Shared instances ───────────────────────────────────────────────────
+
+/// `{ id, name }`: how a group is named on a member row.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupRef {
+    pub id: Id,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedMember {
+    pub user: PublicUser,
+    pub role: MemberRole,
+    pub status: MemberStatus,
+    pub via_group: Option<GroupRef>,
+    pub last_synced_revision: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GroupLinkGroup {
+    pub id: Id,
+    pub name: String,
+    pub icon: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedGroupLink {
+    pub group: GroupLinkGroup,
+    pub role: InviteRole,
+}
+
+/// An optional file a friend can choose to download.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OptionalItem {
+    /// Provider project id, or the file's sha256 for uploads.
+    pub key: String,
+    pub name: String,
+    pub kind: ContentKind,
+    pub size_bytes: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedInstance {
+    pub id: Id,
+    pub name: String,
+    pub description: Option<String>,
+    pub icon: Option<String>,
+    /// None when frozen with no owner.
+    pub owner: Option<PublicUser>,
+    pub minecraft_version: String,
+    pub loader: Loader,
+    pub loader_version: Option<String>,
+    pub latest_revision: u32,
+    pub content_count: u32,
+    /// Total download size of the latest revision.
+    pub size_bytes: u64,
+    pub updated_at: IsoDate,
+    pub frozen: bool,
+    pub my_role: MemberRole,
+    pub my_status: MemberStatus,
+    pub my_via_group: Option<GroupRef>,
+    pub invited_by: Option<PublicUser>,
+    pub invited_at: Option<IsoDate>,
+    pub members: Vec<SharedMember>,
+    pub groups: Vec<SharedGroupLink>,
+    /// Filled in by the app from its own instances; the server always sends null.
+    #[serde(default)]
+    pub local_instance_id: Option<Id>,
+    pub optional_items: Vec<OptionalItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatedItem {
+    pub name: String,
+    pub from: String,
+    pub to: String,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RevisionChanges {
+    pub added: Vec<String>,
+    pub removed: Vec<String>,
+    pub updated: Vec<UpdatedItem>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RevisionSummary {
+    pub revision: u32,
+    pub changelog: Option<String>,
+    pub created_by: Option<PublicUser>,
+    pub created_at: IsoDate,
+    pub changes: RevisionChanges,
+}
+
+/// `SharedInstanceDetail extends SharedInstance` in types.ts.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedInstanceDetail {
+    #[serde(flatten)]
+    pub shared: SharedInstance,
+    /// Newest first.
+    pub revisions: Vec<RevisionSummary>,
+}
+
+/// `POST /shared-instances`: share an instance; its manifest becomes revision 1.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateSharedInstance {
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub manifest: Manifest,
+    pub friend_ids: Vec<Id>,
+    #[serde(default)]
+    pub group_ids: Vec<Id>,
+    pub role: InviteRole,
+}
+
+/// `POST /shared-instances/{id}/revisions`. Refused with 409 unless `base_revision` is
+/// the latest, so nobody publishes over a version they haven't seen.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateRevision {
+    pub base_revision: u32,
+    pub manifest: Manifest,
+    #[serde(default)]
+    pub changelog: Option<String>,
+}
+
+/// `GET /shared-instances/{id}/revisions/{n}`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Revision {
+    pub revision: u32,
+    pub manifest: Manifest,
+    pub manifest_hash: String,
+}
+
+/// `PATCH /shared-instances/{id}`. Missing fields stay; `description: null` clears it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSharedInstance {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "double_option"
+    )]
+    pub description: Option<Option<String>>,
+}
+
+/// `POST /shared-instances/{id}/members`: invite friends.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AddMembers {
+    pub user_ids: Vec<Id>,
+    pub role: InviteRole,
+}
+
+/// `PATCH /shared-instances/{id}/members/{userId}`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetMemberRole {
+    pub role: InviteRole,
+}
+
+/// `POST /shared-instances/{id}/transfer`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Transfer {
+    pub user_id: Id,
+}
+
+/// `PUT /shared-instances/{id}/synced`: the revision this member's folder is on.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Synced {
+    pub revision: u32,
+}
+
+/// Missing = `None`, null = `Some(None)`, value = `Some(Some(v))`.
+mod double_option {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    pub fn serialize<S: Serializer, T: Serialize>(
+        value: &Option<Option<T>>,
+        s: S,
+    ) -> Result<S::Ok, S::Error> {
+        match value {
+            Some(inner) => inner.serialize(s),
+            None => s.serialize_none(),
+        }
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>, T: Deserialize<'de>>(
+        d: D,
+    ) -> Result<Option<Option<T>>, D::Error> {
+        Option::<T>::deserialize(d).map(Some)
+    }
 }
 
 // ── Activity ───────────────────────────────────────────────────────────

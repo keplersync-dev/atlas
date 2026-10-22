@@ -22,6 +22,11 @@ pub struct TestApp {
 impl TestApp {
     /// Launcher auto-detection is off, so results never depend on this machine.
     pub fn new() -> Self {
+        Self::with(|_| {})
+    }
+
+    /// `new`, with a chance to change the state first (e.g. point `cloud` at a server).
+    pub fn with(tweak: impl FnOnce(&mut AppState)) -> Self {
         let dir = TempDir::new();
         let app = mock_builder()
             .invoke_handler(atlas_lib::invoke_handler())
@@ -36,6 +41,7 @@ impl TestApp {
             None,
             std::sync::Arc::new(atlas_lib::cloud::tokens::MemoryStore::default()),
         ));
+        tweak(&mut state);
         app.manage(state);
         let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
             .build()

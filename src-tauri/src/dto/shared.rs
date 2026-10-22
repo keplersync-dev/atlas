@@ -1,117 +1,12 @@
 use serde::{Deserialize, Serialize};
 
-use super::{
-    ContentKind, ContentSource, Id, InviteRole, IsoDate, Loader, ManualDownload, MemberRole,
-    MemberStatus, PublicUser, ShareMode, Storage,
+pub use atlas_protocol::api::{
+    AddMembers, CreateRevision, CreateSharedInstance, GroupLinkGroup, GroupRef, OptionalItem,
+    Revision, RevisionChanges, RevisionSummary, SetMemberRole, SharedGroupLink, SharedInstance,
+    SharedInstanceDetail, SharedMember, Synced, Transfer, UpdateSharedInstance, UpdatedItem,
 };
 
-/// `{ id, name }` — how a group is named on a member row.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GroupRef {
-    pub id: Id,
-    pub name: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SharedMember {
-    pub user: PublicUser,
-    pub role: MemberRole,
-    pub status: MemberStatus,
-    pub via_group: Option<GroupRef>,
-    pub last_synced_revision: Option<u32>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GroupLinkGroup {
-    pub id: Id,
-    pub name: String,
-    pub icon: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SharedGroupLink {
-    pub group: GroupLinkGroup,
-    pub role: InviteRole,
-}
-
-/// An optional file a friend can choose to download.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct OptionalItem {
-    /// Provider project id, or the file's sha256 for uploads.
-    pub key: String,
-    pub name: String,
-    pub kind: ContentKind,
-    pub size_bytes: u64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SharedInstance {
-    pub id: Id,
-    pub name: String,
-    pub description: Option<String>,
-    pub icon: Option<String>,
-    pub owner: Option<PublicUser>,
-    pub minecraft_version: String,
-    pub loader: Loader,
-    pub loader_version: Option<String>,
-    pub latest_revision: u32,
-    pub content_count: u32,
-    pub size_bytes: u64,
-    pub updated_at: IsoDate,
-    pub frozen: bool,
-    pub my_role: MemberRole,
-    pub my_status: MemberStatus,
-    pub my_via_group: Option<GroupRef>,
-    pub invited_by: Option<PublicUser>,
-    pub invited_at: Option<IsoDate>,
-    pub members: Vec<SharedMember>,
-    pub groups: Vec<SharedGroupLink>,
-    /// Filled in by Rust from the local instance table, not by the server.
-    pub local_instance_id: Option<Id>,
-    pub optional_items: Vec<OptionalItem>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdatedItem {
-    pub name: String,
-    pub from: String,
-    pub to: String,
-}
-
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RevisionChanges {
-    pub added: Vec<String>,
-    pub removed: Vec<String>,
-    pub updated: Vec<UpdatedItem>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RevisionSummary {
-    pub revision: u32,
-    pub changelog: Option<String>,
-    pub created_by: Option<PublicUser>,
-    pub created_at: IsoDate,
-    pub changes: RevisionChanges,
-}
-
-/// `SharedInstanceDetail extends SharedInstance` in types.ts.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SharedInstanceDetail {
-    #[serde(flatten)]
-    pub shared: SharedInstance,
-    /// Newest first.
-    pub revisions: Vec<RevisionSummary>,
-}
+use super::{ContentKind, ContentSource, Id, ManualDownload, ShareMode, Storage};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

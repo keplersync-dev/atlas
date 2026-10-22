@@ -14,7 +14,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 
 use super::util::{env_dir, first_existing, from_unix_millis, parse_ini};
-use super::{FoundInstance, ReadResult};
+use super::{FoundInstance, ReadError, ReadResult};
 use crate::dto::Loader;
 
 #[derive(Debug, Clone, Copy)]
@@ -173,12 +173,126 @@ fn read_pack(dir: &Path) -> ReadResult<Pack> {
     Ok(out)
 }
 
+/// Create an empty instance for a shared one: `instance.cfg`, `mmc-pack.json` with the
+/// Minecraft and loader versions, and the game folder. Prism downloads the game itself the
+/// first time it's played. Returns the instance's folder name.
+pub fn create(
+    flavor: Flavor,
+    root: &Path,
+    name: &str,
+    minecraft: &str,
+    loader: Loader,
+    loader_version: Option<&str>,
+) -> ReadResult<String> {
+    let dir = instances_dir(flavor, root);
+    std::fs::create_dir_all(&dir)?;
+    let base: String = name
+        .chars()
+        .map(|c| {
+            if r#"<>:"/\|?*"#.contains(c) || c.is_control() {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect::<String>()
+        .trim_matches(|c: char| c == '.' || c.is_whitespace())
+        .to_owned();
+    let base = if base.is_empty() {
+        "Atlas".to_owned()
+    } else {
+        base
+    };
+    let folder = (1..)
+        .map(|n| {
+            if n == 1 {
+                base.clone()
+            } else {
+                format!("{base} ({n})")
+            }
+        })
+        .find(|f| !dir.join(f).exists())
+        .expect("some folder name is free");
+
+    let mut components = vec![serde_json::json!({
+        "uid": "net.minecraft", "version": minecraft, "important": true
+    })];
+    let loader_uid = match loader {
+        Loader::Vanilla => None,
+        Loader::Fabric => Some("net.fabricmc.fabric-loader"),
+        Loader::Quilt => Some("org.quiltmc.quilt-loader"),
+        Loader::Forge => Some("net.minecraftforge"),
+        Loader::Neoforge => Some("net.neoforged"),
+    };
+    if let Some(uid) = loader_uid {
+        let version = loader_version.ok_or_else(|| {
+            ReadError::Format("the shared instance doesn't say which loader version".into())
+        })?;
+        if matches!(loader, Loader::Fabric | Loader::Quilt) {
+            components.push(serde_json::json!({
+                "uid": "net.fabricmc.intermediary", "version": minecraft, "dependencyOnly": true
+            }));
+        }
+        components.push(serde_json::json!({ "uid": uid, "version": version }));
+    }
+    let pack = serde_json::json!({ "formatVersion": 1, "components": components });
+
+    let instance = dir.join(&folder);
+    std::fs::create_dir_all(instance.join("minecraft"))?;
+    std::fs::write(
+        instance.join("instance.cfg"),
+        format!(
+            "[General]\nConfigVersion=1.2\nInstanceType=OneSix\niconKey=default\nname={name}\n"
+        ),
+    )?;
+    std::fs::write(
+        instance.join("mmc-pack.json"),
+        serde_json::to_vec_pretty(&pack)?,
+    )?;
+    Ok(folder)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn fixture() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/prism")
+    }
+
+    #[test]
+    fn created_instances_read_back() {
+        let tmp = std::env::temp_dir().join(format!("atlas-prism-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("prismlauncher.cfg"), "InstanceDir=instances\n").unwrap();
+        let a = create(
+            Flavor::Prism,
+            &tmp,
+            "Friday: SMP",
+            "1.21.1",
+            Loader::Fabric,
+            Some("0.16.5"),
+        )
+        .unwrap();
+        let b = create(
+            Flavor::Prism,
+            &tmp,
+            "Friday: SMP",
+            "1.21.1",
+            Loader::Fabric,
+            Some("0.16.5"),
+        )
+        .unwrap();
+        assert_eq!((a.as_str(), b.as_str()), ("Friday_ SMP", "Friday_ SMP (2)"));
+        let found = list(Flavor::Prism, &tmp).unwrap();
+        let first = found.iter().find(|f| f.launcher_instance_id == a).unwrap();
+        assert_eq!(first.name, "Friday: SMP");
+        assert_eq!(first.minecraft_version.as_deref(), Some("1.21.1"));
+        assert_eq!(first.loader, Some(Loader::Fabric));
+        assert_eq!(first.loader_version.as_deref(), Some("0.16.5"));
+        assert!(first.game_dir.ends_with("minecraft"));
+        assert!(create(Flavor::Prism, &tmp, "x", "1.21.1", Loader::Forge, None).is_err());
+        std::fs::remove_dir_all(&tmp).ok();
     }
 
     #[test]

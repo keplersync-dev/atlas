@@ -4,7 +4,8 @@
 //! tests/fixtures/<launcher>/. Launchers change their formats now and then; when one
 //! breaks, only its module and fixtures change.
 //!
-//! Adapters only read files (and open the launcher). They never write anything.
+//! Adapters read files and open the launcher. The one thing they write is a new, empty
+//! Prism/MultiMC instance when someone accepts a shared instance into it.
 
 mod curseforge;
 mod modrinth;
@@ -83,6 +84,41 @@ pub fn display_name(kind: LauncherKind) -> &'static str {
 /// The Modrinth App stays off until its import flow is verified.
 pub fn can_create_instances(kind: LauncherKind) -> bool {
     matches!(kind, LauncherKind::Prism | LauncherKind::Multimc)
+}
+
+/// Create an empty instance for a shared one. Returns its launcher instance id.
+pub async fn create_instance(
+    kind: LauncherKind,
+    root: &Path,
+    name: &str,
+    minecraft: &str,
+    loader: Loader,
+    loader_version: Option<&str>,
+) -> ReadResult<String> {
+    let flavor = match kind {
+        LauncherKind::Prism => prism::Flavor::Prism,
+        LauncherKind::Multimc => prism::Flavor::MultiMc,
+        _ => {
+            return Err(ReadError::Format(format!(
+                "can't create instances in {}",
+                display_name(kind)
+            )));
+        }
+    };
+    let (root, name, minecraft) = (root.to_path_buf(), name.to_owned(), minecraft.to_owned());
+    let loader_version = loader_version.map(str::to_owned);
+    tokio::task::spawn_blocking(move || {
+        prism::create(
+            flavor,
+            &root,
+            &name,
+            &minecraft,
+            loader,
+            loader_version.as_deref(),
+        )
+    })
+    .await
+    .map_err(|e| ReadError::Format(format!("creating the instance failed: {e}")))?
 }
 
 /// Default install folders of this launcher that exist on this PC.

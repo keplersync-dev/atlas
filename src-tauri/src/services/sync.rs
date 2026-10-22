@@ -1,6 +1,5 @@
 //! Shared-instance sync on this PC: state for summaries, preview, update, revert, restore,
-//! optional items. Versions come from a `Source` (a dev folder for now, the Atlas
-//! server later).
+//! optional items. Versions come from a `Source`: the Atlas server, or a dev folder.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -34,10 +33,8 @@ async fn linked(state: &AppState, row: &InstanceRow) -> AppResult<Source> {
         .shared_instance_id
         .as_deref()
         .ok_or_else(|| AppError::conflict("Instance is not shared"))?;
-    source::for_shared(&state.db, shared)
-        .await?
-        // TODO: the Atlas server. Until then a shared instance without a dev source can't sync.
-        .ok_or_else(AppError::offline)
+    let synced = row.synced_revision.unwrap_or(0).max(0) as u32;
+    source::for_shared(state, shared, synced).await
 }
 
 /// `InstanceSummary.sync`: None when the instance isn't shared.
@@ -46,19 +43,22 @@ pub async fn info(state: &AppState, row: &InstanceRow) -> AppResult<Option<Insta
         return Ok(None);
     };
     let synced = row.synced_revision.unwrap_or(0).max(0) as u32;
-    let src = source::for_shared(&state.db, shared).await?;
-    let latest = src
-        .as_ref()
-        .map_or(synced, Source::latest_revision)
-        .max(synced);
-    let frozen = src.as_ref().is_some_and(Source::is_frozen);
+    let src = source::for_shared(state, shared, synced).await?;
+    let latest = src.latest_revision().max(synced);
+    let frozen = src.is_frozen();
+    let owner = match src.server_id() {
+        Some(id) => super::shared::cached(state, id)
+            .await?
+            .and_then(|s| s.owner),
+        None => None,
+    };
     let rows = db::content::list(&state.db, &row.id).await?;
     let manifest = row.synced_manifest();
     let changes = sync_state::local_changes(role, &rows, manifest.as_ref()).count();
     Ok(Some(InstanceSyncInfo {
         shared_instance_id: shared.to_string(),
         role,
-        owner: None, // TODO: from the server
+        owner,
         synced_revision: synced,
         latest_revision: latest,
         state: sync_state::sync_state(frozen, synced, latest, changes),
@@ -86,7 +86,7 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
     let row = row(state, id).await?;
     let src = linked(state, &row).await?;
     let latest = src.latest_revision();
-    let target = src.manifest(latest)?;
+    let target = src.manifest(state, latest).await?;
     let none = HashSet::new();
     let (plan, rows, _) =
         apply::make_plan(state, &row, &target, &none, &Default::default()).await?;
@@ -147,7 +147,7 @@ pub async fn sync<R: Runtime>(
         return Err(AppError::conflict("The folder is missing"));
     }
     let revision = src.latest_revision();
-    let manifest = src.manifest(revision)?;
+    let manifest = src.manifest(state, revision).await?;
     let state2 = state.clone();
     jobs::spawn(state, app, id, move |progress| async move {
         let req = apply::Request {
@@ -158,8 +158,19 @@ pub async fn sync<R: Runtime>(
             config_choices: options.config_choices,
         };
         apply::run(&state2, &progress, &src, req).await?;
+        report_if_shared(&state2, &progress.instance_id, &src).await;
         backup::prune(&state2.db, &state2.paths, &progress.instance_id).await
     })
+}
+
+/// After a server instance's folder changed revision, tell the server.
+pub async fn report_if_shared(state: &AppState, instance_id: &str, src: &Source) {
+    if src.server_id().is_none() {
+        return;
+    }
+    if let Ok(Some(row)) = db::instances::get(&state.db, instance_id).await {
+        super::shared::report_synced(state, &row).await;
+    }
 }
 
 /// Viewers: put shared files back the way the synced version has them. Waits for it.
@@ -386,7 +397,7 @@ pub async fn dev_link(
     source::save_dev(&state.db, &shared_id, &folder).await?;
     db::instances::set_link(&state.db, id, Some((&shared_id, role))).await?;
     if let Some(n) = adopt_revision {
-        adopt::adopt(&state.db, id, n, &src.manifest(n)?).await?;
+        adopt::adopt(&state.db, id, n, &src.manifest(state, n).await?).await?;
     }
     Ok(())
 }
