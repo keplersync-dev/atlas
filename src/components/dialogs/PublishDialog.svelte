@@ -4,7 +4,7 @@
   import { resource } from "$lib/resource.svelte";
   import { instances } from "$lib/stores";
   import type { Id, ShareMode } from "$lib/types";
-  import BlockArt from "../BlockArt.svelte";
+  import ContentIcon from "../ContentIcon.svelte";
   import Button from "../Button.svelte";
   import Dialog from "../Dialog.svelte";
   import SharePicker, {
@@ -89,7 +89,11 @@
   onsubmit={submit}
 >
   {#snippet header()}
-    <BlockArt seed={instanceId} class="size-10 rounded-md" />
+    <ContentIcon
+      src={instance?.icon ?? null}
+      seed={instanceId}
+      class="size-10 rounded-md"
+    />
   {/snippet}
 
   {#if plan.loading}

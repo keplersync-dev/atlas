@@ -119,8 +119,8 @@
 <script lang="ts">
   import { fileSize, versionLabel } from "$lib/format";
   import { social } from "$lib/stores";
-  import BlockArt from "./BlockArt.svelte";
   import Button from "./Button.svelte";
+  import ContentIcon from "./ContentIcon.svelte";
   import Icon from "./Icon.svelte";
 
   // One shared instance as a list row: name, plain status, and the one action that matters.
@@ -179,7 +179,11 @@
         : invited && openDialog({ kind: "accept", sharedInstanceId: s.id })}
     class="flex min-w-0 flex-1 items-center gap-3.5 rounded-md text-left"
   >
-    <BlockArt seed={s.localInstanceId ?? s.id} class="size-10 rounded-lg" />
+    <ContentIcon
+      src={local?.icon ?? s.icon}
+      seed={s.localInstanceId ?? s.id}
+      class="size-10 rounded-lg"
+    />
     <span class="min-w-0 flex-1">
       <b class="block truncate font-semibold">{s.name}</b>
       <small class="block truncate text-xs text-(--text-faint)">

@@ -29,6 +29,32 @@ pub struct Manifest {
     pub overrides: Vec<Override>,
 }
 
+impl Manifest {
+    /// The instance picture, when it's one uploaded to Atlas: `icon` is "sha256:<hex>".
+    /// Anything else (older manifests used icon keys like "leaf") isn't a picture.
+    pub fn icon_sha256(&self) -> Option<&str> {
+        self.icon
+            .as_deref()?
+            .strip_prefix("sha256:")
+            .filter(|h| is_hex(h, 64))
+    }
+
+    /// Every uploaded file this version needs: uploads, config files and the picture.
+    pub fn blobs(&self) -> Vec<String> {
+        let mut out: Vec<String> = self
+            .content
+            .iter()
+            .filter(|e| e.source == ContentSource::Upload)
+            .map(|e| e.sha256.clone())
+            .chain(self.overrides.iter().map(|o| o.sha256.clone()))
+            .chain(self.icon_sha256().map(str::to_owned))
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MinecraftSpec {
@@ -99,6 +125,8 @@ const MAX_CONTENT: usize = 2000;
 pub const MAX_OVERRIDES: usize = 500;
 const MAX_OVERRIDE_BYTES: u64 = 1024 * 1024;
 pub const MAX_OVERRIDES_TOTAL: u64 = 20 * 1024 * 1024;
+/// The largest instance picture that can be shared.
+pub const MAX_ICON_BYTES: u64 = 1024 * 1024;
 const CONTENT_DIRS: [&str; 4] = ["mods/", "resourcepacks/", "shaderpacks/", "datapacks/"];
 const OVERRIDE_DIRS: [&str; 3] = ["config/", "defaultconfigs/", "kubejs/"];
 const OVERRIDE_EXTS: [&str; 11] = [

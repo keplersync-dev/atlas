@@ -7,6 +7,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use reqwest::Method;
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Runtime};
 
 use crate::db::{self, content::ContentRow, instances::InstanceRow};
@@ -20,8 +21,8 @@ use crate::events::{AtlasEvent, emit};
 use crate::state::AppState;
 use crate::sync::adopt;
 use crate::sync::manifest::{
-    self, Entry, MAX_OVERRIDES, MAX_OVERRIDES_TOTAL, Manifest, MinecraftSpec, Override,
-    SCHEMA_VERSION,
+    self, Entry, MAX_ICON_BYTES, MAX_OVERRIDES, MAX_OVERRIDES_TOTAL, Manifest, MinecraftSpec,
+    Override, SCHEMA_VERSION,
 };
 
 async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
@@ -311,6 +312,43 @@ async fn send_files(
     Ok(configs.into_iter().map(|(o, _)| o).collect())
 }
 
+/// Upload the instance's picture so friends see it too; returns the manifest's `icon`.
+/// A picture that can't be read or sent is left out rather than stopping the share.
+async fn send_icon(state: &AppState, row: &InstanceRow) -> Option<String> {
+    let icon = row.icon.as_deref()?;
+    let bytes = if let Some(path) = icon.strip_prefix("file:") {
+        tokio::fs::read(path).await.ok()?
+    } else if icon.starts_with("https://") {
+        let res = state.downloads.get(icon).send().await.ok()?;
+        if res.content_length().unwrap_or(0) > MAX_ICON_BYTES {
+            return None;
+        }
+        res.error_for_status().ok()?.bytes().await.ok()?.to_vec()
+    } else {
+        return None;
+    };
+    if bytes.len() as u64 > MAX_ICON_BYTES || !crate::scan::icons::is_image(&bytes) {
+        tracing::info!(size = bytes.len(), "instance picture left out of the share");
+        return None;
+    }
+    let sha256 = hex::encode(Sha256::digest(&bytes));
+    let file = crate::scan::icons::shared_icon_file(&state.paths.icons, &sha256);
+    if !file.is_file() && tokio::fs::write(&file, &bytes).await.is_err() {
+        return None;
+    }
+    match state
+        .cloud
+        .upload(&file, &sha256, bytes.len() as u64, "The instance picture")
+        .await
+    {
+        Ok(()) => Some(format!("sha256:{sha256}")),
+        Err(e) => {
+            tracing::warn!(error = %e, "couldn't upload the instance picture");
+            None
+        }
+    }
+}
+
 /// The manifest for these files and settings, with these config files.
 fn build(
     row: &InstanceRow,
@@ -318,6 +356,7 @@ fn build(
     modes: &HashMap<String, ShareMode>,
     description: Option<String>,
     overrides: Vec<Override>,
+    icon: Option<String>,
 ) -> AppResult<Manifest> {
     let (Some(version), Some(loader)) = (row.minecraft_version.clone(), row.loader()) else {
         return Err(AppError::invalid_input(
@@ -357,7 +396,7 @@ fn build(
         schema_version: SCHEMA_VERSION,
         name: row.name.clone(),
         description,
-        icon: None,
+        icon,
         minecraft: MinecraftSpec {
             version,
             loader,
@@ -430,9 +469,10 @@ pub async fn share<R: Runtime>(
     let modes = modes(&rows, &input.share_modes);
     let description = input.description.flatten();
     // Check the manifest builds before uploading anything.
-    build(&row, &rows, &modes, description.clone(), Vec::new())?;
+    build(&row, &rows, &modes, description.clone(), Vec::new(), None)?;
     let overrides = send_files(state, &row, &rows, &modes, input.confirmed_upload_rights).await?;
-    let m = build(&row, &rows, &modes, description.clone(), overrides)?;
+    let icon = send_icon(state, &row).await;
+    let m = build(&row, &rows, &modes, description.clone(), overrides, icon)?;
     let body = CreateSharedInstance {
         name: row.name.clone(),
         description,
@@ -480,9 +520,15 @@ pub async fn publish<R: Runtime>(
     let rows = db::content::list(&state.db, id).await?;
     let modes = modes(&rows, &input.share_modes);
     let description = row.synced_manifest().and_then(|m| m.description);
-    build(&row, &rows, &modes, description.clone(), Vec::new())?;
+    build(&row, &rows, &modes, description.clone(), Vec::new(), None)?;
     let overrides = send_files(state, &row, &rows, &modes, input.confirmed_upload_rights).await?;
-    let m = build(&row, &rows, &modes, description, overrides)?;
+    // The owner's picture is the shared one; editors keep it.
+    let icon = if row.role() == Some(MemberRole::Owner) {
+        send_icon(state, &row).await
+    } else {
+        row.synced_manifest().and_then(|m| m.icon)
+    };
+    let m = build(&row, &rows, &modes, description, overrides, icon)?;
     if row.synced_manifest_hash.as_deref() == Some(manifest::hash(&m).as_str()) {
         return Err(AppError::invalid_input("Nothing to publish"));
     }

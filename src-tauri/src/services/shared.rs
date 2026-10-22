@@ -2,7 +2,11 @@
 //! latest revision), membership changes, and keeping local instances in step: unlink
 //! one when its shared instance is gone, report which revision a folder is on.
 
+use std::path::Path;
+use std::time::Duration;
+
 use reqwest::Method;
+use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Runtime};
 
 use crate::db::{self, instances::InstanceRow};
@@ -13,6 +17,7 @@ use crate::dto::{
 use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
 use crate::state::AppState;
+use crate::sync::manifest::MAX_ICON_BYTES;
 
 /// Where the last fetched list lives in `cloud_cache`.
 pub const CACHE_KEY: &str = "shared_instances";
@@ -56,6 +61,7 @@ pub async fn list<R: Runtime>(
     for s in &mut list {
         fill_local(s, &rows);
     }
+    show_icons(state, &mut list).await;
     Ok(list)
 }
 
@@ -64,6 +70,7 @@ pub async fn get(state: &AppState, id: &Id) -> AppResult<SharedInstanceDetail> {
     let mut detail: SharedInstanceDetail =
         state.cloud.call(Method::GET, &path, None::<&()>).await?;
     fill_local(&mut detail.shared, &db::instances::list(&state.db).await?);
+    show_icons(state, std::slice::from_mut(&mut detail.shared)).await;
     Ok(detail)
 }
 
@@ -263,6 +270,7 @@ async fn finish<R: Runtime>(
 ) -> AppResult<SharedInstance> {
     changed(state, app, id).await;
     fill_local(&mut shared, &db::instances::list(&state.db).await?);
+    show_icons(state, std::slice::from_mut(&mut shared)).await;
     Ok(shared)
 }
 
@@ -291,6 +299,60 @@ async fn unlink<R: Runtime>(
             instance_id: instance_id.to_owned(),
         },
     );
+    Ok(())
+}
+
+/// Shared pictures come from the server as "sha256:<hex>". Show the copy in the icon
+/// cache, fetching it first when online. No picture, or one that can't be fetched, leaves
+/// `icon` empty and the UI draws a block.
+async fn show_icons(state: &AppState, list: &mut [SharedInstance]) {
+    let online = state.cloud.is_online();
+    let wanted: Vec<Option<String>> = list
+        .iter()
+        .map(|s| {
+            s.icon
+                .as_deref()
+                .and_then(|i| i.strip_prefix("sha256:"))
+                .filter(|sha| sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
+                .map(str::to_owned)
+        })
+        .collect();
+    let found = futures_util::future::join_all(list.iter().zip(&wanted).map(|(s, sha)| async {
+        let sha = sha.as_deref()?;
+        let file = crate::scan::icons::shared_icon_file(&state.paths.icons, sha);
+        if !file.is_file()
+            && online
+            && let Err(e) = fetch_icon(state, &s.id, sha, &file).await
+        {
+            tracing::info!(shared = %s.id, error = %e, "couldn't fetch a shared picture");
+        }
+        file.is_file()
+            .then(|| crate::util::asset::url(&format!("file:{}", file.display())))
+    }))
+    .await;
+    for (s, icon) in list.iter_mut().zip(found) {
+        s.icon = icon;
+    }
+}
+
+async fn fetch_icon(state: &AppState, shared: &str, sha256: &str, file: &Path) -> AppResult<()> {
+    let url = state.cloud.file_url(shared, sha256).await?;
+    let get = state.cloud.file_http().get(url).send();
+    let res = tokio::time::timeout(Duration::from_secs(10), get)
+        .await
+        .map_err(|_| AppError::offline())?
+        .and_then(|r| r.error_for_status())
+        .map_err(|_| AppError::offline())?;
+    let bytes = res.bytes().await.map_err(|_| AppError::offline())?;
+    if bytes.len() as u64 > MAX_ICON_BYTES
+        || hex::encode(Sha256::digest(&bytes)) != sha256
+        || !crate::scan::icons::is_image(&bytes)
+    {
+        return Err(AppError::unknown("not the picture it should be"));
+    }
+    let tmp = file.with_extension("part");
+    tokio::fs::write(&tmp, &bytes).await?;
+    tokio::fs::rename(&tmp, file).await?;
     Ok(())
 }
 

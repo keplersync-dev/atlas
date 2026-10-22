@@ -3,6 +3,7 @@
 //!   cache/icons/<sha1>.png    the icon of the file with that sha1
 //!   cache/icons/<sha1>.none   checked: that file has no icon (don't open it again)
 //!   cache/icons/instance-<sha1 of the image>.png   instance pictures (cache_instance_icon)
+//!   cache/icons/shared-<sha256>.png   shared instances' pictures (services::shared)
 //!
 //! Rows store `icon_url = "file:<absolute path>"`; the DTO turns that into an asset-protocol
 //! URL (util::asset). A Modrinth icon, when there is one, replaces it (it's usually nicer)
@@ -40,11 +41,7 @@ pub fn cache_instance_icon(icons_dir: &Path, icon: &str) -> Option<String> {
             .decode(encoded.trim())
             .ok()?
     };
-    let is_image = bytes.starts_with(b"\x89PNG")
-        || bytes.starts_with(&[0xFF, 0xD8, 0xFF])
-        || bytes.starts_with(b"GIF8")
-        || (bytes.len() > 12 && &bytes[8..12] == b"WEBP");
-    if !is_image {
+    if !is_image(&bytes) {
         return None;
     }
     let file = icons_dir.join(format!(
@@ -58,6 +55,19 @@ pub fn cache_instance_icon(icons_dir: &Path, icon: &str) -> Option<String> {
         std::fs::rename(&tmp, &file).ok()?;
     }
     Some(format!("file:{}", file.display()))
+}
+
+/// PNG, JPEG, GIF or WebP, by the first bytes.
+pub fn is_image(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"\x89PNG")
+        || bytes.starts_with(&[0xFF, 0xD8, 0xFF])
+        || bytes.starts_with(b"GIF8")
+        || (bytes.len() > 12 && &bytes[8..12] == b"WEBP")
+}
+
+/// A shared instance's picture, by the sha256 the server knows it by.
+pub fn shared_icon_file(dir: &Path, sha256: &str) -> PathBuf {
+    dir.join(format!("shared-{sha256}.png"))
 }
 
 fn icon_file(dir: &Path, sha1: &str) -> PathBuf {

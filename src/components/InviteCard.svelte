@@ -3,8 +3,8 @@
   import { fileSize, plural, timeAgo, versionLabel } from "$lib/format";
   import { social } from "$lib/stores";
   import type { SharedInstance } from "$lib/types";
-  import BlockArt from "./BlockArt.svelte";
   import Button from "./Button.svelte";
+  import ContentIcon from "./ContentIcon.svelte";
   import Head from "./Head.svelte";
   import Icon from "./Icon.svelte";
 
@@ -25,7 +25,7 @@
 </script>
 
 <article class="flex items-center gap-3.5 rounded-xl bg-(--bg-raise) p-3.5">
-  <BlockArt seed={invite.id} class="size-12 rounded-lg" />
+  <ContentIcon src={invite.icon} seed={invite.id} class="size-12 rounded-lg" />
   <div class="min-w-0 flex-1">
     <b class="block truncate text-[14px] font-semibold">{invite.name}</b>
     <span class="mt-0.5 flex items-center gap-1.5 text-xs text-(--text-muted)">
