@@ -134,7 +134,11 @@
   {:else}
     <!-- ── Profile (its own form with its own Save button) ── -->
     {@render section("Profile")}
-    <form onsubmit={saveProfile} class="grid grid-cols-2 gap-3">
+    <!-- Save sits beside the fields (lined up with the inputs), not on a row of its own. -->
+    <form
+      onsubmit={saveProfile}
+      class="grid grid-cols-[1fr_1fr_auto] gap-x-3 gap-y-1.5"
+    >
       <label class="text-xs text-(--text-muted)">
         Display name
         <input
@@ -168,21 +172,23 @@
           >
         {/if}
       </label>
-      <div class="col-span-2 flex items-center justify-end gap-3">
-        {#if profileMessage}
-          <span
-            class="text-xs {profileMessage.ok
-              ? 'text-(--online)'
-              : 'text-(--danger)'}">{profileMessage.text}</span
-          >
-        {/if}
-        <Button
-          type="submit"
-          size="sm"
-          variant="primary"
-          disabled={!canSave || saving}>{saving ? "Saving…" : "Save"}</Button
+      <Button
+        type="submit"
+        size="sm"
+        variant="primary"
+        class="mt-6 self-start"
+        disabled={!canSave || saving}
+        >{saving
+          ? "Saving…"
+          : profileMessage?.ok && !dirty
+            ? "Saved"
+            : "Save"}</Button
+      >
+      {#if profileMessage && !profileMessage.ok}
+        <span class="col-span-3 text-xs text-(--danger)" role="alert"
+          >{profileMessage.text}</span
         >
-      </div>
+      {/if}
     </form>
 
     <!-- ── Privacy: saves the moment you flip it ── -->
@@ -191,7 +197,7 @@
       <div class="flex-1">
         <b class="block font-medium">Appear offline</b>
         <small class="text-[11.5px] text-(--text-faint)"
-          >Friends see you as offline everywhere, including in Tandem.</small
+          >Friends see you as offline and can't see what you're playing.</small
         >
       </div>
       <Switch
