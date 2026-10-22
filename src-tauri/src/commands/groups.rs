@@ -6,10 +6,15 @@ use crate::dto::{
     GroupMemberRole, Id, UpdateGroupInput,
 };
 use crate::error::{AppError, AppResult};
+use crate::state::AppState;
 
+/// Empty while signed in: groups aren't on the server yet.
 #[tauri::command]
-pub async fn list_groups() -> AppResult<Vec<Group>> {
-    Err(AppError::not_signed_in())
+pub async fn list_groups(state: tauri::State<'_, AppState>) -> AppResult<Vec<Group>> {
+    if !state.cloud.is_signed_in() {
+        return Err(AppError::not_signed_in());
+    }
+    Ok(Vec::new())
 }
 
 #[tauri::command]

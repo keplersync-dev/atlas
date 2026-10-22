@@ -62,7 +62,7 @@ impl AppState {
             cloud: Arc::new(Cloud::new(
                 db.clone(),
                 Cloud::server_url_from_env(),
-                Arc::new(CredentialManager::new()),
+                Arc::new(CredentialManager::new(dev_profile().as_deref())),
             )),
             db,
         }
@@ -85,7 +85,26 @@ impl AppState {
     }
 }
 
-/// Atlas's own folders under `%APPDATA%\dev.keplerhaloxx.atlas`.
+/// Development builds only: `ATLAS_PROFILE=2` gives this copy of Atlas its own data
+/// folder and saved sign-in, so two copies can run side by side as different accounts.
+/// 1–32 letters, digits, `-` or `_`; anything else is ignored.
+pub fn dev_profile() -> Option<String> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    let profile = std::env::var("ATLAS_PROFILE").ok()?;
+    let valid = (1..=32).contains(&profile.len())
+        && profile
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    if !valid {
+        tracing::warn!(%profile, "ignoring ATLAS_PROFILE: use letters, digits, - or _");
+    }
+    valid.then_some(profile)
+}
+
+/// Atlas's own folders under `%APPDATA%\dev.keplerhaloxx.atlas` (or, with a development
+/// profile, `…\profiles\<profile>`).
 #[derive(Debug, Clone)]
 pub struct AppPaths {
     pub root: PathBuf,

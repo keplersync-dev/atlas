@@ -25,6 +25,13 @@ Signing in needs an Atlas server. Point the app at one with `ATLAS_SERVER_URL`:
 $env:VITE_ATLAS_API = "tauri"; $env:ATLAS_SERVER_URL = "http://localhost:8080"; pnpm tauri dev
 ```
 
+To try two accounts on one PC, start a second copy with its own data folder and sign-in while the first is running (development builds only). Run it from a copy of the exe, so it doesn't stop `pnpm tauri dev` from rebuilding:
+
+```powershell
+Copy-Item src-tauri\target\debug\atlas.exe src-tauri\target\debug\atlas-2.exe
+$env:ATLAS_PROFILE = "2"; $env:ATLAS_SERVER_URL = "http://localhost:8080"; src-tauri\target\debug\atlas-2.exe
+```
+
 ## Tests
 
 ```powershell

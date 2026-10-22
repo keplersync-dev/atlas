@@ -11,9 +11,13 @@ use crate::error::{AppError, AppResult};
 use crate::services::{instances, sync};
 use crate::state::AppState;
 
+/// Empty while signed in: sharing isn't on the server yet.
 #[tauri::command]
-pub async fn list_shared_instances() -> AppResult<Vec<SharedInstance>> {
-    Err(AppError::not_signed_in())
+pub async fn list_shared_instances(state: State<'_, AppState>) -> AppResult<Vec<SharedInstance>> {
+    if !state.cloud.is_signed_in() {
+        return Err(AppError::not_signed_in());
+    }
+    Ok(Vec::new())
 }
 
 #[tauri::command]

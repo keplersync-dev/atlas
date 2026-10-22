@@ -41,19 +41,22 @@ class SocialStore {
       this.groups = [];
       this.activity = [];
     } else {
-      try {
-        // Start all the requests at once instead of one after another.
-        [this.friends, this.requests, this.shared, this.groups, this.activity] =
-          await Promise.all([
-            api.listFriends(),
-            api.listFriendRequests(),
-            api.listSharedInstances(),
-            api.listGroups(),
-            api.listActivity(),
-          ]);
-      } catch {
-        // Offline or a server error: keep what we had so the UI stays usable.
-      }
+      // Start all the requests at once instead of one after another. Each list is
+      // kept as it was if its own request fails (offline, server error), so one
+      // failure doesn't hide the others.
+      const [friends, requests, shared, groups, activity] =
+        await Promise.allSettled([
+          api.listFriends(),
+          api.listFriendRequests(),
+          api.listSharedInstances(),
+          api.listGroups(),
+          api.listActivity(),
+        ]);
+      if (friends.status === "fulfilled") this.friends = friends.value;
+      if (requests.status === "fulfilled") this.requests = requests.value;
+      if (shared.status === "fulfilled") this.shared = shared.value;
+      if (groups.status === "fulfilled") this.groups = groups.value;
+      if (activity.status === "fulfilled") this.activity = activity.value;
     }
     this.loaded = true;
   }

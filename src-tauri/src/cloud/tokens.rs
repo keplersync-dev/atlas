@@ -13,25 +13,27 @@ pub trait TokenStore: Send + Sync {
     fn clear(&self);
 }
 
-/// The real store: one generic credential named after the app.
-pub struct CredentialManager(Option<Arc<windows_native_keyring_store::Store>>);
+/// The real store: one generic credential named after the app (and the development
+/// profile, if any, so each profile keeps its own sign-in).
+pub struct CredentialManager {
+    store: Option<Arc<windows_native_keyring_store::Store>>,
+    service: String,
+}
 
 impl CredentialManager {
-    pub fn new() -> Self {
+    pub fn new(profile: Option<&str>) -> Self {
         let store = windows_native_keyring_store::Store::new()
             .inspect_err(|e| tracing::error!(error = %e, "Credential Manager unavailable"))
             .ok();
-        Self(store)
+        let service = match profile {
+            Some(p) => format!("{SERVICE}.profile-{p}"),
+            None => SERVICE.to_owned(),
+        };
+        Self { store, service }
     }
 
     fn entry(&self) -> Option<keyring_core::Entry> {
-        self.0.as_ref()?.build(SERVICE, USER, None).ok()
-    }
-}
-
-impl Default for CredentialManager {
-    fn default() -> Self {
-        Self::new()
+        self.store.as_ref()?.build(&self.service, USER, None).ok()
     }
 }
 

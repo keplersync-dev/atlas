@@ -126,10 +126,23 @@ fn init_logging(paths: &AppPaths) -> LogGuard {
 
 /// Startup. Must not wait on the network.
 fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::Error>> {
-    let paths = AppPaths::new(&app.path().app_data_dir()?);
+    let mut root = app.path().app_data_dir()?;
+    let profile = state::dev_profile();
+    if let Some(profile) = &profile {
+        root = root.join("profiles").join(profile);
+    }
+    let paths = AppPaths::new(&root);
     paths.create_all()?;
     app.manage(init_logging(&paths));
     tracing::info!(root = %paths.root.display(), "starting Atlas");
+    if let Some(profile) = &profile {
+        // The asset protocol only serves $APPDATA/cache/icons; let this profile's in too.
+        app.asset_protocol_scope()
+            .allow_directory(&paths.icons, false)?;
+        if let Some(window) = app.get_webview_window("main") {
+            window.set_title(&format!("Atlas ({profile})"))?;
+        }
+    }
 
     let db = tauri::async_runtime::block_on(db::open(&paths.database()))?;
     let state = AppState::new(db, paths);
