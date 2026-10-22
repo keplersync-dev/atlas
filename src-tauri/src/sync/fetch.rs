@@ -17,6 +17,9 @@ use crate::error::{AppError, AppResult};
 use crate::scan::hash::hash_file;
 use crate::state::AppPaths;
 
+/// A download gives up when no bytes arrive for this long.
+pub const STALL: Duration = Duration::from_secs(30);
+
 pub fn cache_file(paths: &AppPaths, sha1: &str) -> PathBuf {
     paths.cache.join(&sha1[..2]).join(sha1)
 }
@@ -160,16 +163,23 @@ pub async fn download(
     };
     std::fs::create_dir_all(target.parent().expect("cache files have a parent"))?;
     let tmp = target.with_extension("download");
-    let mut resp = http
-        .get(url)
-        .send()
+    let stalled = || {
+        tracing::warn!("download stalled");
+        AppError::offline()
+    };
+    let mut resp = tokio::time::timeout(STALL, http.get(url).send())
         .await
+        .map_err(|_| stalled())?
         .map_err(offline)?
         .error_for_status()
         .map_err(offline)?;
     {
         let mut file = std::fs::File::create(&tmp)?;
-        while let Some(chunk) = resp.chunk().await.map_err(offline)? {
+        while let Some(chunk) = tokio::time::timeout(STALL, resp.chunk())
+            .await
+            .map_err(|_| stalled())?
+            .map_err(offline)?
+        {
             file.write_all(&chunk)?;
             on_bytes(chunk.len() as u64);
         }

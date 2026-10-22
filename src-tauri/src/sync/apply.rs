@@ -10,8 +10,10 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime};
 
+use futures_util::TryStreamExt;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tauri::Runtime;
@@ -203,6 +205,9 @@ pub async fn run<R: Runtime>(
     Ok(())
 }
 
+/// How many files download at the same time.
+const PARALLEL_DOWNLOADS: usize = 6;
+
 async fn fetch_all<R: Runtime>(
     state: &AppState,
     progress: &Progress<R>,
@@ -220,38 +225,56 @@ async fn fetch_all<R: Runtime>(
         .map(|(e, _)| e.size_bytes)
         .sum();
     progress.stage(SyncStage::Download);
-    let mut done = 0u64;
-    let mut manual = Vec::new();
-    for (entry, route) in &routes {
-        if let Route::Manual(m) = route {
-            manual.push((*entry, m.clone()));
-            continue;
-        }
-        let mut on_bytes = |n: u64| {
-            done += n;
-            progress.bytes(done.min(total), total);
-        };
-        match (route, source.server_id()) {
-            (Route::Blob, Some(shared))
-                if !fetch::cache_file(&state.paths, &entry.sha1).is_file() =>
-            {
-                let url = state.cloud.file_url(shared, &entry.sha256).await?;
-                let target = fetch::cache_file(&state.paths, &entry.sha1);
-                let http = state.cloud.file_http();
-                fetch::download(
-                    http,
-                    &url,
-                    &target,
-                    Some(&entry.sha1),
-                    &entry.sha256,
-                    &mut on_bytes,
-                )
-                .await?;
+    // Several files at a time; the first failure stops the rest (nothing is placed until
+    // every file is in the cache).
+    let done = AtomicU64::new(0);
+    let manual: Vec<_> = routes
+        .iter()
+        .filter_map(|(e, r)| match r {
+            Route::Manual(m) => Some((*e, m.clone())),
+            _ => None,
+        })
+        .collect();
+    let downloads = routes
+        .iter()
+        .filter(|(_, r)| !matches!(r, Route::Manual(_)))
+        .map(Ok::<_, AppError>);
+    futures_util::stream::iter(downloads)
+        .try_for_each_concurrent(PARALLEL_DOWNLOADS, |(entry, route)| {
+            let done = &done;
+            async move {
+                let mut on_bytes = |n: u64| {
+                    let now = done.fetch_add(n, Ordering::Relaxed) + n;
+                    progress.bytes(now.min(total), total);
+                };
+                match (route, source.server_id()) {
+                    (Route::Blob, Some(shared))
+                        if !fetch::cache_file(&state.paths, &entry.sha1).is_file() =>
+                    {
+                        let url = state.cloud.file_url(shared, &entry.sha256).await?;
+                        let target = fetch::cache_file(&state.paths, &entry.sha1);
+                        fetch::download(
+                            state.cloud.file_http(),
+                            &url,
+                            &target,
+                            Some(&entry.sha1),
+                            &entry.sha256,
+                            &mut on_bytes,
+                        )
+                        .await
+                    }
+                    (Route::Blob, _) => {
+                        on_bytes(entry.size_bytes);
+                        Ok(())
+                    }
+                    _ => {
+                        fetch::content(&state.paths, &state.downloads, entry, route, &mut on_bytes)
+                            .await
+                    }
+                }
             }
-            (Route::Blob, _) => on_bytes(entry.size_bytes),
-            _ => fetch::content(&state.paths, &state.http, entry, route, &mut on_bytes).await?,
-        }
-    }
+        })
+        .await?;
     for a in &plan.actions {
         if let Action::WriteConfig { config, .. } = a {
             match source.server_id() {

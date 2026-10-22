@@ -34,6 +34,9 @@ pub struct AppState {
     pub scan_locks: Arc<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>>,
     /// For calls to Modrinth (and later the Atlas server). Identifies Atlas, as Modrinth asks.
     pub http: reqwest::Client,
+    /// For downloading mods and packs: no overall time limit, since big files on slow
+    /// connections take a while (sync/fetch.rs gives up when a download stalls instead).
+    pub downloads: reqwest::Client,
     /// Modrinth API base URL. None = don't look files up (tests).
     pub modrinth_api: Option<String>,
     /// Instances with a lookup in flight, so a burst of scans doesn't ask twice.
@@ -55,6 +58,11 @@ impl AppState {
             http: reqwest::Client::builder()
                 .user_agent(concat!("keplerhaloxx/atlas/", env!("CARGO_PKG_VERSION")))
                 .timeout(std::time::Duration::from_secs(20))
+                .build()
+                .expect("http client"),
+            downloads: reqwest::Client::builder()
+                .user_agent(concat!("keplerhaloxx/atlas/", env!("CARGO_PKG_VERSION")))
+                .connect_timeout(std::time::Duration::from_secs(15))
                 .build()
                 .expect("http client"),
             modrinth_api: Some(crate::resolve::modrinth::API.to_string()),
