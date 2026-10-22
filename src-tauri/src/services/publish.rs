@@ -1,8 +1,10 @@
-//! Sharing an instance and publishing new versions of it: build a manifest from the
-//! folder's files and their share settings, send it, then mark the files as published.
-//! Nothing changes locally until the server has accepted it.
+//! Sharing an instance and publishing new versions of it: upload the files that aren't
+//! on a mod site and the shared config files, build a manifest from the folder's files
+//! and their share settings, send it, then mark the files as published. Nothing changes
+//! locally until the server has accepted it.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 use reqwest::Method;
 use tauri::{AppHandle, Runtime};
@@ -17,7 +19,10 @@ use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
 use crate::state::AppState;
 use crate::sync::adopt;
-use crate::sync::manifest::{self, Entry, Manifest, MinecraftSpec, SCHEMA_VERSION};
+use crate::sync::manifest::{
+    self, Entry, MAX_OVERRIDES, MAX_OVERRIDES_TOTAL, Manifest, MinecraftSpec, Override,
+    SCHEMA_VERSION,
+};
 
 async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
     db::instances::get(&state.db, id)
@@ -32,6 +37,14 @@ fn mode_of(r: &ContentRow) -> ShareMode {
 /// Files that are there and switched on: the ones a publish looks at.
 fn live(rows: &[ContentRow]) -> impl Iterator<Item = &ContentRow> {
     rows.iter().filter(|r| r.installed && r.enabled)
+}
+
+/// On no mod site: shared means uploaded to Atlas.
+fn is_upload(r: &ContentRow) -> bool {
+    matches!(
+        from_wire(&r.source),
+        Some(ContentSource::Local | ContentSource::Upload) | None
+    )
 }
 
 fn manual_download(r: &ContentRow) -> Option<ManualDownload> {
@@ -53,6 +66,17 @@ pub async fn prepare(state: &AppState, id: &str) -> AppResult<PublishPlan> {
         ));
     }
     let rows = db::content::list(&state.db, id).await?;
+    let to_check: Vec<String> = live(&rows)
+        .filter(|r| is_upload(r))
+        .map(|r| r.sha256.clone())
+        .collect();
+    let stored: HashSet<String> = match state.cloud.stored(to_check).await {
+        Ok(found) => found.into_iter().collect(),
+        Err(e) => {
+            tracing::info!(error = %e, "couldn't check which files are uploaded");
+            HashSet::new()
+        }
+    };
     let items = live(&rows)
         .map(|r| {
             let dto = r.to_dto();
@@ -67,8 +91,8 @@ pub async fn prepare(state: &AppState, id: &str) -> AppResult<PublishPlan> {
                 is_new: r.published_share_mode.is_none(),
                 share_mode: mode_of(r),
                 published_share_mode: r.published_share_mode.as_deref().and_then(from_wire),
-                needs_upload: dto.source == ContentSource::Local,
-                already_uploaded: false,
+                needs_upload: is_upload(r),
+                already_uploaded: stored.contains(&r.sha256),
             }
         })
         .collect();
@@ -84,17 +108,24 @@ pub async fn prepare(state: &AppState, id: &str) -> AppResult<PublishPlan> {
             }
         }
     }
-    let storage = state
+    let storage = match state
         .cloud
-        .session()
-        .await?
-        .user
-        .map(|me| me.storage)
-        .unwrap_or(Storage {
-            used_bytes: 0,
-            quota_bytes: 0,
-            max_file_bytes: 0,
-        });
+        .call(Method::GET, "/me/storage", None::<&()>)
+        .await
+    {
+        Ok(storage) => storage,
+        Err(_) => state
+            .cloud
+            .session()
+            .await?
+            .user
+            .map(|me| me.storage)
+            .unwrap_or(Storage {
+                used_bytes: 0,
+                quota_bytes: 0,
+                max_file_bytes: 0,
+            }),
+    };
     Ok(PublishPlan {
         base_revision: row.synced_revision.map(|r| r.max(0) as u32),
         items,
@@ -119,13 +150,174 @@ fn modes(rows: &[ContentRow], chosen: &HashMap<String, ShareMode>) -> HashMap<St
         .collect()
 }
 
-/// The manifest for these files and settings. Files only on this PC can't be shared yet
-/// (uploading comes later), so those must be set to Only me.
+/// Config files to share: those matching the instance's `sync_include` patterns
+/// ("config/**" by default) that the rules allow, up to the count and size limits.
+async fn collect_configs(
+    state: &AppState,
+    row: &InstanceRow,
+) -> AppResult<Vec<(Override, PathBuf)>> {
+    let include: Option<String> =
+        sqlx::query_scalar("SELECT sync_include FROM instance WHERE id = ?")
+            .bind(&row.id)
+            .fetch_optional(&state.db)
+            .await?;
+    let patterns: Vec<String> = include
+        .and_then(|json| serde_json::from_str(&json).ok())
+        .unwrap_or_else(|| vec!["config/**".to_owned()]);
+    let game = PathBuf::from(&row.game_dir);
+    tokio::task::spawn_blocking(move || configs_in(&game, &patterns))
+        .await
+        .map_err(|e| AppError::unknown(e.to_string()))?
+}
+
+fn configs_in(game: &Path, patterns: &[String]) -> AppResult<Vec<(Override, PathBuf)>> {
+    let mut files = Vec::new();
+    for pattern in patterns {
+        match pattern.strip_suffix("/**") {
+            Some(dir) => walk(&game.join(dir), dir, &mut files),
+            None => {
+                let file = game.join(pattern);
+                if file.is_file() {
+                    files.push((pattern.clone(), file));
+                }
+            }
+        }
+    }
+    files.sort();
+    files.dedup();
+    let (mut out, mut total, mut skipped) = (Vec::new(), 0u64, 0usize);
+    for (rel, file) in files {
+        let size = std::fs::metadata(&file)
+            .map(|m| m.len())
+            .unwrap_or(u64::MAX);
+        if !manifest::is_shareable_config(&rel, size)
+            || out.len() >= MAX_OVERRIDES
+            || total + size > MAX_OVERRIDES_TOTAL
+        {
+            skipped += 1;
+            continue;
+        }
+        let hashes = crate::scan::hash::hash_file(&file)?;
+        total += size;
+        out.push((
+            Override {
+                path: rel,
+                sha256: hashes.sha256,
+                size_bytes: size,
+            },
+            file,
+        ));
+    }
+    if skipped > 0 {
+        tracing::info!(
+            skipped,
+            "config files left out of the share (format, size or limits)"
+        );
+    }
+    Ok(out)
+}
+
+/// Every file under `dir`, with paths relative to the game folder ("config/a/b.json").
+fn walk(dir: &Path, rel: &str, out: &mut Vec<(String, PathBuf)>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let path = entry.path();
+        let child = format!("{rel}/{name}");
+        if path.is_dir() {
+            walk(&path, &child, out);
+        } else if path.is_file() {
+            out.push((child, path));
+        }
+    }
+}
+
+/// Upload what the version needs that the server doesn't have yet: files on no mod site
+/// that are shared, and the config files. Returns the configs as overrides.
+async fn send_files(
+    state: &AppState,
+    row: &InstanceRow,
+    rows: &[ContentRow],
+    modes: &HashMap<String, ShareMode>,
+    confirmed_rights: bool,
+) -> AppResult<Vec<Override>> {
+    let uploads: Vec<&ContentRow> = live(rows)
+        .filter(|r| modes.get(&r.id) != Some(&ShareMode::Private) && is_upload(r))
+        .collect();
+    if !uploads.is_empty() && !confirmed_rights {
+        return Err(AppError::invalid_input(
+            "Confirm you have the right to share the files being uploaded",
+        ));
+    }
+    let storage: Storage = state
+        .cloud
+        .call(Method::GET, "/me/storage", None::<&()>)
+        .await?;
+    if let Some(big) = uploads
+        .iter()
+        .find(|r| r.size_bytes.max(0) as u64 > storage.max_file_bytes)
+    {
+        return Err(AppError::new(
+            crate::error::ErrorCode::QuotaExceeded,
+            format!(
+                "{} is larger than the per-file limit. Set it to Only me.",
+                big.name
+            ),
+        ));
+    }
+    let configs = collect_configs(state, row).await?;
+
+    let game = PathBuf::from(&row.game_dir);
+    let mut wanted: Vec<(PathBuf, String, u64, String)> = uploads
+        .iter()
+        .map(|r| {
+            (
+                game.join(&r.path),
+                r.sha256.clone(),
+                r.size_bytes.max(0) as u64,
+                r.name.clone(),
+            )
+        })
+        .chain(
+            configs
+                .iter()
+                .map(|(o, file)| (file.clone(), o.sha256.clone(), o.size_bytes, o.path.clone())),
+        )
+        .collect();
+    let mut seen = HashSet::new();
+    wanted.retain(|w| seen.insert(w.1.clone()));
+    let stored: HashSet<String> = state
+        .cloud
+        .stored(wanted.iter().map(|w| w.1.clone()).collect())
+        .await?
+        .into_iter()
+        .collect();
+    wanted.retain(|w| !stored.contains(&w.1));
+    let new_bytes: u64 = wanted.iter().map(|w| w.2).sum();
+    if storage.used_bytes + new_bytes > storage.quota_bytes {
+        return Err(AppError::new(
+            crate::error::ErrorCode::QuotaExceeded,
+            "Not enough storage left. Set some files to Only me.",
+        ));
+    }
+    for (file, sha256, size, name) in &wanted {
+        state.cloud.upload(file, sha256, *size, name).await?;
+    }
+    if !wanted.is_empty() {
+        tracing::info!(files = wanted.len(), bytes = new_bytes, "uploaded files");
+    }
+    Ok(configs.into_iter().map(|(o, _)| o).collect())
+}
+
+/// The manifest for these files and settings, with these config files.
 fn build(
     row: &InstanceRow,
     rows: &[ContentRow],
     modes: &HashMap<String, ShareMode>,
     description: Option<String>,
+    overrides: Vec<Override>,
 ) -> AppResult<Manifest> {
     let (Some(version), Some(loader)) = (row.minecraft_version.clone(), row.loader()) else {
         return Err(AppError::invalid_input(
@@ -138,26 +330,25 @@ fn build(
         if mode == ShareMode::Private {
             continue;
         }
-        let source = from_wire(&r.source).unwrap_or(ContentSource::Local);
-        if source == ContentSource::Local || source == ContentSource::Upload {
-            return Err(AppError::invalid_input(format!(
-                "{} isn't on Modrinth or CurseForge. Uploading files like it isn't available yet, so set it to Only me for now.",
-                r.name
-            )));
-        }
+        let upload = is_upload(r);
         content.push(Entry {
             kind: from_wire(&r.kind).unwrap_or(ContentKind::Mod),
-            source,
-            project_id: r.project_id.clone(),
-            version_id: r.version_id.clone(),
+            source: if upload {
+                ContentSource::Upload
+            } else {
+                from_wire(&r.source).unwrap_or(ContentSource::Modrinth)
+            },
+            // Uploads are known by their hash, not a project.
+            project_id: r.project_id.clone().filter(|_| !upload),
+            version_id: r.version_id.clone().filter(|_| !upload),
             name: r.name.clone(),
             version_label: r.version_label.clone(),
             path: r.path.clone(),
             sha1: r.sha1.clone(),
             sha256: r.sha256.clone(),
             size_bytes: r.size_bytes.max(0) as u64,
-            download_url: r.download_url.clone(),
-            page_url: r.page_url.clone(),
+            download_url: r.download_url.clone().filter(|_| !upload),
+            page_url: r.page_url.clone().filter(|_| !upload),
             side: from_wire(&r.side).unwrap_or(Side::Both),
             required: mode == ShareMode::Required,
         });
@@ -174,7 +365,7 @@ fn build(
         },
         recommended_memory_mb: None,
         content,
-        overrides: Vec::new(),
+        overrides,
     };
     manifest::validate(&m).map_err(|e| {
         tracing::warn!(error = %e, "built a manifest that doesn't validate");
@@ -238,7 +429,10 @@ pub async fn share<R: Runtime>(
     let rows = db::content::list(&state.db, id).await?;
     let modes = modes(&rows, &input.share_modes);
     let description = input.description.flatten();
-    let m = build(&row, &rows, &modes, description.clone())?;
+    // Check the manifest builds before uploading anything.
+    build(&row, &rows, &modes, description.clone(), Vec::new())?;
+    let overrides = send_files(state, &row, &rows, &modes, input.confirmed_upload_rights).await?;
+    let m = build(&row, &rows, &modes, description.clone(), overrides)?;
     let body = CreateSharedInstance {
         name: row.name.clone(),
         description,
@@ -286,7 +480,9 @@ pub async fn publish<R: Runtime>(
     let rows = db::content::list(&state.db, id).await?;
     let modes = modes(&rows, &input.share_modes);
     let description = row.synced_manifest().and_then(|m| m.description);
-    let m = build(&row, &rows, &modes, description)?;
+    build(&row, &rows, &modes, description.clone(), Vec::new())?;
+    let overrides = send_files(state, &row, &rows, &modes, input.confirmed_upload_rights).await?;
+    let m = build(&row, &rows, &modes, description, overrides)?;
     if row.synced_manifest_hash.as_deref() == Some(manifest::hash(&m).as_str()) {
         return Err(AppError::invalid_input("Nothing to publish"));
     }

@@ -2,6 +2,7 @@
 //! access token (memory only) and the signed-in user (cached in `setting` so the account
 //! still shows while offline). The UI never talks to the server itself.
 
+pub mod files;
 pub mod loopback;
 pub mod realtime;
 pub mod tokens;
@@ -46,6 +47,9 @@ pub struct Cloud {
     /// Server root, e.g. https://atlas.example. None = this build has no server.
     base: Option<Url>,
     http: reqwest::Client,
+    /// For file transfers: no overall timeout (files can be 100 MB) and no redirects
+    /// (download links are read from the server's redirect).
+    blob_http: reqwest::Client,
     tokens: Arc<dyn TokenStore>,
     /// Also makes refreshing single-flight: requests wait for the one refresh in progress.
     access: tokio::sync::Mutex<Option<Access>>,
@@ -72,10 +76,17 @@ impl Cloud {
             .timeout(Duration::from_secs(20))
             .build()
             .expect("http client");
+        let blob_http = reqwest::Client::builder()
+            .user_agent(concat!("Atlas/", env!("CARGO_PKG_VERSION"), " (Windows)"))
+            .connect_timeout(Duration::from_secs(15))
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .expect("http client");
         Self {
             db,
             base,
             http,
+            blob_http,
             tokens,
             access: tokio::sync::Mutex::new(None),
             online: AtomicBool::new(true),

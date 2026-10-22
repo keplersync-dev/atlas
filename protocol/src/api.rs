@@ -320,6 +320,53 @@ mod double_option {
     }
 }
 
+// ── Files ──────────────────────────────────────────────────────────────
+
+/// `POST /blobs/check`: which of these files the server already stores.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlobCheck {
+    pub sha256: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BlobCheckResult {
+    pub existing: Vec<String>,
+}
+
+/// `POST /uploads`: ask to upload one file.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewUpload {
+    pub sha256: String,
+    pub size_bytes: u64,
+    /// For display only.
+    pub file_name: String,
+}
+
+/// Either the server has the file already, or `url` is a presigned PUT for its bytes,
+/// valid until `expires_at`. Then `POST /uploads/{upload_id}/complete`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadTicket {
+    #[serde(default)]
+    pub already_exists: bool,
+    #[serde(default)]
+    pub upload_id: Option<Id>,
+    #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub expires_at: Option<IsoDate>,
+}
+
+/// `POST /uploads/{id}/complete`: the server checked the stored bytes.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadDone {
+    pub sha256: String,
+}
+
 // ── Activity ───────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

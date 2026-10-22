@@ -96,9 +96,9 @@ pub struct Override {
 
 pub const MAX_BYTES: usize = 2 * 1024 * 1024;
 const MAX_CONTENT: usize = 2000;
-const MAX_OVERRIDES: usize = 500;
+pub const MAX_OVERRIDES: usize = 500;
 const MAX_OVERRIDE_BYTES: u64 = 1024 * 1024;
-const MAX_OVERRIDES_TOTAL: u64 = 20 * 1024 * 1024;
+pub const MAX_OVERRIDES_TOTAL: u64 = 20 * 1024 * 1024;
 const CONTENT_DIRS: [&str; 4] = ["mods/", "resourcepacks/", "shaderpacks/", "datapacks/"];
 const OVERRIDE_DIRS: [&str; 3] = ["config/", "defaultconfigs/", "kubejs/"];
 const OVERRIDE_EXTS: [&str; 11] = [
@@ -191,6 +191,15 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
         return bad("config files add up to more than 20 MB".into());
     }
     Ok(())
+}
+
+/// Whether a file can be shared as a config override: an allowed folder and text format,
+/// at most 1 MB. (The count and total limits apply to the whole set.)
+pub fn is_shareable_config(path: &str, size_bytes: u64) -> bool {
+    let ext = path.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
+    check_path(path, &OVERRIDE_DIRS).is_ok()
+        && OVERRIDE_EXTS.contains(&ext.as_str())
+        && size_bytes <= MAX_OVERRIDE_BYTES
 }
 
 fn check_path(path: &str, dirs: &[&str]) -> Result<(), Invalid> {
@@ -367,6 +376,16 @@ mod tests {
 
         assert!(parse(b"{}").is_err());
         assert!(parse(&vec![b' '; MAX_BYTES + 1]).is_err());
+    }
+
+    #[test]
+    fn shareable_configs() {
+        assert!(is_shareable_config("config/sodium-options.json", 100));
+        assert!(is_shareable_config("kubejs/server_scripts/a.js", 100));
+        assert!(!is_shareable_config("config/big.json", 2 * 1024 * 1024));
+        assert!(!is_shareable_config("config/native.dll", 100));
+        assert!(!is_shareable_config("options.txt", 100));
+        assert!(!is_shareable_config("config/../options.txt", 100));
     }
 
     #[test]

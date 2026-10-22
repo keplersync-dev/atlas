@@ -231,11 +231,39 @@ async fn fetch_all<R: Runtime>(
             done += n;
             progress.bytes(done.min(total), total);
         };
-        fetch::content(&state.paths, &state.http, entry, route, &mut on_bytes).await?;
+        match (route, source.server_id()) {
+            (Route::Blob, Some(shared))
+                if !fetch::cache_file(&state.paths, &entry.sha1).is_file() =>
+            {
+                let url = state.cloud.file_url(shared, &entry.sha256).await?;
+                let target = fetch::cache_file(&state.paths, &entry.sha1);
+                let http = state.cloud.file_http();
+                fetch::download(
+                    http,
+                    &url,
+                    &target,
+                    Some(&entry.sha1),
+                    &entry.sha256,
+                    &mut on_bytes,
+                )
+                .await?;
+            }
+            (Route::Blob, _) => on_bytes(entry.size_bytes),
+            _ => fetch::content(&state.paths, &state.http, entry, route, &mut on_bytes).await?,
+        }
     }
     for a in &plan.actions {
         if let Action::WriteConfig { config, .. } = a {
-            fetch::config(&state.paths, source, config).await?;
+            match source.server_id() {
+                Some(shared) if !fetch::blob_file(&state.paths, &config.sha256).is_file() => {
+                    let url = state.cloud.file_url(shared, &config.sha256).await?;
+                    fetch::config_from(&state.paths, state.cloud.file_http(), config, &url).await?;
+                }
+                Some(_) => {}
+                None => {
+                    fetch::config(&state.paths, source, config).await?;
+                }
+            }
         }
     }
     if !manual.is_empty() {

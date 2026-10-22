@@ -104,8 +104,17 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
     let mut config_conflicts = Vec::new();
     for c in &plan.conflicts {
         let mine = std::fs::read_to_string(game_dir.join(&c.path)).unwrap_or_default();
-        let theirs = src
-            .local_copy(&c.path)
+        let theirs_file = match (
+            src.server_id(),
+            target.overrides.iter().find(|o| o.path == c.path),
+        ) {
+            (Some(shared), Some(o)) => {
+                let url = state.cloud.file_url(shared, &o.sha256).await?;
+                Some(fetch::config_from(&state.paths, state.cloud.file_http(), o, &url).await?)
+            }
+            _ => src.local_copy(&c.path),
+        };
+        let theirs = theirs_file
             .and_then(|p| std::fs::read_to_string(p).ok())
             .unwrap_or_default();
         let (mine, theirs) = first_difference(&mine, &theirs);
