@@ -14,14 +14,34 @@
 </script>
 
 <script lang="ts">
+  import { api } from "$lib/api";
   import { openDialog } from "$lib/dialogs.svelte";
   import { plural, timeAgo, versionLabel } from "$lib/format";
   import { go } from "$lib/nav.svelte";
   import { kindFor, wallPixels } from "$lib/pixel";
   import { social } from "$lib/stores";
   import Button from "./Button.svelte";
+  import Icon from "./Icon.svelte";
 
   let { instance }: { instance: InstanceSummary } = $props();
+
+  // Open in the launcher, right from the card. Folders have no launcher to open.
+  const canOpen = $derived(
+    instance.status !== "missing" && instance.launcher.kind !== "folder",
+  );
+  let opening = $state(false);
+  let openError = $state<string | null>(null);
+  async function openInLauncher() {
+    opening = true;
+    openError = null;
+    try {
+      await api.openInLauncher(instance.id);
+    } catch (e) {
+      openError = (e as Error).message;
+    } finally {
+      opening = false;
+    }
+  }
 
   const pixels = $derived(wallPixels(kindFor(instance.id), instance.id));
   // The launcher's picture for this instance, if it has one and it loads.
@@ -133,52 +153,64 @@
   class="group flex flex-col overflow-hidden rounded-xl bg-(--bg-raise) transition-colors hover:bg-(--bg-raise-2)
     {instance.status === 'missing' ? 'opacity-75' : ''}"
 >
-  <!-- Cover and title open the instance; the action button does its own thing. -->
-  <button
-    onclick={open}
-    class="relative aspect-16/7 overflow-hidden"
-    tabindex="-1"
-    aria-hidden="true"
-  >
-    {#if showIcon}
-      <!-- The picture twice: blown up and blurred as the backdrop, crisp on top. -->
-      <img
-        src={instance.icon}
-        alt=""
-        aria-hidden="true"
-        class="absolute inset-0 size-full scale-125 object-cover opacity-70 blur-2xl saturate-150 {instance.status ===
-        'missing'
-          ? 'grayscale'
-          : ''}"
-      />
-      <img
-        src={instance.icon}
-        alt=""
-        onerror={() => (iconFailed = true)}
-        class="absolute top-1/2 left-1/2 size-24 -translate-x-1/2 -translate-y-1/2 rounded-2xl object-cover shadow-[0_8px_24px_#0008] transition-transform duration-300 group-hover:scale-[1.04] {instance.status ===
-        'missing'
-          ? 'grayscale'
-          : ''}"
-      />
-    {:else}
-      <svg
-        viewBox="0 0 40 24"
-        preserveAspectRatio="xMidYMid slice"
-        shape-rendering="crispEdges"
-        class="size-full transition-transform duration-300 group-hover:scale-[1.03] {instance.status ===
-        'missing'
-          ? 'grayscale'
-          : ''}"
+  <!-- Cover and title open the instance; the buttons do their own thing. -->
+  <div class="relative">
+    <button
+      onclick={open}
+      class="relative block aspect-16/7 w-full overflow-hidden"
+      tabindex="-1"
+      aria-hidden="true"
+    >
+      {#if showIcon}
+        <!-- The picture twice: blown up and blurred as the backdrop, crisp on top. -->
+        <img
+          src={instance.icon}
+          alt=""
+          aria-hidden="true"
+          class="absolute inset-0 size-full scale-125 object-cover opacity-70 blur-2xl saturate-150 {instance.status ===
+          'missing'
+            ? 'grayscale'
+            : ''}"
+        />
+        <img
+          src={instance.icon}
+          alt=""
+          onerror={() => (iconFailed = true)}
+          class="absolute top-1/2 left-1/2 size-24 -translate-x-1/2 -translate-y-1/2 rounded-2xl object-cover shadow-[0_8px_24px_#0008] transition-transform duration-300 group-hover:scale-[1.04] {instance.status ===
+          'missing'
+            ? 'grayscale'
+            : ''}"
+        />
+      {:else}
+        <svg
+          viewBox="0 0 40 24"
+          preserveAspectRatio="xMidYMid slice"
+          shape-rendering="crispEdges"
+          class="size-full transition-transform duration-300 group-hover:scale-[1.03] {instance.status ===
+          'missing'
+            ? 'grayscale'
+            : ''}"
+        >
+          {#each pixels as p, i (i)}
+            <rect x={p.x} y={p.y} width="1" height="1" fill={p.fill} />
+          {/each}
+        </svg>
+      {/if}
+      <div
+        class="absolute inset-0 bg-linear-to-b from-transparent from-40% to-(--bg-raise)/80"
+      ></div>
+    </button>
+    {#if canOpen}
+      <button
+        onclick={openInLauncher}
+        disabled={opening}
+        class="absolute top-2.5 right-2.5 flex h-7 items-center gap-1.5 rounded-md bg-black/55 px-2.5 text-xs font-medium text-white backdrop-blur-sm transition-colors hover:bg-black/75 disabled:opacity-60"
       >
-        {#each pixels as p, i (i)}
-          <rect x={p.x} y={p.y} width="1" height="1" fill={p.fill} />
-        {/each}
-      </svg>
+        <Icon name="external" class="size-3.5" />Open in {instance.launcher
+          .name}
+      </button>
     {/if}
-    <div
-      class="absolute inset-0 bg-linear-to-b from-transparent from-40% to-(--bg-raise)/80"
-    ></div>
-  </button>
+  </div>
 
   <div class="flex flex-1 flex-col px-3.5 pt-2.5 pb-3">
     <button onclick={open} class="text-left">
@@ -212,8 +244,14 @@
               status.tone
             ]}"
           >
-            <i class="size-1.5 shrink-0 rounded-full {DOT[status.tone]}"></i>
-            <span class="truncate">{status.text}</span>
+            {#if openError}
+              <span class="truncate text-(--danger)" title={openError}
+                >{openError}</span
+              >
+            {:else}
+              <i class="size-1.5 shrink-0 rounded-full {DOT[status.tone]}"></i>
+              <span class="truncate">{status.text}</span>
+            {/if}
           </span>
           {#if status.action}
             <Button
