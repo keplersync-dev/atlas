@@ -157,13 +157,17 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
 
     game::spawn(state.clone(), handle.clone());
 
-    // Session and connection changes go to the UI; the saved session is checked in the
-    // background.
+    // Session, connection and friend events go to the UI; the saved session is checked
+    // and the server socket opened in the background.
     {
         let handle = handle.clone();
         state.cloud.on_event(move |e| events::emit(&handle, e));
-        let cloud = state.cloud.clone();
-        tauri::async_runtime::spawn(async move { cloud.restore().await });
+        let state = state.clone();
+        tauri::async_runtime::spawn(async move {
+            state.cloud.restore().await;
+            services::presence::refresh(&state).await;
+            state.cloud.start_realtime();
+        });
     }
 
     // Background work that mustn't hold up the window: find launchers, then rescan
@@ -186,9 +190,6 @@ fn on_window_event<R: Runtime>(window: &tauri::Window<R>, event: &tauri::WindowE
             let Some(state) = app.try_state::<AppState>().map(|s| s.inner().clone()) else {
                 return;
             };
-            if state.cloud.is_signed_in() && !state.cloud.is_online() {
-                state.cloud.restore().await;
-            }
             services::instances::rescan_all(&state, &app, std::time::Duration::from_secs(30)).await;
         });
     }

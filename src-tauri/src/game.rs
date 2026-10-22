@@ -66,6 +66,9 @@ async fn update<R: Runtime>(state: &AppState, app: &AppHandle<R>, running_dirs: 
         .map(|i| i.id)
         .collect();
     let before = state.running.replace(now.clone());
+    if now != before {
+        crate::services::presence::refresh(state).await;
+    }
     for id in now.symmetric_difference(&before) {
         let is_running = now.contains(id);
         tracing::info!(instance = %id, is_running, "game running changed");
@@ -76,7 +79,6 @@ async fn update<R: Runtime>(state: &AppState, app: &AppHandle<R>, running_dirs: 
                 is_running,
             },
         );
-        // TODO: send presence ("playing" + instance name unless hidden).
     }
 }
 

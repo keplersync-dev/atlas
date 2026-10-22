@@ -4,6 +4,7 @@
 //! are separate from the DTOs in crate::dto; services convert one into the other.
 
 pub mod backups;
+pub mod cloud_cache;
 pub mod content;
 pub mod instances;
 pub mod launchers;

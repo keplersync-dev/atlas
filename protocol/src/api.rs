@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::enums::AuthProvider;
+use crate::enums::{ActivityType, AuthProvider, PresenceState, RequestDirection};
 use crate::{Id, IsoDate};
 
 // ── Users ──────────────────────────────────────────────────────────────
@@ -64,6 +64,82 @@ pub struct UpdateProfileInput {
     pub display_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub appear_offline: Option<bool>,
+}
+
+// ── Friends ────────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Presence {
+    pub state: PresenceState,
+    /// Set when playing, unless the friend hid it.
+    pub instance_name: Option<String>,
+    pub minecraft_version: Option<String>,
+    /// Set when playing a shared instance you can see too.
+    pub shared_instance_id: Option<Id>,
+    /// When offline, this is "last seen".
+    pub updated_at: IsoDate,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Friend {
+    pub user: PublicUser,
+    pub friends_since: IsoDate,
+    pub presence: Presence,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FriendRequest {
+    pub direction: RequestDirection,
+    pub user: PublicUser,
+    pub created_at: IsoDate,
+}
+
+/// `POST /friends/requests`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendFriendRequest {
+    /// Normalized friend code ("7KQ29XMB").
+    pub code: String,
+}
+
+// ── Activity ───────────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ActivityItem {
+    pub id: Id,
+    #[serde(rename = "type")]
+    pub kind: ActivityType,
+    /// None if the actor deleted their account.
+    pub actor: Option<PublicUser>,
+    pub created_at: IsoDate,
+    pub read_at: Option<IsoDate>,
+    pub shared_instance_id: Option<Id>,
+    pub shared_instance_name: Option<String>,
+    pub group_id: Option<Id>,
+    pub group_name: Option<String>,
+    pub revision: Option<u32>,
+}
+
+/// `POST /notifications/read`: these ids, or everything.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MarkRead {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ids: Vec<Id>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub all: bool,
+}
+
+/// One page of a list, newest first. Pass `nextCursor` as `?before=` for the next page.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Page<T> {
+    pub items: Vec<T>,
+    pub next_cursor: Option<String>,
 }
 
 // ── Auth ───────────────────────────────────────────────────────────────

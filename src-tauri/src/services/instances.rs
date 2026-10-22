@@ -278,7 +278,9 @@ pub async fn update(
 ) -> AppResult<InstanceSummary> {
     row(state, id).await?;
     db::instances::update_prefs(&state.db, id, patch.is_favorite, patch.hide_activity).await?;
-    // TODO: if hideActivity changed while this instance is running, resend presence.
+    if patch.hide_activity.is_some() && state.is_running(id) {
+        super::presence::refresh(state).await;
+    }
     summary_of(state, &row(state, id).await?).await
 }
 

@@ -1,8 +1,10 @@
 //! The logic behind the commands: read the database and launchers, build the DTOs the
 //! UI expects, emit events. One file per section of src/lib/api/api.ts.
 
+pub mod friends;
 pub mod instances;
 pub mod launchers;
+pub mod presence;
 pub mod session;
 pub mod sync;
 

@@ -1,45 +1,71 @@
-// Not built yet: these need the Atlas server.
-#![allow(unused_variables)]
+use reqwest::Method;
+use tauri::{AppHandle, Runtime, State};
 
 use crate::dto::{Friend, FriendRequest, Id, PublicUser};
-use crate::error::{AppError, AppResult};
+use crate::error::AppResult;
+use crate::services::friends;
+use crate::state::AppState;
 
 #[tauri::command]
-pub async fn list_friends() -> AppResult<Vec<Friend>> {
-    Err(AppError::not_signed_in())
+pub async fn list_friends(state: State<'_, AppState>) -> AppResult<Vec<Friend>> {
+    friends::list(&state).await
 }
 
 #[tauri::command]
-pub async fn list_friend_requests() -> AppResult<Vec<FriendRequest>> {
-    Err(AppError::not_signed_in())
+pub async fn list_friend_requests(state: State<'_, AppState>) -> AppResult<Vec<FriendRequest>> {
+    friends::requests(&state).await
 }
 
 #[tauri::command]
-pub async fn preview_friend_code(code: String) -> AppResult<PublicUser> {
-    Err(AppError::not_signed_in())
+pub async fn preview_friend_code(
+    state: State<'_, AppState>,
+    code: String,
+) -> AppResult<PublicUser> {
+    friends::preview_code(&state, &code).await
 }
 
 #[tauri::command]
-pub async fn send_friend_request(code: String) -> AppResult<FriendRequest> {
-    Err(AppError::not_signed_in())
+pub async fn send_friend_request<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    code: String,
+) -> AppResult<FriendRequest> {
+    friends::send_request(&state, &app, &code).await
 }
 
 #[tauri::command]
-pub async fn respond_to_friend_request(user_id: Id, accept: bool) -> AppResult<()> {
-    Err(AppError::not_signed_in())
+pub async fn respond_to_friend_request<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    user_id: Id,
+    accept: bool,
+) -> AppResult<()> {
+    friends::respond(&state, &app, &user_id, accept).await
 }
 
 #[tauri::command]
-pub async fn cancel_friend_request(user_id: Id) -> AppResult<()> {
-    Err(AppError::not_signed_in())
+pub async fn cancel_friend_request<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    user_id: Id,
+) -> AppResult<()> {
+    friends::change(&state, &app, Method::DELETE, "/friends/requests", &user_id).await
 }
 
 #[tauri::command]
-pub async fn remove_friend(user_id: Id) -> AppResult<()> {
-    Err(AppError::not_signed_in())
+pub async fn remove_friend<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    user_id: Id,
+) -> AppResult<()> {
+    friends::change(&state, &app, Method::DELETE, "/friends", &user_id).await
 }
 
 #[tauri::command]
-pub async fn block_user(user_id: Id) -> AppResult<()> {
-    Err(AppError::not_signed_in())
+pub async fn block_user<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    user_id: Id,
+) -> AppResult<()> {
+    friends::change(&state, &app, Method::POST, "/blocks", &user_id).await
 }

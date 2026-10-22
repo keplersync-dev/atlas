@@ -17,10 +17,13 @@ pub async fn sign_in<R: Runtime>(
     app: &AppHandle<R>,
     provider: AuthProvider,
 ) -> AppResult<Session> {
-    match provider {
-        AuthProvider::Discord => state.cloud.sign_in_discord(|url| open(app, url)).await,
-        AuthProvider::Minecraft => Err(minecraft_not_ready()),
-    }
+    let session = match provider {
+        AuthProvider::Discord => state.cloud.sign_in_discord(|url| open(app, url)).await?,
+        AuthProvider::Minecraft => return Err(minecraft_not_ready()),
+    };
+    super::presence::refresh(state).await;
+    state.cloud.start_realtime();
+    Ok(session)
 }
 
 pub async fn link<R: Runtime>(

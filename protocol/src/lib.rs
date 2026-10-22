@@ -6,6 +6,7 @@ pub mod codes;
 pub mod enums;
 pub mod manifest;
 pub mod pkce;
+pub mod ws;
 
 /// UUIDv7 string.
 pub type Id = String;

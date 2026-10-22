@@ -3,6 +3,7 @@
 //! still shows while offline). The UI never talks to the server itself.
 
 pub mod loopback;
+pub mod realtime;
 pub mod tokens;
 
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,13 +14,14 @@ use atlas_protocol::api::{
     AuthResult, ErrorBody, ErrorCode as WireCode, ExchangeRequest, Me, Tokens,
 };
 use atlas_protocol::pkce;
+use atlas_protocol::ws::PresenceUpdate;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use reqwest::{Method, StatusCode};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use sqlx::SqlitePool;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, watch};
 use url::Url;
 
 use crate::db;
@@ -51,6 +53,10 @@ pub struct Cloud {
     emit: OnceLock<Emitter>,
     /// The browser sign-in in progress. Starting another one cancels it.
     attempt: Mutex<Option<oneshot::Sender<()>>>,
+    /// The WebSocket task while signed in (realtime.rs).
+    realtime: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    /// What this PC is doing, sent to friends over the WebSocket.
+    presence: watch::Sender<PresenceUpdate>,
 }
 
 impl Cloud {
@@ -75,6 +81,8 @@ impl Cloud {
             online: AtomicBool::new(true),
             emit: OnceLock::new(),
             attempt: Mutex::new(None),
+            realtime: Mutex::new(None),
+            presence: watch::Sender::new(PresenceUpdate::online()),
         }
     }
 
@@ -219,16 +227,36 @@ impl Cloud {
         self.forget_session().await
     }
 
-    /// Drop the session locally: token, access token and cached user.
+    /// Drop the session locally: token, access token, cached user and lists.
     pub async fn forget_session(&self) -> AppResult<()> {
+        self.stop_realtime();
         self.tokens.clear();
         *self.access.lock().await = None;
         db::settings::delete(&self.db, USER_SETTING).await?;
+        db::cloud_cache::clear(&self.db).await?;
         self.emit(AtlasEvent::SessionChanged {});
         Ok(())
     }
 
     // ── Requests ───────────────────────────────────────────────────────
+
+    /// GET a list and remember it; offline, answer with the last copy if there is one.
+    pub async fn cached_get<T: Serialize + DeserializeOwned>(
+        &self,
+        key: &str,
+        path: &str,
+    ) -> AppResult<T> {
+        match self.call::<T>(Method::GET, path, None::<&()>).await {
+            Ok(value) => {
+                db::cloud_cache::set(&self.db, key, &value).await?;
+                Ok(value)
+            }
+            Err(e) if e.code == ErrorCode::Offline => {
+                db::cloud_cache::get(&self.db, key).await?.ok_or(e)
+            }
+            Err(e) => Err(e),
+        }
+    }
 
     /// An authenticated request to `/v1{path}`. Refreshes the access token when needed,
     /// and once more if the server says it has expired.
