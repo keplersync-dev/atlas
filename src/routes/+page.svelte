@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
   import { nav } from "$lib/nav.svelte";
   import { connectStores } from "$lib/stores";
   import TitleBar from "../components/TitleBar.svelte";
@@ -14,6 +15,14 @@
   // Load all shared data once and keep it live. The returned cleanup
   // unsubscribes from events if this component is ever destroyed.
   onMount(connectStores);
+
+  // The window starts hidden so it never shows a blank page while this loads; show it
+  // once the first frame is drawn.
+  onMount(() => {
+    if ("__TAURI_INTERNALS__" in window) {
+      requestAnimationFrame(() => void getCurrentWindow().show());
+    }
+  });
 </script>
 
 <!-- prevent default right click behaviour -->

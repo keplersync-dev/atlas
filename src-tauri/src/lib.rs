@@ -151,6 +151,21 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
 
     let handle = app.handle().clone();
 
+    // The page shows the window once it has drawn (it starts hidden). If the page never
+    // loads, show it anyway rather than leave Atlas invisible.
+    {
+        let handle = handle.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+            if let Some(window) = handle.get_webview_window("main")
+                && !window.is_visible().unwrap_or(true)
+            {
+                tracing::warn!("the page didn't show the window; showing it");
+                let _ = window.show();
+            }
+        });
+    }
+
     // An update interrupted by a crash or power cut is undone before anything else.
     let recovered = tauri::async_runtime::block_on(sync::recovery::run(&state));
     if !recovered.is_empty() {

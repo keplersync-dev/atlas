@@ -15,7 +15,9 @@
         "title": "Atlas",
         "minWidth": 1050,
         "minHeight": 650,
-        "decorations": false
+        "decorations": false,
+        "visible": false,
+        "backgroundColor": "#101216"
       }
     ],
     "security": {
