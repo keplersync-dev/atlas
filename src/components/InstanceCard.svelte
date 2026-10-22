@@ -112,7 +112,7 @@
             : `From ${s.owner?.displayName ?? "a friend"} · up to date`,
       };
     }
-    return { tone: "muted", text: "Only on this PC" };
+    return { tone: "muted", text: "Not shared" };
   });
 
   const DOT = {

@@ -217,7 +217,7 @@
             · v{summary.sync.syncedRevision}
           </span>
         {:else}
-          <span>Only on this PC</span>
+          <span>Not shared</span>
         {/if}
         {#if summary.totalPlaytimeSeconds}
           <span

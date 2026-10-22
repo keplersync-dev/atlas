@@ -13,6 +13,7 @@
   import Head from "../components/Head.svelte";
   import Icon from "../components/Icon.svelte";
   import Menu from "../components/Menu.svelte";
+  import PageHeader from "../components/PageHeader.svelte";
   import SharedRow, {
     attentionOf,
     byAttention,
@@ -84,18 +85,12 @@
   }
 </script>
 
-<div class="mb-6">
-  <h1
-    class="font-(family-name:--font-display) text-2xl font-semibold tracking-tight"
-  >
-    Friends
-  </h1>
-  {#if social.signedIn}
-    <p class="mt-1.5 text-(--text-muted)">
-      {plural(social.friends.length, "friend")} · {onlineCount} online
-    </p>
-  {/if}
-</div>
+<PageHeader
+  title="Friends"
+  subtitle={social.signedIn
+    ? `${plural(social.friends.length, "friend")} · ${onlineCount} online`
+    : undefined}
+/>
 
 {#if !social.signedIn}
   <div class="py-12 text-center text-(--text-muted)">

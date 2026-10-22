@@ -1,12 +1,15 @@
 <script lang="ts">
   import { instances, social } from "$lib/stores";
   import { openDialog } from "$lib/dialogs.svelte";
+  import { plural } from "$lib/format";
   import Button from "../components/Button.svelte";
   import FriendsRail from "../components/FriendsRail.svelte";
+  import Icon from "../components/Icon.svelte";
   import InstanceCard, {
     needsAttention,
   } from "../components/InstanceCard.svelte";
   import InviteCard from "../components/InviteCard.svelte";
+  import PageHeader from "../components/PageHeader.svelte";
 
   // Attention first (updates, changes to share, problems), then most recently played.
   const sorted = $derived(
@@ -16,6 +19,7 @@
       return (b.lastPlayedAt ?? "").localeCompare(a.lastPlayedAt ?? "");
     }),
   );
+  const sharedCount = $derived(instances.list.filter((i) => i.sync).length);
 </script>
 
 <div class="flex min-h-full">
@@ -52,6 +56,24 @@
         </Button>
       </div>
     {:else}
+      <PageHeader
+        title="Instances"
+        subtitle="{plural(
+          instances.list.length,
+          'instance',
+        )} tracked · {sharedCount} shared"
+      >
+        {#snippet actions()}
+          <Button
+            variant="primary"
+            class="gap-1.5"
+            onclick={() => openDialog({ kind: "track" })}
+          >
+            <Icon name="plus" class="size-3.5" />Track instances
+          </Button>
+        {/snippet}
+      </PageHeader>
+
       <!-- Invites are instances too, so they get a row of cards above yours. -->
       {#if social.invites.length}
         <section class="mb-9">
@@ -71,19 +93,14 @@
       {/if}
 
       <section>
-        <div class="mb-3 flex items-baseline justify-between">
-          <h2 class="text-[15px] font-semibold">
+        <!-- Only needed to tell them apart from the invites above. -->
+        {#if social.invites.length}
+          <h2 class="mb-3 text-[15px] font-semibold">
             Your instances <span class="font-normal text-(--text-faint)"
               >{instances.list.length}</span
             >
           </h2>
-          <button
-            class="text-xs text-(--accent) hover:underline"
-            onclick={() => openDialog({ kind: "track" })}
-          >
-            Track another instance
-          </button>
-        </div>
+        {/if}
         <!-- auto-fill: as many 240px+ columns as fit, so wide windows get more columns -->
         <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
           {#each sorted as inst (inst.id)}

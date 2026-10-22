@@ -29,8 +29,7 @@
     {title} <span class="font-normal text-(--text-faint)">{items.length}</span>
   </h3>
   <p class="mb-1.5 text-xs text-(--text-faint)">
-    Not downloaded unless you tick them. You can add or remove them later from
-    the instance's Content tab.
+    Only downloaded if you tick them. You can change this later.
   </p>
   <div class="rounded-lg bg-(--bg-raise) px-1.5 py-1">
     {#each items as o (o.key)}

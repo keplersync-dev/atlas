@@ -5,11 +5,13 @@
 </script>
 
 <script lang="ts">
+  import { plural } from "$lib/format";
   import { social } from "$lib/stores";
   import type { SharedInstance } from "$lib/types";
   import AttentionBadges from "../components/AttentionBadges.svelte";
   import Button from "../components/Button.svelte";
   import Icon from "../components/Icon.svelte";
+  import PageHeader from "../components/PageHeader.svelte";
   import SharedRow, {
     byAttention,
     localFor,
@@ -53,6 +55,18 @@
     ),
   );
   const narrowed = $derived(filter !== "all" || query.trim() !== "");
+  // With a filter or search on, only the lists with matches show; this is said instead
+  // when neither has any.
+  const noMatches = $derived(
+    query.trim()
+      ? `Nothing matches “${query.trim()}”.`
+      : {
+          all: "",
+          needs: "Nothing needs you right now.",
+          local: "None of your shared instances are on this PC.",
+          not_added: "You've added everything shared with you.",
+        }[filter],
+  );
 
   const mine = $derived(
     shown.filter((s) => s.myRole === "owner").toSorted(byAttention),
@@ -136,7 +150,14 @@
 
 {#snippet cards()}
   <div class="grid grid-cols-1 items-start gap-10">
-    {#each sections as sec (sec.key)}
+    {#if narrowed && sections.every((sec) => !sec.items.length)}
+      <p
+        class="rounded-xl bg-(--bg-raise) px-4 py-6 text-[12.5px] text-(--text-muted)"
+      >
+        {noMatches}
+      </p>
+    {/if}
+    {#each sections.filter((sec) => !narrowed || sec.items.length) as sec (sec.key)}
       <section class="overflow-hidden rounded-xl bg-(--bg-raise)">
         <header
           class="flex items-center gap-3 border-b border-(--line) px-4 py-3.5"
@@ -158,14 +179,23 @@
         {#each sec.items as s (s.id)}
           <SharedRow {s} showOwner={sec.showOwner} />
         {:else}
-          <p class="px-4 py-6 text-[12.5px] text-(--text-muted)">
-            {narrowed ? "Nothing matches." : sec.empty}
-          </p>
+          <p class="px-4 py-6 text-[12.5px] text-(--text-muted)">{sec.empty}</p>
         {/each}
       </section>
     {/each}
   </div>
 {/snippet}
+
+<PageHeader
+  title="Shared"
+  subtitle={social.signedIn
+    ? `${plural(all.filter((s) => s.myRole === "owner").length, "instance")} shared by you · ${all.filter((s) => s.myRole !== "owner").length} with you`
+    : undefined}
+>
+  {#snippet actions()}
+    {#if social.signedIn}<ShareButton />{/if}
+  {/snippet}
+</PageHeader>
 
 {#if !social.signedIn}
   <div class="py-12 text-center text-(--text-muted)">
@@ -189,7 +219,6 @@
       <div class="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
         {@render search()}
         {@render chips()}
-        <ShareButton class="ml-auto" />
       </div>
       {@render cards()}
     </div>
