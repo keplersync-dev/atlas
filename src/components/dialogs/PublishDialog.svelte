@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from "$lib/api";
-  import { plural } from "$lib/format";
+  import { plural, versionLabel } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
   import { instances } from "$lib/stores";
   import type { Id, ShareMode } from "$lib/types";
@@ -32,8 +32,10 @@
       : { added: [], changed: [] },
   );
   const removedCount = $derived(plan.data?.removed.length ?? 0);
+  // The launcher moved to other Minecraft or loader versions: one change.
+  const versions = $derived(plan.data?.versions ?? null);
   const total = $derived(
-    diff.added.length + diff.changed.length + removedCount,
+    diff.added.length + diff.changed.length + removedCount + (versions ? 1 : 0),
   );
   const needsRights = $derived(
     !!plan.data && uploadsOf(plan.data.items, modes).length > 0,
@@ -115,15 +117,24 @@
       {:else}
         {#if diff.added.length}<span
             ><b class="text-(--online)">+{diff.added.length}</b>
-            {plural(diff.added.length, "new file")} shared</span
+            {diff.added.length === 1 ? "new file" : "new files"} shared</span
           >{/if}
         {#if diff.changed.length}<span
             ><b class="text-(--accent)">{diff.changed.length}</b>
-            {plural(diff.changed.length, "setting")} changed</span
+            {diff.changed.length === 1 ? "setting" : "settings"} changed</span
           >{/if}
         {#if removedCount}<span title={plan.data.removed.join(", ")}
             ><b class="text-(--danger)">−{removedCount}</b> removed (disabled in your
             launcher)</span
+          >{/if}
+        {#if versions?.minecraftVersion}<span
+            >Minecraft <b>{versions.minecraftVersion.from}</b> →
+            <b class="text-(--accent)">{versions.minecraftVersion.to}</b></span
+          >{/if}
+        {#if versions?.loaderVersion}<span
+            >{versionLabel(instance?.loader ?? null, null)}
+            <b>{versions.loaderVersion.from}</b> →
+            <b class="text-(--accent)">{versions.loaderVersion.to}</b></span
           >{/if}
       {/if}
     </div>
@@ -134,6 +145,8 @@
       firstShare={false}
       bind:modes
       bind:rights
+      unchecked={plan.data.unchecked}
+      onrecheck={plan.reload}
     />
 
     <h3 class="mt-4 mb-1.5 text-xs font-semibold text-(--text-muted)">

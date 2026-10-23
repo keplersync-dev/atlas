@@ -5,7 +5,7 @@
 //! breaks, only its module and fixtures change.
 //!
 //! Adapters read files and open the launcher. The one thing they write is a new, empty
-//! Prism/MultiMC instance when someone accepts a shared instance into it.
+//! instance when someone accepts a shared instance into it (see `creatable_loaders`).
 
 mod curseforge;
 mod modrinth;
@@ -48,6 +48,10 @@ pub enum ReadError {
     Db(#[from] sqlx::Error),
     #[error("{0}")]
     Format(String),
+    /// The launcher was asked to make an instance and didn't (the user said no, or never
+    /// answered).
+    #[error("the launcher didn't create the instance")]
+    NotCreated,
 }
 
 pub type ReadResult<T> = Result<T, ReadError>;
@@ -80,45 +84,125 @@ pub fn display_name(kind: LauncherKind) -> &'static str {
     }
 }
 
-/// Atlas can create instances there (for accepting invites).
-/// The Modrinth App stays off until its import flow is verified.
-pub fn can_create_instances(kind: LauncherKind) -> bool {
-    matches!(kind, LauncherKind::Prism | LauncherKind::Multimc)
+/// The loaders Atlas can set up in a new instance there (for accepting invites).
+/// Empty: Atlas can't create instances in that launcher.
+///
+/// - Prism/MultiMC: Atlas writes the instance folder; Prism installs the game and loader.
+/// - Modrinth App: the app makes the instance itself from a pack file Atlas hands it
+///   (modrinth.rs). Writing its app.db directly isn't safe: the instance rows are tied to
+///   install jobs, content sets and its file store.
+/// - Minecraft Launcher: a new profile. Fabric and Quilt only need their version file,
+///   which Atlas fetches like their installers do. Forge and NeoForge have to run their
+///   installer under Java to patch the game, so Atlas leaves those to the user.
+/// - CurseForge: Atlas writes the instance folder. Its instance file carries the loader's
+///   install data, which only CurseForge's API hands out: the Atlas server asks it (the
+///   key stays there) and passes it on, see `create_instance`.
+pub fn creatable_loaders(kind: LauncherKind) -> &'static [Loader] {
+    const ALL: &[Loader] = &[
+        Loader::Vanilla,
+        Loader::Fabric,
+        Loader::Quilt,
+        Loader::Forge,
+        Loader::Neoforge,
+    ];
+    match kind {
+        LauncherKind::Prism
+        | LauncherKind::Multimc
+        | LauncherKind::Modrinth
+        | LauncherKind::Curseforge => ALL,
+        LauncherKind::Official => &[Loader::Vanilla, Loader::Fabric, Loader::Quilt],
+        LauncherKind::Folder => &[],
+    }
+}
+
+pub fn can_create_instance(kind: LauncherKind, loader: Loader) -> bool {
+    creatable_loaders(kind).contains(&loader)
+}
+
+/// What a new instance for a shared one needs.
+#[derive(Debug, Clone)]
+pub struct NewInstance {
+    pub name: String,
+    pub minecraft: String,
+    pub loader: Loader,
+    /// Required for every loader but vanilla.
+    pub loader_version: Option<String>,
+    /// The shared instance's picture (png, jpg, gif or webp).
+    pub icon: Option<Vec<u8>>,
+}
+
+impl NewInstance {
+    fn loader_version(&self) -> ReadResult<Option<&str>> {
+        match (self.loader, self.loader_version.as_deref()) {
+            (Loader::Vanilla, _) => Ok(None),
+            (_, Some(v)) if !v.is_empty() => Ok(Some(v)),
+            _ => Err(ReadError::Format(
+                "the shared instance doesn't say which loader version".into(),
+            )),
+        }
+    }
+}
+
+/// Why Atlas can't create an instance there right now, if it can't.
+pub fn create_blocker(kind: LauncherKind) -> Option<&'static str> {
+    match kind {
+        // It keeps its profiles in memory and saves them over the file.
+        LauncherKind::Official if official::running() => {
+            Some("Close the Minecraft Launcher first, then try again")
+        }
+        // It may not notice an instance folder added while it's open.
+        LauncherKind::Curseforge if curseforge::running() => {
+            Some("Close CurseForge first, then try again")
+        }
+        _ => None,
+    }
 }
 
 /// Create an empty instance for a shared one. Returns its launcher instance id.
+/// `curseforge_loader`: CurseForge's install data for the loader, from the Atlas server
+/// (CurseForge instances other than vanilla need it).
 pub async fn create_instance(
     kind: LauncherKind,
     root: &Path,
-    name: &str,
-    minecraft: &str,
-    loader: Loader,
-    loader_version: Option<&str>,
+    new: NewInstance,
+    http: &reqwest::Client,
+    curseforge_loader: Option<serde_json::Value>,
 ) -> ReadResult<String> {
-    let flavor = match kind {
-        LauncherKind::Prism => prism::Flavor::Prism,
-        LauncherKind::Multimc => prism::Flavor::MultiMc,
-        _ => {
-            return Err(ReadError::Format(format!(
-                "can't create instances in {}",
-                display_name(kind)
-            )));
+    if !can_create_instance(kind, new.loader) {
+        return Err(ReadError::Format(format!(
+            "can't create {:?} instances in {}",
+            new.loader,
+            display_name(kind)
+        )));
+    }
+    let root = root.to_path_buf();
+    match kind {
+        LauncherKind::Prism | LauncherKind::Multimc => {
+            let flavor = if kind == LauncherKind::Prism {
+                prism::Flavor::Prism
+            } else {
+                prism::Flavor::MultiMc
+            };
+            unblock(move || prism::create(flavor, &root, &new)).await
         }
-    };
-    let (root, name, minecraft) = (root.to_path_buf(), name.to_owned(), minecraft.to_owned());
-    let loader_version = loader_version.map(str::to_owned);
-    tokio::task::spawn_blocking(move || {
-        prism::create(
-            flavor,
-            &root,
-            &name,
-            &minecraft,
-            loader,
-            loader_version.as_deref(),
-        )
-    })
-    .await
-    .map_err(|e| ReadError::Format(format!("creating the instance failed: {e}")))?
+        LauncherKind::Official => {
+            let version = official::fetch_version(http, &new).await?;
+            unblock(move || official::create(&root, &new, version)).await
+        }
+        LauncherKind::Modrinth => modrinth::create(&root, &new).await,
+        LauncherKind::Curseforge => {
+            unblock(move || curseforge::create(&root, &new, curseforge_loader)).await
+        }
+        LauncherKind::Folder => unreachable!("no creatable loaders"),
+    }
+}
+
+async fn unblock<T: Send + 'static>(
+    work: impl FnOnce() -> ReadResult<T> + Send + 'static,
+) -> ReadResult<T> {
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|e| ReadError::Format(format!("creating the instance failed: {e}")))?
 }
 
 /// Default install folders of this launcher that exist on this PC.

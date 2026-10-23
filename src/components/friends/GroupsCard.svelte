@@ -1,11 +1,13 @@
 <script lang="ts">
   import { api } from "$lib/api";
   import { copier } from "$lib/clipboard.svelte";
+  import { confirmAction } from "$lib/confirm.svelte";
   import { plural } from "$lib/format";
   import { social } from "$lib/stores";
   import type { Group } from "$lib/types";
   import Button from "../Button.svelte";
   import Head from "../Head.svelte";
+  import Icon from "../Icon.svelte";
 
   const clip = copier(2200);
 
@@ -61,13 +63,14 @@
     });
   }
 
-  function leave(g: Group) {
-    if (
-      !confirm(
-        `Leave ${g.name}? Instances shared with the group stay on your PC.`,
-      )
-    )
-      return;
+  async function leave(g: Group) {
+    const ok = await confirmAction({
+      title: `Leave ${g.name}?`,
+      message: "Instances shared with the group stay on your PC.",
+      confirmLabel: "Leave group",
+      danger: true,
+    });
+    if (!ok) return;
     run(async () => {
       await social.leaveGroup(g.id);
       return `You left ${g.name}.`;
@@ -76,18 +79,27 @@
 </script>
 
 <div class="rounded-xl bg-(--bg-raise) p-4.5">
-  <div class="flex items-baseline justify-between">
+  <div class="flex items-center justify-between">
     <h2 class="font-semibold">Groups</h2>
-    <div class="flex gap-3 text-xs">
-      <button
-        class="text-(--accent) hover:underline"
-        onclick={() => (form = form === "join" ? "none" : "join")}>Join</button
+    <div class="flex gap-1.5">
+      <Button
+        size="sm"
+        aria-pressed={form === "join"}
+        class={form === "join" ? "border-(--accent)!" : ""}
+        onclick={() => (form = form === "join" ? "none" : "join")}
       >
-      <button
-        class="text-(--accent) hover:underline"
+        <Icon name="login" class="size-3.5" />
+        Join
+      </Button>
+      <Button
+        size="sm"
+        aria-pressed={form === "create"}
+        class={form === "create" ? "border-(--accent)!" : ""}
         onclick={() => (form = form === "create" ? "none" : "create")}
-        >New group</button
       >
+        <Icon name="plus" class="size-3.5" />
+        New group
+      </Button>
     </div>
   </div>
   <p class="mt-1 mb-1.5 text-[12.5px] text-(--text-muted)">

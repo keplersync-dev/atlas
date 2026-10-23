@@ -156,7 +156,7 @@
         >
         <small class="block text-[11px] text-(--text-faint)"
           >{!social.session.online
-            ? "Offline"
+            ? "Can't reach the server"
             : social.session.user.appearOffline
               ? "Appearing offline"
               : "Online"}</small

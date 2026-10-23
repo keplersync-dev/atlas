@@ -8,15 +8,20 @@
 //!             submitted_time_played, recent_time_played [s], applied_content_set_id, ...)
 //!   instance_content_sets(id, game_version, loader, loader_version, ...)
 //! Older versions had one `profiles` table instead (unverified, kept as a fallback).
+//!
+//! New instances: the app makes them itself from a .mrpack Atlas hands it (see `create`).
 
+use std::collections::HashSet;
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection, SqliteRow};
 use sqlx::{Connection, FromRow};
 
-use super::util::{env_dir, first_existing, from_unix_seconds, loader_from};
-use super::{FoundInstance, ReadError, ReadResult};
+use super::util::{env_dir, file_stem, first_existing, from_unix_seconds, loader_from};
+use super::{FoundInstance, NewInstance, ReadError, ReadResult};
+use crate::dto::Loader;
 
 pub fn default_roots() -> Vec<PathBuf> {
     let Some(appdata) = env_dir("APPDATA") else {
@@ -69,18 +74,7 @@ const LEGACY: &str = "
     FROM profiles";
 
 pub async fn list(root: &Path) -> ReadResult<Vec<FoundInstance>> {
-    let db = root.join("app.db");
-    if !db.is_file() {
-        return Ok(vec![]);
-    }
-    let rows = match read(&db, true).await {
-        Ok(rows) => rows,
-        // Locked or mid-write: read a copy instead of waiting on the app.
-        Err(e) => {
-            tracing::debug!(error = %e, "reading a copy of Modrinth's app.db");
-            read_copy(&db).await?
-        }
-    };
+    let rows: Vec<Row> = rows(root, CURRENT, LEGACY).await?;
     Ok(rows
         .into_iter()
         .map(|r| FoundInstance {
@@ -97,7 +91,34 @@ pub async fn list(root: &Path) -> ReadResult<Vec<FoundInstance>> {
         .collect())
 }
 
-async fn read(db: &Path, read_only: bool) -> ReadResult<Vec<Row>> {
+/// Rows from the app's database: `current` on today's schema, `legacy` on the old one.
+async fn rows<T>(root: &Path, current: &'static str, legacy: &'static str) -> ReadResult<Vec<T>>
+where
+    T: for<'r> FromRow<'r, SqliteRow> + Send + Unpin,
+{
+    let db = root.join("app.db");
+    if !db.is_file() {
+        return Ok(vec![]);
+    }
+    match read(&db, true, current, legacy).await {
+        Ok(rows) => Ok(rows),
+        // Locked or mid-write: read a copy instead of waiting on the app.
+        Err(e) => {
+            tracing::debug!(error = %e, "reading a copy of Modrinth's app.db");
+            read_copy(&db, current, legacy).await
+        }
+    }
+}
+
+async fn read<T>(
+    db: &Path,
+    read_only: bool,
+    current: &'static str,
+    legacy: &'static str,
+) -> ReadResult<Vec<T>>
+where
+    T: for<'r> FromRow<'r, SqliteRow> + Send + Unpin,
+{
     let options = SqliteConnectOptions::new()
         .filename(db)
         .read_only(read_only)
@@ -109,16 +130,19 @@ async fn read(db: &Path, read_only: bool) -> ReadResult<Vec<Row>> {
     .fetch_optional(&mut conn)
     .await?;
     let sql = if has_instances.is_some() {
-        CURRENT
+        current
     } else {
-        LEGACY
+        legacy
     };
-    let rows = sqlx::query_as::<_, Row>(sql).fetch_all(&mut conn).await?;
+    let rows = sqlx::query_as::<_, T>(sql).fetch_all(&mut conn).await?;
     conn.close().await?;
     Ok(rows)
 }
 
-async fn read_copy(db: &Path) -> ReadResult<Vec<Row>> {
+async fn read_copy<T>(db: &Path, current: &'static str, legacy: &'static str) -> ReadResult<Vec<T>>
+where
+    T: for<'r> FromRow<'r, SqliteRow> + Send + Unpin,
+{
     let dir = std::env::temp_dir().join(format!("atlas-modrinth-{}", crate::util::ids::new_id()));
     std::fs::create_dir_all(&dir)?;
     let result = async {
@@ -128,17 +152,131 @@ async fn read_copy(db: &Path) -> ReadResult<Vec<Row>> {
                 std::fs::copy(&from, dir.join(format!("app.db{suffix}")))?;
             }
         }
-        read(&dir.join("app.db"), false).await
+        read(&dir.join("app.db"), false, current, legacy).await
     }
     .await;
     let _ = std::fs::remove_dir_all(&dir);
     result.map_err(|e| ReadError::Format(format!("Modrinth app.db: {e}")))
 }
 
+/// How long the user has to confirm the new instance in the app.
+const CONFIRM_WAIT: Duration = Duration::from_secs(5 * 60);
+
+/// Create an instance through the app, the way it supports from outside: hand it a pack
+/// file (.mrpack) that names only the Minecraft and loader versions, like opening one from
+/// Explorer. The app asks to confirm (packs it doesn't know get a warning first), makes the
+/// instance and installs the loader. Returns the new instance's path once the app is done
+/// setting up its folder.
+///
+/// Writing app.db instead isn't safe: an instance there is tied to install jobs, content
+/// sets and the app's file store. The new instance has no picture: the app only takes
+/// one from Modrinth or its own editor.
+pub async fn create(root: &Path, new: &NewInstance) -> ReadResult<String> {
+    let loader_version = new.loader_version()?;
+    let before: HashSet<String> = rows::<Stage>(root, STAGES, LEGACY_STAGES)
+        .await?
+        .into_iter()
+        .map(|s| s.path)
+        .collect();
+    let dir = std::env::temp_dir().join(format!("atlas-mrpack-{}", crate::util::ids::new_id()));
+    std::fs::create_dir_all(&dir)?;
+    let result = async {
+        // The app names the instance after the file at first, then after the pack.
+        let pack = dir.join(format!("{}.mrpack", file_stem(&new.name)));
+        write_pack(&pack, new, loader_version)?;
+        open_pack(&pack)?;
+        let deadline = Instant::now() + CONFIRM_WAIT;
+        loop {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+            match find_new(root, &before, &new.name).await {
+                Ok(Some(path)) => return Ok(path),
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::debug!(error = %e, "couldn't look for the new Modrinth instance")
+                }
+            }
+            if Instant::now() > deadline {
+                return Err(ReadError::NotCreated);
+            }
+        }
+    }
+    .await;
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
+
+/// A Modrinth pack with no files: modrinth.index.json naming the versions.
+fn write_pack(file: &Path, new: &NewInstance, loader_version: Option<&str>) -> ReadResult<()> {
+    let mut dependencies = serde_json::json!({ "minecraft": new.minecraft });
+    let key = match new.loader {
+        Loader::Vanilla => None,
+        Loader::Fabric => Some("fabric-loader"),
+        Loader::Quilt => Some("quilt-loader"),
+        Loader::Forge => Some("forge"),
+        Loader::Neoforge => Some("neoforge"),
+    };
+    if let (Some(key), Some(version)) = (key, loader_version) {
+        dependencies[key] = version.into();
+    }
+    let index = serde_json::json!({
+        "formatVersion": 1,
+        "game": "minecraft",
+        "versionId": "atlas",
+        "name": new.name,
+        "summary": "Shared with Atlas",
+        "files": [],
+        "dependencies": dependencies,
+    });
+    let zip_error = |e: zip::result::ZipError| ReadError::Format(format!("writing the pack: {e}"));
+    let mut zip = zip::ZipWriter::new(std::fs::File::create(file)?);
+    zip.start_file(
+        "modrinth.index.json",
+        zip::write::SimpleFileOptions::default(),
+    )
+    .map_err(zip_error)?;
+    zip.write_all(&serde_json::to_vec_pretty(&index)?)?;
+    zip.finish().map_err(zip_error)?;
+    Ok(())
+}
+
+/// Give the pack to the app: its program takes it as an argument (and passes it on to a
+/// running copy). Without the program, Explorer opens it with whatever owns .mrpack.
+fn open_pack(pack: &Path) -> ReadResult<()> {
+    let program = program().unwrap_or_else(|| PathBuf::from("explorer.exe"));
+    std::process::Command::new(program).arg(pack).spawn()?;
+    Ok(())
+}
+
+#[derive(FromRow)]
+struct Stage {
+    path: String,
+    name: String,
+    install_stage: String,
+}
+
+const STAGES: &str = "SELECT path, name, install_stage FROM instances";
+const LEGACY_STAGES: &str = "SELECT path, name, install_stage FROM profiles";
+
+/// The instance the app made from the pack, once it's past installing the pack itself.
+/// From then on the app only installs the game and loader, outside the instance folder.
+async fn find_new(root: &Path, before: &HashSet<String>, name: &str) -> ReadResult<Option<String>> {
+    let stem = file_stem(name);
+    let rows: Vec<Stage> = rows(root, STAGES, LEGACY_STAGES).await?;
+    Ok(rows
+        .into_iter()
+        .find(|s| !before.contains(&s.path) && (s.name == name || s.name == stem))
+        .filter(|s| {
+            matches!(
+                s.install_stage.as_str(),
+                "pack_installed" | "minecraft_installing" | "installing" | "installed"
+            )
+        })
+        .map(|s| s.path))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dto::Loader;
 
     /// A Modrinth root with the real table definitions (only the columns Atlas reads
     /// plus the NOT NULL ones) and two instances.
@@ -202,5 +340,76 @@ mod tests {
         assert_eq!(new.minecraft_version, None);
         assert_eq!(new.loader, None);
         assert_eq!(new.last_played_at, None);
+    }
+
+    fn neoforge() -> NewInstance {
+        NewInstance {
+            name: "Friday: SMP".into(),
+            minecraft: "1.21.1".into(),
+            loader: Loader::Neoforge,
+            loader_version: Some("21.1.77".into()),
+            icon: None,
+        }
+    }
+
+    #[test]
+    fn packs_name_only_the_versions() {
+        let file = std::env::temp_dir().join(format!(
+            "atlas-mrpack-test-{}.mrpack",
+            crate::util::ids::new_id()
+        ));
+        write_pack(&file, &neoforge(), Some("21.1.77")).unwrap();
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(&file).unwrap()).unwrap();
+        assert_eq!(zip.len(), 1);
+        let index: serde_json::Value =
+            serde_json::from_reader(zip.by_name("modrinth.index.json").unwrap()).unwrap();
+        drop(zip);
+        std::fs::remove_file(&file).ok();
+        assert_eq!(index["formatVersion"], 1);
+        assert_eq!(index["game"], "minecraft");
+        assert_eq!(index["name"], "Friday: SMP");
+        assert_eq!(index["files"], serde_json::json!([]));
+        assert_eq!(
+            index["dependencies"],
+            serde_json::json!({ "minecraft": "1.21.1", "neoforge": "21.1.77" })
+        );
+    }
+
+    #[tokio::test]
+    async fn finds_the_instance_once_the_pack_is_installed() {
+        let root = fixture().await;
+        let before: HashSet<String> = rows::<Stage>(&root, STAGES, LEGACY_STAGES)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|s| s.path)
+            .collect();
+        assert_eq!(before.len(), 2);
+        assert_eq!(find_new(&root, &before, "Friday: SMP").await.unwrap(), None);
+
+        let options = SqliteConnectOptions::new().filename(root.join("app.db"));
+        let mut c = SqliteConnection::connect_with(&options).await.unwrap();
+        // the app names it after the file first, while it installs the pack
+        sqlx::query(
+            "INSERT INTO instances (id, path, install_stage, launcher_feature_version, name, created, modified)
+             VALUES ('x', 'Friday_ SMP', 'pack_installing', 'x', 'Friday_ SMP', 1, 1)",
+        )
+        .execute(&mut c)
+        .await
+        .unwrap();
+        assert_eq!(find_new(&root, &before, "Friday: SMP").await.unwrap(), None);
+        sqlx::query("UPDATE instances SET name = 'Friday: SMP', install_stage = 'minecraft_installing' WHERE id = 'x'")
+            .execute(&mut c)
+            .await
+            .unwrap();
+        c.close().await.unwrap();
+        assert_eq!(
+            find_new(&root, &before, "Friday: SMP")
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("Friday_ SMP")
+        );
+        std::fs::remove_dir_all(&root).ok();
     }
 }

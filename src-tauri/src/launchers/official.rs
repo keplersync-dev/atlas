@@ -1,17 +1,25 @@
 //! The official Minecraft Launcher.
 //!
 //! <root>/launcher_profiles.json → profiles{id: {name, type, gameDir?, lastVersionId, lastUsed, icon}}
+//! "latest-release" and "latest-snapshot" profiles have no fixed version: the launcher's
+//! copy of Mojang's version list (versions/version_manifest_v2.json) says what they are now.
 //! No gameDir = the root itself. Several profiles often share one game dir, but Atlas
 //! tracks folders, so each game dir is one instance, named after its most recently
 //! used profile. Checked against the launcher on Windows, 2026.
+//!
+//! New instances are a "custom" profile with its own game dir in <root>/instances/.
+//! Fabric and Quilt profiles also need versions/<id>/<id>.json, which their installers
+//! fetch from the loader's meta server; the launcher downloads the rest on first play.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
+use base64::Engine;
 use serde::Deserialize;
+use serde_json::{Value, json};
 
-use super::util::{env_dir, first_existing, parse_time};
-use super::{FoundInstance, ReadResult};
+use super::util::{any_running, env_dir, first_existing, free_folder, parse_time};
+use super::{FoundInstance, NewInstance, ReadError, ReadResult};
 use crate::dto::Loader;
 
 pub fn default_roots() -> Vec<PathBuf> {
@@ -68,6 +76,38 @@ struct Profile {
     icon: Option<String>,
 }
 
+/// What "latest-release" and "latest-snapshot" point at now. The launcher refreshes its
+/// copy of Mojang's version list when it starts.
+#[derive(Deserialize, Default)]
+struct Latest {
+    release: Option<String>,
+    snapshot: Option<String>,
+}
+
+impl Latest {
+    fn read(root: &Path) -> Self {
+        #[derive(Deserialize)]
+        struct VersionList {
+            latest: Latest,
+        }
+        std::fs::read_to_string(root.join("versions").join("version_manifest_v2.json"))
+            .ok()
+            .and_then(|t| {
+                serde_json::from_str::<VersionList>(t.trim_start_matches('\u{feff}')).ok()
+            })
+            .map(|v| v.latest)
+            .unwrap_or_default()
+    }
+
+    fn of(&self, version_id: &str) -> Option<String> {
+        match version_id {
+            "latest-release" => self.release.clone(),
+            "latest-snapshot" => self.snapshot.clone(),
+            _ => None,
+        }
+    }
+}
+
 pub fn list(root: &Path) -> ReadResult<Vec<FoundInstance>> {
     let file = root.join("launcher_profiles.json");
     if !file.is_file() {
@@ -95,11 +135,13 @@ pub fn list(root: &Path) -> ReadResult<Vec<FoundInstance>> {
         }
     }
 
+    let latest = Latest::read(root);
     Ok(by_dir
         .into_values()
         .map(|(game_dir, p, used)| {
             let version_id = p.last_version_id.clone().unwrap_or_default();
             let (minecraft_version, loader) = parse_version_id(&version_id);
+            let minecraft_version = minecraft_version.or_else(|| latest.of(&version_id));
             FoundInstance {
                 launcher_instance_id: game_dir.to_string_lossy().into_owned(),
                 name: display_name(&p),
@@ -188,6 +230,143 @@ fn neoforge_minecraft(version: &str) -> Option<String> {
     })
 }
 
+/// Is the launcher open? It keeps profiles in memory and saves them over the file, so
+/// a profile added meanwhile would be lost.
+pub fn running() -> bool {
+    any_running(&["minecraft.exe", "minecraftlauncher.exe"])
+}
+
+/// A loader's version file for the launcher: versions/<id>/<id>.json.
+pub struct VersionFile {
+    pub id: String,
+    pub json: Vec<u8>,
+}
+
+/// The version file a Fabric or Quilt profile needs, from the loader's meta server (what
+/// their installers do). None for vanilla, which the launcher knows itself.
+pub async fn fetch_version(
+    http: &reqwest::Client,
+    new: &NewInstance,
+) -> ReadResult<Option<VersionFile>> {
+    let Some(loader_version) = new.loader_version()? else {
+        return Ok(None);
+    };
+    let (mc, v) = (new.minecraft.as_str(), loader_version);
+    if !safe_id(mc) || !safe_id(v) {
+        return Err(ReadError::Format(format!("odd version: {mc} {v}")));
+    }
+    let url = match new.loader {
+        Loader::Fabric => {
+            format!("https://meta.fabricmc.net/v2/versions/loader/{mc}/{v}/profile/json")
+        }
+        Loader::Quilt => {
+            format!("https://meta.quiltmc.org/v3/versions/loader/{mc}/{v}/profile/json")
+        }
+        other => {
+            return Err(ReadError::Format(format!(
+                "can't set up {other:?} in the Minecraft Launcher"
+            )));
+        }
+    };
+    let failed = |e: reqwest::Error| ReadError::Format(format!("{url}: {e}"));
+    let res = http
+        .get(&url)
+        .send()
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(failed)?;
+    let json = res.bytes().await.map_err(failed)?.to_vec();
+    let parsed: Value = serde_json::from_slice(&json)?;
+    let id = parsed["id"].as_str().unwrap_or_default().to_owned();
+    if !safe_id(&id) || parsed["inheritsFrom"].as_str() != Some(mc) {
+        return Err(ReadError::Format(format!("{url} sent an odd version file")));
+    }
+    Ok(Some(VersionFile { id, json }))
+}
+
+/// Version ids end up in URLs and folder names: letters, digits and `.-_+` only.
+fn safe_id(id: &str) -> bool {
+    !id.is_empty()
+        && !id.starts_with('.')
+        && id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || ".-_+".contains(c))
+}
+
+/// Add a profile for a shared instance, with its own game dir. Returns the game dir,
+/// which is the instance's launcher id.
+pub fn create(root: &Path, new: &NewInstance, version: Option<VersionFile>) -> ReadResult<String> {
+    let file = root.join("launcher_profiles.json");
+    let text = std::fs::read_to_string(&file)?;
+    let mut doc: Value = serde_json::from_str(text.trim_start_matches('\u{feff}'))?;
+    let Some(top) = doc.as_object_mut() else {
+        return Err(ReadError::Format(
+            "launcher_profiles.json isn't an object".into(),
+        ));
+    };
+    let Some(profiles) = top
+        .entry("profiles")
+        .or_insert_with(|| json!({}))
+        .as_object_mut()
+    else {
+        return Err(ReadError::Format(
+            "launcher_profiles.json has odd profiles".into(),
+        ));
+    };
+
+    let version_id = match version {
+        Some(v) => {
+            let dir = root.join("versions").join(&v.id);
+            std::fs::create_dir_all(&dir)?;
+            std::fs::write(dir.join(format!("{}.json", v.id)), &v.json)?;
+            // The installers leave an empty jar; the launcher fills it from the parent version.
+            let jar = dir.join(format!("{}.jar", v.id));
+            if !jar.exists() {
+                std::fs::write(jar, b"")?;
+            }
+            v.id
+        }
+        None => new.minecraft.clone(),
+    };
+
+    let instances = root.join("instances");
+    let game_dir = instances.join(free_folder(&instances, &new.name));
+    std::fs::create_dir_all(&game_dir)?;
+    let game_dir = game_dir.to_string_lossy().into_owned();
+
+    // Custom pictures are embedded PNGs; other formats get a built-in block.
+    let icon = new
+        .icon
+        .as_deref()
+        .filter(|b| b.starts_with(b"\x89PNG"))
+        .map(|b| {
+            format!(
+                "data:image/png;base64,{}",
+                base64::engine::general_purpose::STANDARD.encode(b)
+            )
+        })
+        .unwrap_or_else(|| "Furnace".into());
+    let now = crate::util::time::iso(chrono::Utc::now());
+    profiles.insert(
+        uuid::Uuid::now_v7().simple().to_string(),
+        json!({
+            "created": now,
+            "gameDir": game_dir,
+            "icon": icon,
+            "lastUsed": now,
+            "lastVersionId": version_id,
+            "name": new.name,
+            "type": "custom",
+        }),
+    );
+
+    // Written next to it and swapped in, so the launcher never reads half a file.
+    let tmp = root.join("launcher_profiles.json.atlas");
+    std::fs::write(&tmp, serde_json::to_vec_pretty(&doc)?)?;
+    std::fs::rename(&tmp, &file)?;
+    Ok(game_dir)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -209,7 +388,11 @@ mod tests {
         assert_eq!(main.name, "Latest release");
         assert_eq!(main.game_dir, root);
         assert_eq!(main.launcher_instance_id, root.to_string_lossy());
-        assert_eq!(main.minecraft_version, None);
+        assert_eq!(
+            main.minecraft_version.as_deref(),
+            Some("1.21.4"),
+            "the latest release in the launcher's version list"
+        );
         assert_eq!(main.loader, Some(Loader::Vanilla));
         assert_eq!(main.icon, None, "built-in icon name");
         assert_eq!(
@@ -232,6 +415,15 @@ mod tests {
             fabric.last_played_at.as_deref(),
             Some("2024-11-01T12:43:39.000Z")
         );
+    }
+
+    #[test]
+    fn latest_without_a_version_list() {
+        let none = Latest::read(Path::new(r"C:\no\such\folder"));
+        assert_eq!(none.of("latest-release"), None);
+        let latest = Latest::read(&fixture());
+        assert_eq!(latest.of("latest-snapshot").as_deref(), Some("25w02a"));
+        assert_eq!(latest.of("1.21.1"), None, "only the latest-* ids");
     }
 
     #[test]
@@ -281,5 +473,127 @@ mod tests {
         assert_eq!(v("1.20.1-OptiFine_HD_U_I6"), (Some("1.20.1".into()), None));
         assert_eq!(v("latest-snapshot"), (None, Some((Loader::Vanilla, None))));
         assert_eq!(v(""), (None, None));
+    }
+
+    #[test]
+    fn created_profiles_read_back() {
+        let root =
+            std::env::temp_dir().join(format!("atlas-official-{}", crate::util::ids::new_id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::copy(
+            fixture().join("launcher_profiles.json"),
+            root.join("launcher_profiles.json"),
+        )
+        .unwrap();
+        let png = std::fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/prism/icons/smp.png"),
+        )
+        .unwrap();
+        let fabric = NewInstance {
+            name: "Friday: SMP".into(),
+            minecraft: "1.21.1".into(),
+            loader: Loader::Fabric,
+            loader_version: Some("0.16.5".into()),
+            icon: Some(png.clone()),
+        };
+        let version = VersionFile {
+            id: "fabric-loader-0.16.5-1.21.1".into(),
+            json: br#"{"id":"fabric-loader-0.16.5-1.21.1","inheritsFrom":"1.21.1"}"#.to_vec(),
+        };
+        let a = create(&root, &fabric, Some(version)).unwrap();
+        let b = create(
+            &root,
+            &NewInstance {
+                loader: Loader::Vanilla,
+                loader_version: None,
+                icon: None,
+                ..fabric.clone()
+            },
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            PathBuf::from(&a),
+            root.join("instances").join("Friday_ SMP")
+        );
+        assert_eq!(
+            PathBuf::from(&b),
+            root.join("instances").join("Friday_ SMP (2)")
+        );
+        assert!(Path::new(&a).is_dir());
+        let versions = root.join("versions/fabric-loader-0.16.5-1.21.1");
+        assert!(versions.join("fabric-loader-0.16.5-1.21.1.json").is_file());
+        assert!(versions.join("fabric-loader-0.16.5-1.21.1.jar").is_file());
+
+        let list = list(&root).unwrap();
+        assert_eq!(list.len(), 4, "the two old game dirs and two new ones");
+        let first = list.iter().find(|i| i.launcher_instance_id == a).unwrap();
+        assert_eq!(first.name, "Friday: SMP");
+        assert_eq!(first.game_dir, PathBuf::from(&a));
+        assert_eq!(first.minecraft_version.as_deref(), Some("1.21.1"));
+        assert_eq!(first.loader, Some(Loader::Fabric));
+        assert_eq!(first.loader_version.as_deref(), Some("0.16.5"));
+        let icon = first.icon.as_deref().unwrap();
+        let encoded = icon.strip_prefix("data:image/png;base64,").unwrap();
+        assert_eq!(
+            base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .unwrap(),
+            png
+        );
+        let second = list.iter().find(|i| i.launcher_instance_id == b).unwrap();
+        assert_eq!(second.minecraft_version.as_deref(), Some("1.21.1"));
+        assert_eq!(second.loader, Some(Loader::Vanilla));
+        assert_eq!(second.icon, None, "built-in block");
+
+        // what was there is kept
+        let doc: Value = serde_json::from_str(
+            &std::fs::read_to_string(root.join("launcher_profiles.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(doc["settings"]["crashAssistance"], true);
+        assert_eq!(doc["profiles"].as_object().unwrap().len(), 6);
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// Fetches real version files from Fabric's and Quilt's meta servers. Opt-in:
+    /// `cargo test --lib fetches_loader_versions -- --ignored`
+    #[tokio::test]
+    #[ignore]
+    async fn fetches_loader_versions() {
+        let http = reqwest::Client::new();
+        for (loader, mc, v, id) in [
+            (
+                Loader::Fabric,
+                "1.21.1",
+                "0.16.5",
+                "fabric-loader-0.16.5-1.21.1",
+            ),
+            (
+                Loader::Quilt,
+                "1.20.1",
+                "0.26.0",
+                "quilt-loader-0.26.0-1.20.1",
+            ),
+        ] {
+            let new = NewInstance {
+                name: "x".into(),
+                minecraft: mc.into(),
+                loader,
+                loader_version: Some(v.into()),
+                icon: None,
+            };
+            let file = fetch_version(&http, &new).await.unwrap().unwrap();
+            assert_eq!(file.id, id);
+        }
+    }
+
+    #[test]
+    fn version_ids_must_be_plain() {
+        assert!(safe_id("fabric-loader-0.16.5-1.21.1"));
+        assert!(safe_id("0.16.5+build.1"));
+        assert!(!safe_id("../evil"));
+        assert!(!safe_id("a/b"));
+        assert!(!safe_id(""));
     }
 }

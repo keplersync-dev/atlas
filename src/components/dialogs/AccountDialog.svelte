@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import { confirmAction } from "$lib/confirm.svelte";
   import { fileSize, formatCode } from "$lib/format";
   import { social } from "$lib/stores";
   import type { AuthProvider } from "$lib/types";
@@ -100,12 +101,17 @@
     });
   }
 
-  function deleteAccount() {
+  async function deleteAccount() {
     if (!me) return;
-    const typed = prompt(
-      `This deletes your Atlas account, friends and shares. Your instances stay on this PC.\n\nType ${me.username} to confirm.`,
-    );
-    if (typed !== me.username) return;
+    const ok = await confirmAction({
+      title: "Delete your Atlas account?",
+      message:
+        "Your account, friends and shares are deleted for good. Your instances stay on this PC.",
+      confirmLabel: "Delete account",
+      danger: true,
+      typeToConfirm: me.username,
+    });
+    if (!ok) return;
     act("delete", async () => {
       await social.deleteAccount();
       onclose();
@@ -232,8 +238,15 @@
             title={me.identities.length === 1
               ? "You need at least one way to sign in"
               : undefined}
-            onclick={() => act(p.id, () => social.unlinkIdentity(p.id))}
-            >Unlink</Button
+            onclick={async () => {
+              const ok = await confirmAction({
+                title: `Unlink ${p.label}?`,
+                message: `You won't be able to sign in with ${p.label} anymore. You can link it again later.`,
+                confirmLabel: "Unlink",
+                danger: true,
+              });
+              if (ok) act(p.id, () => social.unlinkIdentity(p.id));
+            }}>Unlink</Button
           >
         {:else}
           <Button
@@ -249,20 +262,22 @@
     <!-- ── Friend code ── -->
     {@render section("Friend code")}
     <div class="flex items-center gap-3">
-      <span class="flex-1 font-mono text-base font-semibold tracking-[2px]"
+      <span
+        class="flex-1 font-mono text-base font-semibold tracking-[2px] select-text"
         >{formatCode(me.friendCode)}</span
       >
       <Button
         size="sm"
         variant="ghost"
         disabled={busy !== null}
-        onclick={() => {
-          if (
-            confirm(
-              "Reset your friend code? The old code and link stop working right away.",
-            )
-          )
-            act("code", () => social.resetFriendCode());
+        onclick={async () => {
+          const ok = await confirmAction({
+            title: "Reset your friend code?",
+            message:
+              "Your old code and link stop working right away. You'll get a new one to share.",
+            confirmLabel: "Reset code",
+          });
+          if (ok) act("code", () => social.resetFriendCode());
         }}>Reset code</Button
       >
     </div>

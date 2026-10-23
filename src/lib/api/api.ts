@@ -78,7 +78,10 @@ export interface AtlasApi {
   trackInstances(refs: TrackInstanceRef[]): Promise<InstanceSummary[]>;
   /** Track a game folder that isn't in a known launcher. */
   trackFolder(gameDir: string): Promise<InstanceSummary>;
-  /** Stops tracking. The folder is never touched. A shared instance you own stays shared (use archiveSharedInstance). */
+  /**
+   * Stops tracking. The folder is never touched. A shared instance stays shared and you stay in it
+   * (use leaveSharedInstance or archiveSharedInstance); acceptInvite adds it back.
+   */
   untrackInstance(id: Id): Promise<void>;
   updateInstance(id: Id, patch: UpdateInstanceInput): Promise<InstanceSummary>;
   /** Re-read the folder and launcher metadata now (Atlas also watches folders and rescans on its own). */
@@ -113,6 +116,7 @@ export interface AtlasApi {
   getSharedInstance(id: Id): Promise<SharedInstanceDetail>;
   /**
    * Creates a new instance in the chosen launcher, fills it with the latest revision, and tracks it.
+   * Accepts a pending invite; members and owners can also add one that isn't on this PC.
    * `installOptional`: keys from SharedInstance.optionalItems the user ticked (optional items start unticked).
    */
   acceptInvite(

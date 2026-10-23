@@ -1,6 +1,5 @@
-// Real implementation: forwards every call to a Rust command of the same name in snake_case.
+// Forwards every call to a Rust command of the same name in snake_case.
 // Tauri converts camelCase argument keys to snake_case parameters automatically.
-// Commands that don't exist yet will reject, so keep VITE_ATLAS_API=mock until they do.
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";

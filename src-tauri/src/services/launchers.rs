@@ -81,7 +81,7 @@ async fn to_dto(row: &LauncherRow) -> Option<Launcher> {
         name: launchers::display_name(kind).into(),
         root_path: row.root_path.clone(),
         instance_count: instances_in(row).await.len() as u32,
-        can_create_instances: launchers::can_create_instances(kind),
+        creatable_loaders: launchers::creatable_loaders(kind).to_vec(),
         added_by_user: row.added_by_user,
     })
 }

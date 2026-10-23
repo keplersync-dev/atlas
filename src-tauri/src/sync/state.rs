@@ -1,12 +1,12 @@
 //! Sync state, computed when a response is built and never stored.
-//! Pure functions: the same rules as `localChanges` / `refreshSyncState` in the mock
-//! (src/lib/api/mock.ts), plus deleted files, which the mock can't model.
+//! Pure functions.
 
 use std::collections::HashSet;
 
 use super::manifest::Manifest;
 use crate::db::content::ContentRow;
-use crate::dto::{MemberRole, ShareMode, SyncState, from_wire};
+use crate::db::instances::InstanceRow;
+use crate::dto::{LauncherChange, MemberRole, ShareMode, SyncState, VersionChange, from_wire};
 
 /// What differs from the synced version.
 #[derive(Debug, Default)]
@@ -17,12 +17,31 @@ pub struct LocalChanges<'a> {
     pub mode_changed: Vec<&'a ContentRow>,
     /// Owners/editors: files not in the shared version that would now be shared.
     pub added: Vec<&'a ContentRow>,
+    /// Owners/editors: the launcher runs other Minecraft or loader versions than the
+    /// shared ones (see `version_change`).
+    pub versions: bool,
 }
 
 impl LocalChanges<'_> {
     pub fn count(&self) -> u32 {
         (self.removed.len() + self.mode_changed.len() + self.added.len()) as u32
+            + u32::from(self.versions)
     }
+}
+
+/// Owners/editors: the next version would change the Minecraft or loader version, because
+/// the launcher runs other ones now. `from` is the shared version, `to` this instance's.
+pub fn version_change(row: &InstanceRow, synced: &Manifest) -> Option<LauncherChange> {
+    let c = super::prism_versions::change(row, synced)?;
+    let flip = |v: VersionChange| VersionChange {
+        from: v.to,
+        to: v.from,
+    };
+    Some(LauncherChange {
+        minecraft_version: c.minecraft_version.map(flip),
+        loader_version: c.loader_version.map(flip),
+        automatic: false,
+    })
 }
 
 fn mode(s: &str) -> Option<ShareMode> {
@@ -36,6 +55,7 @@ pub fn local_changes<'a>(
     role: MemberRole,
     rows: &'a [ContentRow],
     synced: Option<&Manifest>,
+    versions_differ: bool,
 ) -> LocalChanges<'a> {
     let live: Vec<&ContentRow> = rows.iter().filter(|r| r.installed).collect();
     let viewer = role == MemberRole::Viewer;
@@ -61,6 +81,7 @@ pub fn local_changes<'a>(
     if viewer {
         return out;
     }
+    out.versions = versions_differ;
     for r in live.into_iter().filter(|r| r.enabled) {
         let now = mode(&r.share_mode);
         let published = r.published_share_mode.as_deref().and_then(mode);
@@ -177,7 +198,11 @@ mod tests {
         ];
         let m = manifest(&[("sodium", true), ("iris", false)]);
         for role in [MemberRole::Owner, MemberRole::Viewer] {
-            assert_eq!(local_changes(role, &rows, Some(&m)).count(), 0, "{role:?}");
+            assert_eq!(
+                local_changes(role, &rows, Some(&m), false).count(),
+                0,
+                "{role:?}"
+            );
         }
     }
 
@@ -191,7 +216,7 @@ mod tests {
             row("off", false, false, "required", None),               // disabled extra: not shared
         ];
         let m = manifest(&[("sodium", true), ("iris", false), ("lithium", true)]); // lithium deleted
-        let c = local_changes(MemberRole::Owner, &rows, Some(&m));
+        let c = local_changes(MemberRole::Owner, &rows, Some(&m), false);
         assert_eq!(c.removed, ["sodium", "lithium"]);
         assert_eq!(
             c.mode_changed
@@ -207,7 +232,7 @@ mod tests {
         assert_eq!(c.count(), 4);
         // Editors follow the same rules.
         assert_eq!(
-            local_changes(MemberRole::Editor, &rows, Some(&m)).count(),
+            local_changes(MemberRole::Editor, &rows, Some(&m), false).count(),
             4
         );
     }
@@ -229,7 +254,7 @@ mod tests {
             ("lithium", true),
             ("zoom", false),
         ]);
-        let c = local_changes(MemberRole::Viewer, &rows, Some(&m));
+        let c = local_changes(MemberRole::Viewer, &rows, Some(&m), false);
         // lithium (required) deleted counts; zoom (optional) gone doesn't.
         assert_eq!(c.removed, ["sodium", "lithium"]);
         assert_eq!(c.count(), 2);
@@ -242,5 +267,52 @@ mod tests {
         assert_eq!(sync_state(false, 3, 3, 1), SyncState::LocalChanges);
         assert_eq!(sync_state(false, 2, 3, 1), SyncState::Conflict);
         assert_eq!(sync_state(true, 2, 3, 1), SyncState::Frozen);
+    }
+
+    #[tokio::test]
+    async fn versions_changed_in_the_launcher_count_for_publishers() {
+        use crate::db::instances::{Metadata, NewInstance, insert};
+        let pool = crate::db::open_in_memory().await.unwrap();
+        let instance = |minecraft: &str, loader_version: &str| NewInstance {
+            launcher_id: None,
+            kind: crate::dto::LauncherKind::Folder,
+            launcher_instance_id: None,
+            game_dir: format!(r"C:\{minecraft}"),
+            meta: Metadata {
+                name: "x".into(),
+                icon: None,
+                minecraft_version: Some(minecraft.into()),
+                loader: Some(Loader::Fabric),
+                loader_version: Some(loader_version.into()),
+                last_played_at: None,
+                total_playtime_seconds: None,
+            },
+        };
+        let mut m = manifest(&[]);
+        m.minecraft.loader_version = Some("0.16.9".into());
+
+        let same = insert(&pool, instance("1.21.1", "0.16.9")).await.unwrap();
+        assert!(version_change(&same, &m).is_none());
+
+        let moved = insert(&pool, instance("1.21.11", "0.18.3")).await.unwrap();
+        let c = version_change(&moved, &m).unwrap();
+        let mc = c.minecraft_version.unwrap();
+        assert_eq!((mc.from.as_str(), mc.to.as_str()), ("1.21.1", "1.21.11"));
+        let lv = c.loader_version.unwrap();
+        assert_eq!((lv.from.as_str(), lv.to.as_str()), ("0.16.9", "0.18.3"));
+
+        assert_eq!(
+            local_changes(MemberRole::Owner, &[], Some(&m), true).count(),
+            1
+        );
+        assert_eq!(
+            local_changes(MemberRole::Editor, &[], Some(&m), true).count(),
+            1
+        );
+        assert_eq!(
+            local_changes(MemberRole::Viewer, &[], Some(&m), true).count(),
+            0,
+            "viewers can't publish"
+        );
     }
 }

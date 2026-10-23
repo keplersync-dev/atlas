@@ -2,7 +2,6 @@
 // Atlas is a sync companion: launchers own instances; Atlas tracks their folders and keeps them in sync.
 // These are app DTOs, not database rows or server responses: the Rust side assembles them from
 // SQLite + the Atlas server and serialises with #[serde(rename_all = "camelCase")].
-// Mock data uses the exact same types, so swapping mock -> real backend needs no component changes.
 
 /** UUIDv7 string. */
 export type Id = string;
@@ -187,8 +186,9 @@ export interface Launcher {
   rootPath: string;
   /** Instances found there, tracked or not. */
   instanceCount: number;
-  /** Atlas can create new instances in it (for accepting invites). */
-  canCreateInstances: boolean;
+  /** Loaders Atlas can set up in a new instance there (for accepting invites); empty
+   *  when it can't create instances. */
+  creatableLoaders: Loader[];
   addedByUser: boolean;
 }
 
@@ -446,6 +446,16 @@ export interface PublishPlan {
   /** CurseForge files whose authors disabled third-party downloads. Members download them by hand. */
   manualDownloads: ManualDownload[];
   storage: { usedBytes: number; quotaBytes: number; maxFileBytes: number };
+  /** Files Modrinth or CurseForge couldn't be asked about (unreachable). They count as uploads. */
+  unchecked: number;
+  /**
+   * The launcher runs other Minecraft or loader versions than the shared ones: `from` is
+   * shared now, `to` is what this version will say. null when they match.
+   */
+  versions: {
+    minecraftVersion: { from: string; to: string } | null;
+    loaderVersion: { from: string; to: string } | null;
+  } | null;
 }
 
 // ── Activity ───────────────────────────────────────────────────────────

@@ -12,9 +12,10 @@
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
+use sha2::{Digest, Sha256};
 
-use super::util::{env_dir, first_existing, from_unix_millis, parse_ini};
-use super::{FoundInstance, ReadError, ReadResult};
+use super::util::{env_dir, first_existing, free_folder, from_unix_millis, image_ext, parse_ini};
+use super::{FoundInstance, NewInstance, ReadResult};
 use crate::dto::Loader;
 
 #[derive(Debug, Clone, Copy)]
@@ -174,75 +175,47 @@ fn read_pack(dir: &Path) -> ReadResult<Pack> {
 }
 
 /// Create an empty instance for a shared one: `instance.cfg`, `mmc-pack.json` with the
-/// Minecraft and loader versions, and the game folder. Prism downloads the game itself the
-/// first time it's played. Returns the instance's folder name.
-pub fn create(
-    flavor: Flavor,
-    root: &Path,
-    name: &str,
-    minecraft: &str,
-    loader: Loader,
-    loader_version: Option<&str>,
-) -> ReadResult<String> {
+/// Minecraft and loader versions, the game folder, and the picture in Prism's icons
+/// folder. Prism downloads the game itself the first time it's played. Returns the
+/// instance's folder name.
+pub fn create(flavor: Flavor, root: &Path, new: &NewInstance) -> ReadResult<String> {
+    let loader_version = new.loader_version()?;
     let dir = instances_dir(flavor, root);
     std::fs::create_dir_all(&dir)?;
-    let base: String = name
-        .chars()
-        .map(|c| {
-            if r#"<>:"/\|?*"#.contains(c) || c.is_control() {
-                '_'
-            } else {
-                c
-            }
-        })
-        .collect::<String>()
-        .trim_matches(|c: char| c == '.' || c.is_whitespace())
-        .to_owned();
-    let base = if base.is_empty() {
-        "Atlas".to_owned()
-    } else {
-        base
-    };
-    let folder = (1..)
-        .map(|n| {
-            if n == 1 {
-                base.clone()
-            } else {
-                format!("{base} ({n})")
-            }
-        })
-        .find(|f| !dir.join(f).exists())
-        .expect("some folder name is free");
+    let folder = free_folder(&dir, &new.name);
 
     let mut components = vec![serde_json::json!({
-        "uid": "net.minecraft", "version": minecraft, "important": true
+        "uid": "net.minecraft", "version": new.minecraft, "important": true
     })];
-    let loader_uid = match loader {
+    let loader_uid = match new.loader {
         Loader::Vanilla => None,
         Loader::Fabric => Some("net.fabricmc.fabric-loader"),
         Loader::Quilt => Some("org.quiltmc.quilt-loader"),
         Loader::Forge => Some("net.minecraftforge"),
         Loader::Neoforge => Some("net.neoforged"),
     };
-    if let Some(uid) = loader_uid {
-        let version = loader_version.ok_or_else(|| {
-            ReadError::Format("the shared instance doesn't say which loader version".into())
-        })?;
-        if matches!(loader, Loader::Fabric | Loader::Quilt) {
+    if let (Some(uid), Some(version)) = (loader_uid, loader_version) {
+        if matches!(new.loader, Loader::Fabric | Loader::Quilt) {
             components.push(serde_json::json!({
-                "uid": "net.fabricmc.intermediary", "version": minecraft, "dependencyOnly": true
+                "uid": "net.fabricmc.intermediary", "version": new.minecraft, "dependencyOnly": true
             }));
         }
         components.push(serde_json::json!({ "uid": uid, "version": version }));
     }
     let pack = serde_json::json!({ "formatVersion": 1, "components": components });
+    let icon_key = match &new.icon {
+        Some(bytes) => save_icon(&root.join("icons"), bytes)?,
+        None => None,
+    };
 
     let instance = dir.join(&folder);
     std::fs::create_dir_all(instance.join("minecraft"))?;
     std::fs::write(
         instance.join("instance.cfg"),
         format!(
-            "[General]\nConfigVersion=1.2\nInstanceType=OneSix\niconKey=default\nname={name}\n"
+            "[General]\nConfigVersion=1.2\nInstanceType=OneSix\niconKey={}\nname={}\n",
+            icon_key.as_deref().unwrap_or("default"),
+            new.name.replace(['\r', '\n'], " ")
         ),
     )?;
     std::fs::write(
@@ -250,6 +223,21 @@ pub fn create(
         serde_json::to_vec_pretty(&pack)?,
     )?;
     Ok(folder)
+}
+
+/// Put a picture in Prism's icons folder, named after its contents so the same picture
+/// is saved once. Returns its icon key (the file name without extension).
+fn save_icon(icons: &Path, bytes: &[u8]) -> ReadResult<Option<String>> {
+    let Some(ext) = image_ext(bytes) else {
+        return Ok(None);
+    };
+    let key = format!("atlas-{}", &hex::encode(Sha256::digest(bytes))[..16]);
+    std::fs::create_dir_all(icons)?;
+    let file = icons.join(format!("{key}.{ext}"));
+    if !file.is_file() {
+        std::fs::write(file, bytes)?;
+    }
+    Ok(Some(key))
 }
 
 #[cfg(test)]
@@ -260,27 +248,36 @@ mod tests {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/prism")
     }
 
+    fn new_instance(loader: Loader, version: Option<&str>) -> NewInstance {
+        NewInstance {
+            name: "Friday: SMP".into(),
+            minecraft: "1.21.1".into(),
+            loader,
+            loader_version: version.map(str::to_owned),
+            icon: None,
+        }
+    }
+
     #[test]
     fn created_instances_read_back() {
-        let tmp = std::env::temp_dir().join(format!("atlas-prism-{}", std::process::id()));
+        let tmp = std::env::temp_dir().join(format!("atlas-prism-{}", crate::util::ids::new_id()));
         std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(tmp.join("prismlauncher.cfg"), "InstanceDir=instances\n").unwrap();
-        let a = create(
-            Flavor::Prism,
-            &tmp,
-            "Friday: SMP",
-            "1.21.1",
-            Loader::Fabric,
-            Some("0.16.5"),
+        std::fs::write(
+            tmp.join("prismlauncher.cfg"),
+            "InstanceDir=instances
+",
         )
         .unwrap();
+        let fabric = new_instance(Loader::Fabric, Some("0.16.5"));
+        let a = create(Flavor::Prism, &tmp, &fabric).unwrap();
+        let png = std::fs::read(fixture().join("icons/smp.png")).unwrap();
         let b = create(
             Flavor::Prism,
             &tmp,
-            "Friday: SMP",
-            "1.21.1",
-            Loader::Fabric,
-            Some("0.16.5"),
+            &NewInstance {
+                icon: Some(png.clone()),
+                ..fabric.clone()
+            },
         )
         .unwrap();
         assert_eq!((a.as_str(), b.as_str()), ("Friday_ SMP", "Friday_ SMP (2)"));
@@ -291,7 +288,32 @@ mod tests {
         assert_eq!(first.loader, Some(Loader::Fabric));
         assert_eq!(first.loader_version.as_deref(), Some("0.16.5"));
         assert!(first.game_dir.ends_with("minecraft"));
-        assert!(create(Flavor::Prism, &tmp, "x", "1.21.1", Loader::Forge, None).is_err());
+        assert_eq!(first.icon, None, "built-in default icon");
+
+        let second = found.iter().find(|f| f.launcher_instance_id == b).unwrap();
+        let icon = second
+            .icon
+            .as_deref()
+            .unwrap()
+            .strip_prefix("file:")
+            .unwrap();
+        assert!(icon.ends_with(".png"), "{icon}");
+        assert_eq!(std::fs::read(icon).unwrap(), png);
+
+        let neo = create(
+            Flavor::Prism,
+            &tmp,
+            &new_instance(Loader::Neoforge, Some("21.1.77")),
+        )
+        .unwrap();
+        let neo = list(Flavor::Prism, &tmp)
+            .unwrap()
+            .into_iter()
+            .find(|f| f.launcher_instance_id == neo)
+            .unwrap();
+        assert_eq!(neo.loader, Some(Loader::Neoforge));
+        assert_eq!(neo.loader_version.as_deref(), Some("21.1.77"));
+        assert!(create(Flavor::Prism, &tmp, &new_instance(Loader::Forge, None)).is_err());
         std::fs::remove_dir_all(&tmp).ok();
     }
 

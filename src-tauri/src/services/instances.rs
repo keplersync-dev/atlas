@@ -358,7 +358,7 @@ pub async fn rescan<R: Runtime>(
     summary_of(state, &row).await
 }
 
-/// Identify unknown files on Modrinth without holding up the scan. Sends
+/// Identify unknown files on Modrinth and CurseForge without holding up the scan. Sends
 /// `instance.changed` when names, versions or icons arrive.
 fn look_up_in_background<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) {
     let Some(api) = state.modrinth_api.clone() else {
@@ -369,7 +369,15 @@ fn look_up_in_background<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &
     }
     let (state, app, id) = (state.clone(), app.clone(), id.to_string());
     tauri::async_runtime::spawn(async move {
-        match crate::resolve::resolve_instance(&state.db, &state.http, &api, &id).await {
+        match crate::resolve::resolve_instance(
+            &state.db,
+            &state.http,
+            &api,
+            Some(&state.cloud),
+            &id,
+        )
+        .await
+        {
             Ok(0) => {}
             Ok(_) => emit(
                 &app,
@@ -381,6 +389,35 @@ fn look_up_in_background<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &
         }
         state.resolving.lock().unwrap().remove(&id);
     });
+}
+
+/// Identify unknown files now, after any lookup already running for this instance. For
+/// plans that decide what gets uploaded: a file not looked up yet would count as one.
+pub async fn look_up_now<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) {
+    let Some(api) = state.modrinth_api.clone() else {
+        return;
+    };
+    let claim = || state.resolving.lock().unwrap().insert(id.to_string());
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    while !claim() {
+        if std::time::Instant::now() > deadline {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+    match crate::resolve::resolve_instance(&state.db, &state.http, &api, Some(&state.cloud), id)
+        .await
+    {
+        Ok(0) => {}
+        Ok(_) => emit(
+            app,
+            AtlasEvent::InstanceChanged {
+                instance_id: id.to_string(),
+            },
+        ),
+        Err(e) => tracing::warn!(instance = %id, error = %e, "saving lookups failed"),
+    }
+    state.resolving.lock().unwrap().remove(id);
 }
 
 /// Rescan every tracked instance whose last scan is older than `older_than`

@@ -34,7 +34,7 @@
     {
       key: "not_added",
       label: "Not added",
-      test: (s) => !localFor(s) && s.myRole !== "owner",
+      test: (s) => !localFor(s),
     },
   ] as const satisfies readonly {
     key: typeof filter;
@@ -64,7 +64,7 @@
           all: "",
           needs: "Nothing needs you right now.",
           local: "None of your shared instances are on this PC.",
-          not_added: "You've added everything shared with you.",
+          not_added: "Every shared instance is on this PC.",
         }[filter],
   );
 
@@ -165,7 +165,7 @@
 {#snippet search()}
   <label class="relative block max-w-72 min-w-36 flex-1">
     <span
-      class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-(--text-faint)"
+      class="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2 text-(--text-faint)"
     >
       <Icon name="search" class="size-3.5" />
     </span>

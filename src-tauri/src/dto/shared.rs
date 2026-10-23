@@ -76,4 +76,10 @@ pub struct PublishPlan {
     pub removed: Vec<String>,
     pub manual_downloads: Vec<ManualDownload>,
     pub storage: Storage,
+    /// Files Modrinth or CurseForge couldn't be asked about (unreachable). They count as
+    /// uploads.
+    pub unchecked: u32,
+    /// The launcher runs other Minecraft or loader versions than the shared ones: `from`
+    /// is shared now, `to` is what this version will say. `automatic` is unused here.
+    pub versions: Option<LauncherChange>,
 }

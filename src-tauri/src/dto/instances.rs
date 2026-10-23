@@ -14,7 +14,8 @@ pub struct Launcher {
     pub name: String,
     pub root_path: String,
     pub instance_count: u32,
-    pub can_create_instances: bool,
+    /// The loaders Atlas can set up in a new instance there; empty when it can't create any.
+    pub creatable_loaders: Vec<Loader>,
     pub added_by_user: bool,
 }
 

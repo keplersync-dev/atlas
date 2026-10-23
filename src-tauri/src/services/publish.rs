@@ -59,14 +59,26 @@ fn manual_download(r: &ContentRow) -> Option<ManualDownload> {
     )
 }
 
-pub async fn prepare(state: &AppState, id: &str) -> AppResult<PublishPlan> {
+pub async fn prepare<R: Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    id: &str,
+) -> AppResult<PublishPlan> {
     let row = row(state, id).await?;
     if row.shared_instance_id.is_some() && row.role() == Some(MemberRole::Viewer) {
         return Err(AppError::forbidden(
             "Only the owner and editors can publish",
         ));
     }
+    // Read the folder now, after any scan already running: a just-tracked instance may
+    // not have been scanned yet, and the plan must match what's on disk.
+    super::instances::rescan(state, app, id).await?;
+    // Files not looked up yet would all count as uploads.
+    super::instances::look_up_now(state, app, id).await;
     let rows = db::content::list(&state.db, id).await?;
+    let unchecked = live(&rows)
+        .filter(|r| r.source == "local" && r.resolved_at.is_none())
+        .count() as u32;
     let to_check: Vec<String> = live(&rows)
         .filter(|r| is_upload(r))
         .map(|r| r.sha256.clone())
@@ -136,6 +148,10 @@ pub async fn prepare(state: &AppState, id: &str) -> AppResult<PublishPlan> {
             .filter_map(manual_download)
             .collect(),
         storage,
+        unchecked,
+        versions: row
+            .synced_manifest()
+            .and_then(|m| crate::sync::state::version_change(&row, &m)),
     })
 }
 
@@ -247,27 +263,10 @@ async fn send_files(
     let uploads: Vec<&ContentRow> = live(rows)
         .filter(|r| modes.get(&r.id) != Some(&ShareMode::Private) && is_upload(r))
         .collect();
-    if !uploads.is_empty() && !confirmed_rights {
-        return Err(AppError::invalid_input(
-            "Confirm you have the right to share the files being uploaded",
-        ));
-    }
     let storage: Storage = state
         .cloud
         .call(Method::GET, "/me/storage", None::<&()>)
         .await?;
-    if let Some(big) = uploads
-        .iter()
-        .find(|r| r.size_bytes.max(0) as u64 > storage.max_file_bytes)
-    {
-        return Err(AppError::new(
-            crate::error::ErrorCode::QuotaExceeded,
-            format!(
-                "{} is larger than the per-file limit. Set it to Only me.",
-                big.name
-            ),
-        ));
-    }
     let configs = collect_configs(state, row).await?;
 
     let game = PathBuf::from(&row.game_dir);
@@ -295,6 +294,29 @@ async fn send_files(
         .await?
         .into_iter()
         .collect();
+    // Files uploaded for an earlier version were confirmed then; only new ones need it,
+    // the same rule the dialog uses.
+    let new_uploads: Vec<&&ContentRow> = uploads
+        .iter()
+        .filter(|r| !stored.contains(&r.sha256))
+        .collect();
+    if !new_uploads.is_empty() && !confirmed_rights {
+        return Err(AppError::invalid_input(
+            "Confirm you have the right to share the files being uploaded",
+        ));
+    }
+    if let Some(big) = new_uploads
+        .iter()
+        .find(|r| r.size_bytes.max(0) as u64 > storage.max_file_bytes)
+    {
+        return Err(AppError::new(
+            crate::error::ErrorCode::QuotaExceeded,
+            format!(
+                "{} is larger than the per-file limit. Set it to Only me.",
+                big.name
+            ),
+        ));
+    }
     wanted.retain(|w| !stored.contains(&w.1));
     let new_bytes: u64 = wanted.iter().map(|w| w.2).sum();
     if storage.used_bytes + new_bytes > storage.quota_bytes {

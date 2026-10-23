@@ -2,7 +2,7 @@
   import type { Snippet } from "svelte";
   import type { HTMLButtonAttributes } from "svelte/elements";
 
-  type Variant = "default" | "primary" | "warn" | "ghost";
+  type Variant = "default" | "primary" | "warn" | "danger" | "ghost";
 
   // `children` is whatever is written between <Button> and </Button>.
   // `...rest` collects every other attribute (onclick, disabled, aria-label…)
@@ -26,6 +26,8 @@
     primary:
       "border-(--accent) bg-(--accent) font-semibold text-(--accent-ink) hover:border-[#a6e5f3] hover:bg-[#a6e5f3]",
     warn: "border-(--warn) bg-(--warn) font-semibold text-[#2e1f05] hover:bg-[#f2c983]",
+    danger:
+      "border-(--danger) bg-(--danger) font-semibold text-[#2b0a0d] hover:border-[#f4959a] hover:bg-[#f4959a]",
     ghost:
       "border-transparent bg-transparent text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)",
   };

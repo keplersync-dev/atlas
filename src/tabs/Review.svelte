@@ -279,7 +279,8 @@
     {#if changes.added.length}
       <section class="mb-5">
         {@render group("Added", changes.added.length)}
-        {#each changes.added as name (name)}{@render row(
+        <!-- Unkeyed: names aren't unique (two files can share one). -->
+        {#each changes.added as name}{@render row(
             "+",
             "text-(--online)",
             name,
@@ -290,7 +291,7 @@
     {#if changes.updated.length}
       <section class="mb-5">
         {@render group("Updated", changes.updated.length)}
-        {#each changes.updated as u (u.name)}{@render row(
+        {#each changes.updated as u}{@render row(
             "↑",
             "text-(--accent)",
             u.name,
@@ -301,7 +302,7 @@
     {#if changes.removed.length}
       <section class="mb-5">
         {@render group("Removed", changes.removed.length)}
-        {#each changes.removed as name (name)}{@render row(
+        {#each changes.removed as name}{@render row(
             "−",
             "text-(--danger)",
             name,

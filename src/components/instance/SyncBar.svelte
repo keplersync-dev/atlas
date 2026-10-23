@@ -46,7 +46,9 @@
     <span class="ico"><Icon name={icon} class="size-4.5" /></span>
     <div class="min-w-0 flex-1">
       <b class="font-semibold">{title}</b>
-      <small class="block text-xs text-(--text-muted)">{detail}</small>
+      <small class="block text-xs text-(--text-muted) select-text"
+        >{detail}</small
+      >
     </div>
     {#if tone === "warn" && (s?.state === "update_available" || s?.state === "conflict")}
       <Button variant="warn" disabled={busy} onclick={onupdate}

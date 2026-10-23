@@ -1,7 +1,7 @@
 //! Small parsers shared by the adapters.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, NaiveDateTime, Utc};
 
@@ -16,6 +16,69 @@ pub fn env_dir(var: &str) -> Option<PathBuf> {
 /// The first of these paths that exists.
 pub fn first_existing(paths: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
     paths.into_iter().find(|p| p.exists())
+}
+
+/// Is a program with one of these exe names (lowercase) running?
+pub fn any_running(exes: &[&str]) -> bool {
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+    let mut system = System::new();
+    system.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
+    system
+        .processes()
+        .values()
+        .any(|p| exes.contains(&p.name().to_string_lossy().to_lowercase().as_str()))
+}
+
+/// A folder name for a new instance in `dir`: the name with the characters Windows
+/// forbids replaced, and " (2)", " (3)", ... added when it's taken.
+pub fn free_folder(dir: &Path, name: &str) -> String {
+    let base = file_stem(name);
+    (1..)
+        .map(|n| {
+            if n == 1 {
+                base.clone()
+            } else {
+                format!("{base} ({n})")
+            }
+        })
+        .find(|f| !dir.join(f).exists())
+        .expect("some folder name is free")
+}
+
+/// The name, usable as a Windows file or folder name.
+pub fn file_stem(name: &str) -> String {
+    let safe: String = name
+        .chars()
+        .map(|c| {
+            if r#"<>:"/\|?*"#.contains(c) || c.is_control() {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect::<String>()
+        .trim_matches(|c: char| c == '.' || c.is_whitespace())
+        .to_owned();
+    if safe.is_empty() {
+        "Atlas".to_owned()
+    } else {
+        safe
+    }
+}
+
+/// "png", "jpg", "gif" or "webp", from the file's first bytes.
+pub fn image_ext(bytes: &[u8]) -> Option<&'static str> {
+    if bytes.starts_with(b"\x89PNG") {
+        Some("png")
+    } else if bytes.starts_with(&[0xFF, 0xD8, 0xFF]) {
+        Some("jpg")
+    } else if bytes.starts_with(b"GIF8") {
+        Some("gif")
+    } else if bytes.len() > 12 && &bytes[8..12] == b"WEBP" {
+        Some("webp")
+    } else {
+        None
+    }
 }
 
 /// Minimal INI reader for Qt-style files (Prism's instance.cfg, prismlauncher.cfg):

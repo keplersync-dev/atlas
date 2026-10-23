@@ -1,10 +1,15 @@
 <script lang="ts">
   import { api } from "$lib/api";
   import { back, forgetInstance, go, nav } from "$lib/nav.svelte";
+  import {
+    chooseAction,
+    confirmAction,
+    type Choice,
+  } from "$lib/confirm.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
   import { plural, versionLabel } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
-  import { instances } from "$lib/stores";
+  import { instances, social } from "$lib/stores";
   import type { Id } from "$lib/types";
   import ContentIcon from "../components/ContentIcon.svelte";
   import Button from "../components/Button.svelte";
@@ -85,15 +90,70 @@
     }
   }
 
+  /** The shared instance this is linked to, if any (dev-folder links aren't on the server). */
+  const sharedId = $derived(
+    summary?.sync && !summary.sync.sharedInstanceId.startsWith("dev:")
+      ? summary.sync.sharedInstanceId
+      : null,
+  );
+
+  const stopTracking = { confirmLabel: "Stop tracking", danger: true };
+
   async function untrack() {
     if (!summary) return;
-    if (
-      !confirm(
-        `Stop tracking ${summary.name}? Its folder in ${summary.launcher.name} isn't touched.`,
+    const forget = `Atlas forgets it and deletes its backups. The instance in ${summary.launcher.name} isn't touched.`;
+    let choice: Choice | null;
+    if (!sharedId) {
+      choice = await chooseAction({
+        ...stopTracking,
+        title: `Stop tracking ${summary.name}?`,
+        message: `${forget} You can track it again later.`,
+      });
+    } else if (summary.sync?.role === "owner") {
+      // Stopping tracking here never ends the sharing: you may have it on another PC.
+      const shared = social.shared.find((s) => s.id === sharedId);
+      const people =
+        shared?.members.filter(
+          (m) => m.role !== "owner" && m.status === "active",
+        ).length ?? 0;
+      choice = await chooseAction({
+        ...stopTracking,
+        title: `Stop tracking ${summary.name}?`,
+        message: `${forget} It stays shared${people ? ` with ${plural(people, "person", "people")}` : ""}, and you can add it back from Shared to publish again.`,
+        alternativeLabel: "Stop sharing too",
+      });
+      if (
+        choice === "alternative" &&
+        !(await confirmAction({
+          title: `Stop sharing ${summary.name}?`,
+          message:
+            "Nobody gets updates anymore. Everyone keeps their copy as a normal instance.",
+          confirmLabel: "Stop sharing",
+          danger: true,
+        }))
       )
-    )
+        return;
+    } else {
+      choice = await chooseAction({
+        ...stopTracking,
+        title: `Stop tracking ${summary.name}?`,
+        message: `${forget} You're still in it, so you can add it back from Shared.`,
+        alternativeLabel: "Leave too",
+      });
+    }
+    if (!choice) return;
+    try {
+      if (choice === "alternative" && sharedId)
+        await (summary.sync?.role === "owner"
+          ? api.archiveSharedInstance(sharedId)
+          : api.leaveSharedInstance(sharedId));
+      await api.untrackInstance(id);
+    } catch (e) {
+      error = (e as Error).message;
+      await instances.load();
       return;
-    await api.untrackInstance(id);
+    }
+    await social.load();
     await instances.load();
     // This page no longer exists: remove it from history and leave without remembering it.
     forgetInstance(id);
@@ -125,8 +185,16 @@
             {
               label: "Leave shared instance",
               danger: true,
-              onselect: () =>
-                run(() => api.leaveSharedInstance(s.sharedInstanceId)),
+              onselect: async () => {
+                const ok = await confirmAction({
+                  title: `Leave ${summary.name}?`,
+                  message:
+                    "You stop getting its updates. The instance and its files stay here as they are.",
+                  confirmLabel: "Leave",
+                  danger: true,
+                });
+                if (ok) run(() => api.leaveSharedInstance(s.sharedInstanceId));
+              },
             },
           ]
         : []),
@@ -135,8 +203,17 @@
             {
               label: "Stop sharing",
               danger: true,
-              onselect: () =>
-                run(() => api.archiveSharedInstance(s.sharedInstanceId)),
+              onselect: async () => {
+                const ok = await confirmAction({
+                  title: `Stop sharing ${summary.name}?`,
+                  message:
+                    "Nobody gets updates anymore, you included. Everyone keeps their copy as a normal instance.",
+                  confirmLabel: "Stop sharing",
+                  danger: true,
+                });
+                if (ok)
+                  run(() => api.archiveSharedInstance(s.sharedInstanceId));
+              },
             },
           ]
         : []),
@@ -268,7 +345,15 @@
     instance={summary}
     {busy}
     onupdate={() => go({ page: "review", id })}
-    onrevert={() => run(() => api.revertLocalChanges(id))}
+    onrevert={async () => {
+      const ok = await confirmAction({
+        title: "Revert your changes?",
+        message:
+          "Files you added, removed or changed go back to the shared version. Atlas backs up the current files first, so you can restore them from History.",
+        confirmLabel: "Revert",
+      });
+      if (ok) run(() => api.revertLocalChanges(id));
+    }}
     onuntrack={untrack}
   />
 

@@ -1,8 +1,9 @@
 <script lang="ts">
   import { api } from "$lib/api";
+  import { confirmAction } from "$lib/confirm.svelte";
   import { fileSize, plural, timeAgo } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
-  import type { Backup, InstanceDetail } from "$lib/types";
+  import type { Backup, InstanceDetail, RevisionChanges } from "$lib/types";
   import Button from "../Button.svelte";
 
   let {
@@ -24,6 +25,31 @@
   let restoring = $state<string | null>(null);
   let error = $state<string | null>(null);
 
+  /** A version's changes as one list: what was added, updated, removed. */
+  function chips(changes: RevisionChanges) {
+    return [
+      ...changes.added.map((name) => ({
+        sign: "+",
+        cls: "text-(--online)",
+        text: name,
+      })),
+      ...changes.updated.map((u) => ({
+        sign: "↑",
+        cls: "text-(--accent)",
+        text: `${u.name} ${u.to}`,
+      })),
+      ...changes.removed.map((name) => ({
+        sign: "−",
+        cls: "text-(--danger)",
+        text: name,
+      })),
+    ];
+  }
+
+  // A first version lists every file, which can be hundreds: show a few until asked.
+  const SHOWN = 12;
+  let expanded = $state<number[]>([]);
+
   function backupLabel(b: Backup) {
     const versions =
       b.fromRevision != null && b.toRevision != null
@@ -35,12 +61,12 @@
   }
 
   async function restore(b: Backup) {
-    if (
-      !confirm(
-        `Restore the files from “${backupLabel(b)}”? Atlas backs up the current files first.`,
-      )
-    )
-      return;
+    const ok = await confirmAction({
+      title: "Restore this backup?",
+      message: `The files go back to how they were “${backupLabel(b).toLowerCase()}”. Atlas backs up the current files first, so you can undo this.`,
+      confirmLabel: "Restore",
+    });
+    if (!ok) return;
     restoring = b.id;
     error = null;
     try {
@@ -66,6 +92,8 @@
     <ol>
       {#each shared.data.revisions as rev, i (rev.revision)}
         {@const current = rev.revision === instance.sync?.syncedRevision}
+        {@const all = chips(rev.changes)}
+        {@const open = expanded.includes(rev.revision)}
         <li class="relative grid grid-cols-[56px_minmax(0,1fr)] gap-3.5 pb-5.5">
           <!-- the vertical line joining versions; not after the last one -->
           {#if i < shared.data.revisions.length - 1}
@@ -90,21 +118,24 @@
             <div
               class="mt-1.5 flex flex-wrap gap-1.5 text-[11.5px] text-(--text-muted)"
             >
-              {#each rev.changes.added as name (name)}
+              <!-- Unkeyed: names aren't unique (two files can share one). -->
+              {#each open ? all : all.slice(0, SHOWN) as c}
                 <span class="rounded bg-(--bg-raise) px-2 py-0.5"
-                  ><span class="text-(--online)">+</span> {name}</span
+                  ><span class={c.cls}>{c.sign}</span> {c.text}</span
                 >
               {/each}
-              {#each rev.changes.updated as u (u.name)}
-                <span class="rounded bg-(--bg-raise) px-2 py-0.5"
-                  ><span class="text-(--accent)">↑</span> {u.name} {u.to}</span
+              {#if all.length > SHOWN}
+                <button
+                  type="button"
+                  class="rounded px-2 py-0.5 font-medium text-(--accent) hover:bg-(--bg-hover)"
+                  onclick={() =>
+                    (expanded = open
+                      ? expanded.filter((r) => r !== rev.revision)
+                      : [...expanded, rev.revision])}
                 >
-              {/each}
-              {#each rev.changes.removed as name (name)}
-                <span class="rounded bg-(--bg-raise) px-2 py-0.5"
-                  ><span class="text-(--danger)">−</span> {name}</span
-                >
-              {/each}
+                  {open ? "Show less" : `+${all.length - SHOWN} more`}
+                </button>
+              {/if}
             </div>
           </div>
         </li>

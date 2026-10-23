@@ -5,13 +5,21 @@
 //! "forge-47.4.0", "fabric-0.16.5"), lastPlayed ("0001-01-01T00:00:00" = never),
 //! profileImagePath (a custom picture, usually null), installedModpack.thumbnailUrl.
 //! Checked against CurseForge on Windows, 2026. Files may start with a UTF-8 BOM.
+//!
+//! New instances: a folder with a minecraftinstance.json shaped like the ones CurseForge
+//! writes for a custom profile. `baseModLoader` is CurseForge's own install data for the
+//! loader (from its API, through the Atlas server, which holds the key); CurseForge
+//! installs the loader from it on first play.
 
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
+use serde_json::{Map, Value, json};
 
-use super::util::{env_dir, first_existing, loader_from, parse_time};
-use super::{FoundInstance, ReadResult};
+use super::util::{
+    any_running, env_dir, first_existing, free_folder, image_ext, loader_from, parse_time,
+};
+use super::{FoundInstance, NewInstance, ReadError, ReadResult};
 use crate::dto::Loader;
 
 pub fn default_roots() -> Vec<PathBuf> {
@@ -118,7 +126,7 @@ fn read_instance(file: &Path) -> ReadResult<Read> {
     let loader = i
         .base_mod_loader
         .and_then(|b| b.name)
-        .and_then(|n| parse_loader(&n));
+        .and_then(|n| parse_loader(&n, i.game_version.as_deref()));
     // A picture the user set wins; otherwise the modpack's thumbnail from CurseForge.
     let custom = i
         .profile_image_path
@@ -137,11 +145,142 @@ fn read_instance(file: &Path) -> ReadResult<Read> {
     })
 }
 
-/// "neoforge-21.1.250" → (NeoForge, "21.1.250").
-fn parse_loader(name: &str) -> Option<(Loader, Option<String>)> {
+/// "neoforge-21.1.250" → (NeoForge, "21.1.250"). Fabric's names end in the Minecraft
+/// version: "fabric-0.16.5-1.21.1" → (Fabric, "0.16.5").
+fn parse_loader(name: &str, minecraft: Option<&str>) -> Option<(Loader, Option<String>)> {
     let (kind, version) = name.split_once('-').unwrap_or((name, ""));
     let loader = loader_from(kind)?;
+    let version = minecraft
+        .and_then(|mc| version.strip_suffix(mc)?.strip_suffix('-'))
+        .unwrap_or(version);
     Some((loader, (!version.is_empty()).then(|| version.to_string())))
+}
+
+/// Is the CurseForge app open? It may not notice an instance folder added meanwhile.
+pub fn running() -> bool {
+    any_running(&["curseforge.exe"])
+}
+
+/// The parts of CurseForge's loader data that it keeps in `baseModLoader`.
+const LOADER_FIELDS: [&str; 12] = [
+    "forgeVersion",
+    "name",
+    "type",
+    "downloadUrl",
+    "filename",
+    "installMethod",
+    "latest",
+    "recommended",
+    "versionJson",
+    "librariesInstallLocation",
+    "minecraftVersion",
+    "installProfileJson",
+];
+
+/// Create an empty instance for a shared one. `loader_data` is CurseForge's data for the
+/// loader version (None for vanilla). Returns the instance's folder name.
+pub fn create(root: &Path, new: &NewInstance, loader_data: Option<Value>) -> ReadResult<String> {
+    let base_mod_loader = match (new.loader, loader_data) {
+        (Loader::Vanilla, _) => Value::Null,
+        (_, Some(Value::Object(data))) => {
+            let kept: Map<String, Value> = LOADER_FIELDS
+                .iter()
+                .filter_map(|&k| Some((k.to_owned(), data.get(k)?.clone())))
+                .collect();
+            if kept.get("versionJson").and_then(Value::as_str).is_none() {
+                return Err(ReadError::Format(
+                    "CurseForge's loader data has no version file".into(),
+                ));
+            }
+            Value::Object(kept)
+        }
+        _ => {
+            return Err(ReadError::Format(
+                "no CurseForge loader data for a modded instance".into(),
+            ));
+        }
+    };
+
+    let instances = root.join("Instances");
+    std::fs::create_dir_all(&instances)?;
+    let folder = free_folder(&instances, &new.name);
+    let dir = instances.join(&folder);
+    std::fs::create_dir_all(&dir)?;
+
+    // The picture goes in the instance folder; CurseForge shows it as the profile image.
+    let image = match new.icon.as_deref().and_then(|b| Some((b, image_ext(b)?))) {
+        Some((bytes, ext)) => {
+            let file = dir.join(format!("atlas-icon.{ext}"));
+            std::fs::write(&file, bytes)?;
+            Value::String(file.to_string_lossy().into_owned())
+        }
+        None => Value::Null,
+    };
+    const NEVER: &str = "0001-01-01T00:00:00";
+    // Two halves: one json! this long goes past the macro recursion limit.
+    let mut instance = json!({
+        "baseModLoader": base_mod_loader,
+        "isUnlocked": true,
+        "javaArgsOverride": null,
+        "lastPlayed": NEVER,
+        "playedCount": 0,
+        "timePlayed": 0,
+        "manifest": null,
+        "fileDate": NEVER,
+        "installedModpack": null,
+        "projectID": 0,
+        "fileID": 0,
+        "customAuthor": null,
+        "modpackOverrides": [],
+        "isMemoryOverride": false,
+        "allocatedMemory": 0,
+        "profileImagePath": image,
+        "groupId": null,
+        "isVanilla": new.loader == Loader::Vanilla,
+        "guid": uuid::Uuid::now_v7().to_string(),
+        "gameTypeID": 432,
+        "installPath": format!("{}\\", dir.display()),
+        "name": new.name,
+    });
+    let rest = json!({
+        "cachedScans": [],
+        "isValid": true,
+        "lastPreviousMatchUpdate": NEVER,
+        "lastRefreshAttempt": NEVER,
+        "isEnabled": true,
+        "gameVersion": new.minecraft,
+        "gameVersionFlavor": null,
+        "gameVersionTypeId": null,
+        "preferenceAlternateFile": false,
+        "preferenceAutoInstallUpdates": false,
+        "preferenceDeleteOrphanedDependencies": false,
+        "preferenceDeleteSavedVariables": false,
+        "preferenceReleaseType": 1,
+        "preferenceModdingFolderPath": null,
+        "syncProfile": {
+            "PreferenceEnabled": false,
+            "PreferenceAutoSync": true,
+            "PreferenceAutoDelete": false,
+            "PreferenceBackupSavedVariables": false,
+            "GameInstanceGuid": "00000000-0000-0000-0000-000000000000",
+            "SyncProfileID": 0,
+            "SavedVariablesProfile": null,
+            "LastSyncDate": NEVER
+        },
+        "installDate": crate::util::time::iso(chrono::Utc::now()),
+        "installedAddons": [],
+        "installedGamePrerequisites": [],
+        "wasNameManuallyChanged": false,
+        "wasGameVersionTypeIdManuallyChanged": false,
+    });
+    if let (Value::Object(all), Value::Object(rest)) = (&mut instance, rest) {
+        all.extend(rest);
+    }
+    let file = dir.join("minecraftinstance.json");
+    let tmp = dir.join("minecraftinstance.json.atlas");
+    std::fs::write(&tmp, serde_json::to_vec_pretty(&instance)?)?;
+    std::fs::rename(&tmp, &file)?;
+    Ok(folder)
 }
 
 #[cfg(test)]
@@ -194,13 +333,115 @@ mod tests {
     #[test]
     fn loader_names() {
         assert_eq!(
-            parse_loader("fabric-0.16.5"),
+            parse_loader("fabric-0.16.5", Some("1.21.1")),
             Some((Loader::Fabric, Some("0.16.5".into())))
         );
         assert_eq!(
-            parse_loader("quilt-0.26.0"),
+            parse_loader("fabric-0.16.5-1.21.1", Some("1.21.1")),
+            Some((Loader::Fabric, Some("0.16.5".into())))
+        );
+        assert_eq!(
+            parse_loader("quilt-0.26.0", None),
             Some((Loader::Quilt, Some("0.26.0".into())))
         );
-        assert_eq!(parse_loader("weird-1.0"), None);
+        assert_eq!(parse_loader("weird-1.0", None), None);
+    }
+
+    /// Makes "Atlas test" (vanilla 1.21.1) in this PC's CurseForge, to check CurseForge
+    /// takes it up. Opt-in, and close CurseForge first:
+    /// `cargo test --lib real_curseforge_instance -- --ignored`
+    #[test]
+    #[ignore]
+    fn real_curseforge_instance() {
+        let root = default_roots().into_iter().find(|r| is_root(r)).unwrap();
+        assert!(!running(), "close CurseForge first");
+        let new = NewInstance {
+            name: "Atlas test".into(),
+            minecraft: "1.21.1".into(),
+            loader: Loader::Vanilla,
+            loader_version: None,
+            icon: None,
+        };
+        let folder = create(&root, &new, None).unwrap();
+        println!("created {}", root.join("Instances").join(folder).display());
+    }
+
+    #[test]
+    fn created_instances_read_back() {
+        let root = std::env::temp_dir().join(format!("atlas-cf-{}", crate::util::ids::new_id()));
+        std::fs::create_dir_all(root.join("Install")).unwrap();
+        let png = std::fs::read(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/prism/icons/smp.png"),
+        )
+        .unwrap();
+        let neoforge = NewInstance {
+            name: "Friday: SMP".into(),
+            minecraft: "1.21.1".into(),
+            loader: Loader::Neoforge,
+            loader_version: Some("21.1.250".into()),
+            icon: Some(png.clone()),
+        };
+        // What the server passes on from CurseForge, with fields it doesn't keep.
+        let data = json!({
+            "id": 12345, "gameVersionId": 7, "approved": true,
+            "forgeVersion": "21.1.250", "name": "neoforge-21.1.250", "type": 6,
+            "downloadUrl": "", "filename": "neoforge-21.1.250.jar", "installMethod": 6,
+            "latest": false, "recommended": false, "versionJson": "{\"id\":\"neoforge-21.1.250\"}",
+            "librariesInstallLocation": "{0}//libraries//net//neoforged//neoforge//21.1.250",
+            "minecraftVersion": "1.21.1", "installProfileJson": "{\"spec\":1}"
+        });
+        let a = create(&root, &neoforge, Some(data.clone())).unwrap();
+        let b = create(
+            &root,
+            &NewInstance {
+                loader: Loader::Vanilla,
+                loader_version: None,
+                icon: None,
+                ..neoforge.clone()
+            },
+            None,
+        )
+        .unwrap();
+        assert_eq!((a.as_str(), b.as_str()), ("Friday_ SMP", "Friday_ SMP (2)"));
+        assert!(
+            create(&root, &neoforge, None).is_err(),
+            "modded needs the data"
+        );
+
+        let found = list(&root).unwrap();
+        let first = found.iter().find(|f| f.launcher_instance_id == a).unwrap();
+        assert_eq!(first.name, "Friday: SMP");
+        assert_eq!(first.game_dir, root.join("Instances").join(&a));
+        assert_eq!(first.minecraft_version.as_deref(), Some("1.21.1"));
+        assert_eq!(first.loader, Some(Loader::Neoforge));
+        assert_eq!(first.loader_version.as_deref(), Some("21.1.250"));
+        assert_eq!(first.last_played_at, None);
+        let icon = first
+            .icon
+            .as_deref()
+            .unwrap()
+            .strip_prefix("file:")
+            .unwrap();
+        assert_eq!(std::fs::read(icon).unwrap(), png);
+        let second = found.iter().find(|f| f.launcher_instance_id == b).unwrap();
+        assert_eq!(second.loader, Some(Loader::Vanilla));
+
+        // Only the fields CurseForge keeps itself, as it writes them.
+        let written: Value = serde_json::from_str(
+            &std::fs::read_to_string(
+                root.join("Instances")
+                    .join(&a)
+                    .join("minecraftinstance.json"),
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let base = written["baseModLoader"].as_object().unwrap();
+        assert_eq!(base.len(), LOADER_FIELDS.len());
+        assert!(base.get("id").is_none());
+        assert_eq!(base["installMethod"], 6);
+        assert_eq!(written["isVanilla"], false);
+        assert!(written["installPath"].as_str().unwrap().ends_with('\\'));
+        std::fs::remove_dir_all(&root).ok();
     }
 }

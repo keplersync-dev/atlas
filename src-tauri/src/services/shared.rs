@@ -335,13 +335,7 @@ async fn show_icons(state: &AppState, list: &mut [SharedInstance]) {
     let online = state.cloud.is_online();
     let wanted: Vec<Option<String>> = list
         .iter()
-        .map(|s| {
-            s.icon
-                .as_deref()
-                .and_then(|i| i.strip_prefix("sha256:"))
-                .filter(|sha| sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
-                .map(str::to_owned)
-        })
+        .map(|s| icon_sha256(s).map(str::to_owned))
         .collect();
     let found = futures_util::future::join_all(list.iter().zip(&wanted).map(|(s, sha)| async {
         let sha = sha.as_deref()?;
@@ -359,6 +353,27 @@ async fn show_icons(state: &AppState, list: &mut [SharedInstance]) {
     for (s, icon) in list.iter_mut().zip(found) {
         s.icon = icon;
     }
+}
+
+/// The picture's sha256, as the server sends it: "sha256:<hex>".
+fn icon_sha256(s: &SharedInstance) -> Option<&str> {
+    s.icon
+        .as_deref()
+        .and_then(|i| i.strip_prefix("sha256:"))
+        .filter(|sha| sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
+}
+
+/// The picture of a shared instance as the server sends it, from the icon cache (fetched
+/// first if needed). None when it has none or it can't be fetched.
+pub async fn icon_bytes(state: &AppState, shared: &SharedInstance) -> Option<Vec<u8>> {
+    let sha = icon_sha256(shared)?;
+    let file = crate::scan::icons::shared_icon_file(&state.paths.icons, sha);
+    if !file.is_file()
+        && let Err(e) = fetch_icon(state, &shared.id, sha, &file).await
+    {
+        tracing::info!(shared = %shared.id, error = %e, "couldn't fetch a shared picture");
+    }
+    tokio::fs::read(&file).await.ok()
 }
 
 async fn fetch_icon(state: &AppState, shared: &str, sha256: &str, file: &Path) -> AppResult<()> {

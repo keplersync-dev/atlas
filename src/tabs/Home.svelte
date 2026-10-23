@@ -16,6 +16,7 @@
     needsAttention,
   } from "../components/InstanceCard.svelte";
   import InviteCard from "../components/InviteCard.svelte";
+  import Select from "../components/Select.svelte";
 
   const FILTERS = [
     { key: "all", label: "All", test: () => true },
@@ -96,7 +97,7 @@
         <!-- The search box gives up width first, so the row fits beside the friends column. -->
         <label class="relative block max-w-64 min-w-36 flex-1">
           <span
-            class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-(--text-faint)"
+            class="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2 text-(--text-faint)"
           >
             <Icon name="search" class="size-3.5" />
           </span>
@@ -128,15 +129,15 @@
           {/each}
         </div>
         <div class="ml-auto flex items-center gap-2">
-          <select
+          <Select
             bind:value={sort}
-            aria-label="Sort"
-            class="h-8 rounded-md border border-(--line-2) bg-(--bg-raise) px-2 text-[12.5px] text-(--text-muted) focus:border-(--accent) focus:outline-none"
-          >
-            <option value="played">Last played</option>
-            <option value="name">Name</option>
-            <option value="added">Recently added</option>
-          </select>
+            label="Sort"
+            options={[
+              { value: "played", label: "Last played" },
+              { value: "name", label: "Name" },
+              { value: "added", label: "Recently added" },
+            ]}
+          />
           <Button
             variant="primary"
             class="gap-1.5"

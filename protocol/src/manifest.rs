@@ -261,7 +261,8 @@ fn is_hex(s: &str, len: usize) -> bool {
     s.len() == len && s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
-fn allowed_download(url: &str) -> bool {
+/// A download link a manifest may carry: https on Modrinth's or CurseForge's CDN.
+pub fn allowed_download(url: &str) -> bool {
     let Some(rest) = url.strip_prefix("https://") else {
         return false;
     };

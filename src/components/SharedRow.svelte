@@ -17,6 +17,13 @@
   export const localFor = (s: SharedInstance): InstanceSummary | undefined =>
     s.localInstanceId ? instances.byId(s.localInstanceId) : undefined;
 
+  /** Install it on this PC: a new invite, or one you have but stopped tracking here. */
+  const add = (s: SharedInstance): RowState["action"] => ({
+    label: "Add",
+    variant: "primary",
+    run: () => openDialog({ kind: "accept", sharedInstanceId: s.id }),
+  });
+
   /** One plain-language line per instance, plus a button only when there's something to do. */
   export function rowState(s: SharedInstance): RowState {
     const local = localFor(s);
@@ -47,25 +54,23 @@
       if (behind) parts.push(`${behind} not updated yet`);
       else if (active.length) parts.push("everyone up to date");
       if (invited) parts.push(`${invited} invited`);
+      if (!local) return { tone: "muted", text: "Not on this PC", action: add(s) };
       return { tone: "muted", text: parts.join(" · ") };
     }
     if (s.myStatus === "invited")
       return {
         tone: "accent",
         text: `New${s.myViaGroup ? ` · to ${s.myViaGroup.name}` : ""} · ${timeAgo(s.invitedAt)}`,
-        action: {
-          label: "Add",
-          variant: "primary",
-          run: () => openDialog({ kind: "accept", sharedInstanceId: s.id }),
-        },
+        action: add(s),
         attention: "new",
       };
     if (s.frozen)
       return {
         tone: "muted",
         text: "Frozen · the owner left, no more updates",
+        action: local ? undefined : add(s),
       };
-    if (!local) return { tone: "muted", text: "Not on this PC" };
+    if (!local) return { tone: "muted", text: "Not on this PC", action: add(s) };
     if (local.isRunning) return { tone: "online", text: "Playing now" };
     if (local.sync?.state === "update_available")
       return {
@@ -167,16 +172,12 @@
 <div
   class="flex items-center gap-3.5 px-4 py-2.5 not-last:border-b not-last:border-(--line)"
 >
-  <!-- Click: open it if it's on this PC, or start adding it if it's a new invite.
-       Otherwise there's nothing to open, so it's plain text (not a disabled button,
-       which would look faded). -->
-  <svelte:element
-    this={local || invited ? "button" : "div"}
-    role={local || invited ? undefined : "presentation"}
+  <!-- Click: open it if it's on this PC, otherwise start adding it. -->
+  <button
     onclick={() =>
       local
         ? go({ page: "instance", id: local.id })
-        : invited && openDialog({ kind: "accept", sharedInstanceId: s.id })}
+        : openDialog({ kind: "accept", sharedInstanceId: s.id })}
     class="flex min-w-0 flex-1 items-center gap-3.5 rounded-md text-left"
   >
     <ContentIcon
@@ -201,7 +202,7 @@
         {#if s.description}· {s.description}{/if}
       </small>
     </span>
-  </svelte:element>
+  </button>
 
   <span class="flex shrink-0 flex-col items-end">
     <span class="flex items-center gap-1.5 text-xs {TONE[st.tone]}">

@@ -46,7 +46,10 @@ impl AppError {
         Self::new(ErrorCode::Forbidden, m)
     }
     pub fn offline() -> Self {
-        Self::new(ErrorCode::Offline, "You're offline")
+        Self::new(
+            ErrorCode::Offline,
+            "Can't reach the Atlas server right now. Try again in a little while.",
+        )
     }
     pub fn conflict(m: impl Into<String>) -> Self {
         Self::new(ErrorCode::Conflict, m)

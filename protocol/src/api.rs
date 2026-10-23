@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::enums::{
     ActivityType, AuthProvider, ContentKind, GroupMemberRole, GroupRole, InviteRole, Loader,
-    MemberRole, MemberStatus, PresenceState, RequestDirection,
+    MemberRole, MemberStatus, PresenceState, RequestDirection, Side,
 };
 use crate::manifest::Manifest;
 use crate::{Id, IsoDate};
@@ -475,6 +475,44 @@ pub struct UploadTicket {
 #[serde(rename_all = "camelCase")]
 pub struct UploadDone {
     pub sha256: String,
+}
+
+// ── CurseForge ─────────────────────────────────────────────────────────
+
+/// `POST /curseforge/fingerprints`: look files up by CurseForge fingerprint (murmur2).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurseForgeLookup {
+    pub fingerprints: Vec<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurseForgeLookupResult {
+    pub files: Vec<CurseForgeFile>,
+}
+
+/// A file CurseForge knows by its fingerprint. Fingerprints are 32-bit, so check `sha1`
+/// before trusting a match.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurseForgeFile {
+    pub fingerprint: u32,
+    pub project_id: String,
+    pub file_id: String,
+    /// The project's name: "Just Enough Items (JEI)"
+    pub name: String,
+    /// The file's display name, often its file name: "jei-1.21.1-neoforge-19.21.0.247.jar"
+    pub version_label: String,
+    pub sha1: Option<String>,
+    pub author: Option<String>,
+    pub icon_url: Option<String>,
+    /// None when the author turned off downloads outside CurseForge: members download it
+    /// from `page_url` themselves.
+    pub download_url: Option<String>,
+    /// The file's page on curseforge.com.
+    pub page_url: String,
+    pub side: Side,
 }
 
 // ── Activity ───────────────────────────────────────────────────────────

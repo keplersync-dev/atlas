@@ -167,7 +167,7 @@
         <small class="block text-[11px] text-(--text-faint)"
           >Your friend code</small
         >
-        <span class="font-mono text-lg font-semibold tracking-[2px]"
+        <span class="font-mono text-lg font-semibold tracking-[2px] select-text"
           >{formatCode(me.friendCode)}</span
         >
       </div>

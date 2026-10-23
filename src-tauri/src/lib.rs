@@ -191,6 +191,32 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
         });
     }
 
+    // Development builds load the page from the dev server, which may still be starting
+    // (a second copy opened while `pnpm tauri dev` starts up): load it again once it answers.
+    #[cfg(debug_assertions)]
+    if let Some(url) = app.config().build.dev_url.clone() {
+        let handle = handle.clone();
+        tauri::async_runtime::spawn(async move {
+            let (Some(host), Some(port)) = (url.host_str().map(str::to_owned), url.port()) else {
+                return;
+            };
+            let up = || tokio::net::TcpStream::connect((host.clone(), port));
+            if up().await.is_ok() {
+                return;
+            }
+            tracing::info!(%url, "waiting for the dev server");
+            for _ in 0..300 {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                if up().await.is_ok() {
+                    if let Some(window) = handle.get_webview_window("main") {
+                        let _ = window.navigate(url);
+                    }
+                    return;
+                }
+            }
+        });
+    }
+
     // An update interrupted by a crash or power cut is undone before anything else.
     let recovered = tauri::async_runtime::block_on(sync::recovery::run(&state));
     if !recovered.is_empty() {

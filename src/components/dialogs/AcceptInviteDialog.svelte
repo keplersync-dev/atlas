@@ -5,10 +5,11 @@
   import { go } from "$lib/nav.svelte";
   import { resource } from "$lib/resource.svelte";
   import { instances, social } from "$lib/stores";
-  import type { Id, InstanceSummary } from "$lib/types";
+  import type { Id, InstanceSummary, Launcher } from "$lib/types";
   import Button from "../Button.svelte";
   import ContentIcon from "../ContentIcon.svelte";
   import Dialog from "../Dialog.svelte";
+  import Icon from "../Icon.svelte";
   import OptionalPicker from "../OptionalPicker.svelte";
 
   let {
@@ -18,8 +19,11 @@
 
   const invite = $derived(social.shared.find((s) => s.id === sharedInstanceId));
   const launchers = resource(() => api.listLaunchers());
+  // Launchers that can make a new instance on the invite's loader.
   const creatable = $derived(
-    launchers.data?.filter((l) => l.canCreateInstances) ?? [],
+    launchers.data?.filter(
+      (l) => !!invite && l.creatableLoaders.includes(invite.loader),
+    ) ?? [],
   );
 
   // Instances already tracked here that aren't shared: the files can go into one of those.
@@ -50,6 +54,44 @@
   let error = $state<string | null>(null);
 
   const canSubmit = $derived(!submitting && !!invite && !!target);
+  const pickedLauncher = $derived(
+    target?.kind === "launcher"
+      ? launchers.data?.find((l) => l.id === target?.id)
+      : undefined,
+  );
+  const pickedInstance = $derived(
+    target?.kind === "instance"
+      ? spare.find((i) => i.id === target?.id)
+      : undefined,
+  );
+
+  /** The Minecraft Launcher calls them profiles. */
+  const newWhat = (l: Launcher) =>
+    l.kind === "official" ? "profile" : "instance";
+
+  /** One line on what happens when this launcher is picked. */
+  function newHint(l: Launcher) {
+    const items = invite ? plural(invite.contentCount, "item") : "the files";
+    switch (l.kind) {
+      case "modrinth":
+        return `The Modrinth App asks you to confirm, then Atlas adds the ${items}`;
+      case "official":
+        return `Close the launcher first, then Atlas adds the ${items}`;
+      case "curseforge":
+        return `Close CurseForge first, then Atlas adds the ${items}`;
+      default:
+        return `Atlas creates it and adds the ${items}`;
+    }
+  }
+
+  // The button says what it will do.
+  const action = $derived(
+    pickedLauncher
+      ? `Create in ${pickedLauncher.name}`
+      : pickedInstance
+        ? `Add to ${pickedInstance.name}`
+        : "Add",
+  );
   // Nowhere to put it yet: the button tracks an instance instead.
   const nowhere = $derived(
     !!invite && !launchers.loading && !creatable.length && !spare.length,
@@ -88,8 +130,64 @@
   }
 </script>
 
+<!-- One choice: the whole card is the click target; the radio stays for keyboards and screen readers. -->
+{#snippet choice(
+  kind: Target["kind"],
+  id: Id,
+  title: string,
+  hint: string,
+  instance: InstanceSummary | null,
+  warn = false,
+)}
+  {@const on = picked(kind, id)}
+  <label
+    class="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 transition-colors
+      has-focus-visible:outline-2 has-focus-visible:outline-(--accent)
+      {on
+      ? 'border-(--accent) bg-(--accent)/8'
+      : 'border-(--line-2) hover:bg-(--bg-hover)'}"
+  >
+    <input
+      type="radio"
+      name="target"
+      value={id}
+      checked={on}
+      onchange={() => (target = { kind, id })}
+      class="sr-only"
+    />
+    {#if instance}
+      <ContentIcon
+        src={instance.icon}
+        seed={instance.id}
+        class="size-8 shrink-0 rounded-md"
+      />
+    {:else}
+      <span
+        class="grid size-8 shrink-0 place-items-center rounded-md bg-(--bg-raise-2) text-(--accent)"
+      >
+        <Icon name="plus" class="size-4" />
+      </span>
+    {/if}
+    <span class="min-w-0 flex-1">
+      <b class="block truncate font-medium">{title}</b>
+      <small
+        class="block text-[11.5px] {warn
+          ? 'text-(--warn)'
+          : 'text-(--text-faint)'}">{hint}</small
+      >
+    </span>
+    <span
+      class="grid size-5 shrink-0 place-items-center rounded-full border {on
+        ? 'border-(--accent) bg-(--accent) text-(--accent-ink)'
+        : 'border-(--line-2)'}"
+    >
+      {#if on}<Icon name="check" class="size-3" />{/if}
+    </span>
+  </label>
+{/snippet}
+
 <Dialog
-  title={invite ? `Add ${invite.name}` : "Invite"}
+  title={invite ? `Add ${invite.name}` : "Shared instance"}
   description={invite
     ? `${versionLabel(invite.loader, invite.minecraftVersion)} · ${plural(invite.contentCount, "item")} · ${fileSize(invite.sizeBytes)}`
     : undefined}
@@ -106,8 +204,41 @@
 
   {#if !invite}
     <p class="py-4 text-[12.5px] text-(--text-muted)">
-      This invite isn't available anymore.
+      This shared instance isn't available anymore.
     </p>
+  {:else if submitting}
+    <!-- While it works: say what's happening and what, if anything, to do. -->
+    <div class="flex items-start gap-3.5 rounded-lg bg-(--bg-raise) px-4 py-4">
+      <Icon
+        name="refresh"
+        class="mt-0.5 size-5 shrink-0 animate-spin text-(--accent)"
+      />
+      <div class="text-[12.5px]">
+        {#if pickedLauncher?.kind === "modrinth"}
+          <b class="block text-[13.5px] font-semibold"
+            >Confirm in the Modrinth App</b
+          >
+          <p class="mt-1 text-(--text-muted)">
+            It has opened and is asking whether to add “{invite.name}”. Confirm
+            there, and Atlas adds the {plural(invite.contentCount, "item")} by itself.
+          </p>
+        {:else if pickedLauncher}
+          <b class="block text-[13.5px] font-semibold"
+            >Creating the {newWhat(pickedLauncher)} in {pickedLauncher.name}…</b
+          >
+          <p class="mt-1 text-(--text-muted)">
+            Then Atlas adds the {plural(invite.contentCount, "item")}.
+          </p>
+        {:else}
+          <b class="block text-[13.5px] font-semibold"
+            >Linking {pickedInstance?.name ?? "the instance"}…</b
+          >
+          <p class="mt-1 text-(--text-muted)">
+            Then Atlas adds the {plural(invite.contentCount, "item")}.
+          </p>
+        {/if}
+      </div>
+    </div>
   {:else}
     {#if launchers.loading}
       <p class="text-[12.5px] text-(--text-muted)">Looking for launchers…</p>
@@ -122,53 +253,45 @@
         </span>
       </p>
     {:else}
-      <h3 class="mt-1 mb-1 text-xs font-semibold text-(--text-muted)">
-        Add to
-      </h3>
-      {#each creatable as l (l.id)}
-        <label
-          class="-mx-2 flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-(--bg-hover)"
+      <h3 class="mt-1 mb-2 text-[13px] font-semibold">Where should it go?</h3>
+
+      {#if creatable.length}
+        <p class="mb-1.5 text-[11.5px] font-medium text-(--text-faint)">New</p>
+        <div class="flex flex-col gap-1.5">
+          {#each creatable as l (l.id)}
+            {@render choice(
+              "launcher",
+              l.id,
+              `New ${newWhat(l)} in ${l.name}`,
+              newHint(l),
+              null,
+            )}
+          {/each}
+        </div>
+      {/if}
+
+      {#if spare.length}
+        <p
+          class="mb-1.5 text-[11.5px] font-medium text-(--text-faint) {creatable.length
+            ? 'mt-4'
+            : ''}"
         >
-          <!-- Radios share a `name`; checked/onchange keep them in step with target. -->
-          <input
-            type="radio"
-            name="target"
-            value={l.id}
-            checked={picked("launcher", l.id)}
-            onchange={() => (target = { kind: "launcher", id: l.id })}
-            class="accent-(--accent)"
-          />
-          <span class="min-w-0 flex-1">
-            <b class="block font-medium">A new instance in {l.name}</b>
-          </span>
-        </label>
-      {/each}
-      {#each spare as i (i.id)}
-        {@const note = mismatch(i)}
-        <label
-          class="-mx-2 flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 hover:bg-(--bg-hover)"
-        >
-          <input
-            type="radio"
-            name="target"
-            value={i.id}
-            checked={picked("instance", i.id)}
-            onchange={() => (target = { kind: "instance", id: i.id })}
-            class="accent-(--accent)"
-          />
-          <ContentIcon src={i.icon} seed={i.id} class="size-6 rounded" />
-          <span class="min-w-0 flex-1">
-            <b class="block truncate font-medium">{i.name}</b>
-            <small
-              class="block text-[11.5px] {note
-                ? 'text-(--warn)'
-                : 'text-(--text-faint)'}"
-            >
-              {note ?? i.launcher.name}
-            </small>
-          </span>
-        </label>
-      {/each}
+          An instance you already have
+        </p>
+        <div class="flex flex-col gap-1.5">
+          {#each spare as i (i.id)}
+            {@const note = mismatch(i)}
+            {@render choice(
+              "instance",
+              i.id,
+              i.name,
+              note ?? `${i.launcher.name} · your own files there stay`,
+              i,
+              !!note,
+            )}
+          {/each}
+        </div>
+      {/if}
     {/if}
 
     <OptionalPicker items={invite.optionalItems} bind:selected={optional} />
@@ -178,14 +301,17 @@
     {#if error}<span class="mr-auto text-xs text-(--danger)" role="alert"
         >{error}</span
       >{/if}
-    <Button variant="ghost" onclick={onclose}>Cancel</Button>
+    <!-- Closing doesn't stop it: the work carries on and the instance shows up when done. -->
+    <Button variant="ghost" onclick={onclose}
+      >{submitting ? "Close" : "Cancel"}</Button
+    >
     {#if nowhere}
       <Button variant="primary" onclick={() => openDialog({ kind: "track" })}>
         Track an instance
       </Button>
     {:else}
       <Button type="submit" variant="primary" disabled={!canSubmit}>
-        {submitting ? "Adding…" : "Add instance"}
+        {submitting ? "Working…" : action}
       </Button>
     {/if}
   {/snippet}

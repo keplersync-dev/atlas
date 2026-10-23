@@ -64,7 +64,7 @@
     local: {
       label: "Not identified",
       dot: "border border-(--text-faint)",
-      hint: "Atlas couldn't match this file on Modrinth (CurseForge matching comes later). If you share it, it gets uploaded to Atlas.",
+      hint: "Atlas couldn't match this file on Modrinth or CurseForge. If you share it, it gets uploaded to Atlas.",
     },
   };
 
@@ -89,19 +89,47 @@
       .filter((c) => c.count > 0),
   );
 
-  const visible = $derived(
-    instance.content.filter(
-      (c) =>
-        (kind === "all" || c.kind === kind) &&
-        c.name.toLowerCase().includes(query.trim().toLowerCase()),
-    ),
-  );
-
   /** Owners/editors: has this file's sharing changed since the last publish? */
   const unpublished = (c: InstanceContent) =>
     c.publishedShareMode === null
       ? c.shareMode !== "private"
       : c.shareMode !== c.publishedShareMode;
+
+  /**
+   * Differs from the shared version, the same rules as the "local changes" count:
+   * a shared file that's disabled, or (owners/editors) a new or re-set file.
+   */
+  function pending(c: InstanceContent) {
+    if (!instance.sync || !c.installed) return false;
+    if (c.isManaged && !c.enabled)
+      return canSetModes || c.shareMode === "required";
+    return canSetModes && c.enabled && unpublished(c);
+  }
+
+  // Pending changes go first. Which ones is decided when the list opens or its files
+  // change (and once nothing is pending), not on every click, so a row you're editing
+  // doesn't jump away.
+  let first = $state(new Set<string>());
+  let orderedFor = "";
+  $effect(() => {
+    const files = instance.id + ":" + instance.content.map((c) => c.id).join();
+    const now = instance.content.filter(pending);
+    if (files !== orderedFor || now.length === 0) {
+      orderedFor = files;
+      first = new Set(now.map((c) => c.id));
+    }
+  });
+
+  const visible = $derived(
+    instance.content
+      .filter(
+        (c) =>
+          (kind === "all" || c.kind === kind) &&
+          c.name.toLowerCase().includes(query.trim().toLowerCase()),
+      )
+      // sort() keeps the original order within each group.
+      .sort((a, b) => Number(first.has(b.id)) - Number(first.has(a.id))),
+  );
 
   /** Viewers: optional items from the shared version can be downloaded or removed freely. */
   const isOptionalExtra = (c: InstanceContent) =>
@@ -229,10 +257,14 @@
         <span class="flex items-center gap-1.5">
           <!-- Dot = differs from the published version (reaches friends on next publish). -->
           <i
-            class="size-1.5 rounded-full {unpublished(item)
+            class="size-1.5 rounded-full {pending(item)
               ? 'bg-(--accent)'
               : 'bg-transparent'}"
-            title={unpublished(item) ? "Not published yet" : undefined}
+            title={!pending(item)
+              ? undefined
+              : item.enabled
+                ? "Not published yet"
+                : "Disabled: removed for everyone when you publish"}
           ></i>
           <ShareModeSelect
             value={item.shareMode}

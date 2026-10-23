@@ -73,11 +73,12 @@ pub async fn decline_invite<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn prepare_publish(
+pub async fn prepare_publish<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     instance_id: Id,
 ) -> AppResult<PublishPlan> {
-    publish::prepare(&state, &instance_id).await
+    publish::prepare(&state, &app, &instance_id).await
 }
 
 #[tauri::command]

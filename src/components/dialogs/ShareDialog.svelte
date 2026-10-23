@@ -267,6 +267,8 @@
           firstShare
           bind:modes
           bind:rights
+          unchecked={plan.data.unchecked}
+          onrecheck={plan.reload}
         />
       {/if}
     {/if}

@@ -21,6 +21,7 @@
   import { kindFor, wallPixels } from "$lib/pixel";
   import { social } from "$lib/stores";
   import Button from "./Button.svelte";
+  import Head from "./Head.svelte";
   import Icon from "./Icon.svelte";
 
   let { instance }: { instance: InstanceSummary } = $props();
@@ -58,8 +59,18 @@
   );
   const open = () => go({ page: "instance", id: instance.id });
 
+  // Who else has it, as faces on shared cards.
+  const people = $derived.by(() => {
+    const id = instance.sync?.sharedInstanceId;
+    const shared = id ? social.shared.find((x) => x.id === id) : undefined;
+    const me = social.session?.user?.id;
+    return (shared?.members ?? []).filter(
+      (m) => m.status === "active" && m.user.id !== me,
+    );
+  });
+
   type Status = {
-    tone: "warn" | "accent" | "online" | "muted";
+    tone: "warn" | "accent" | "online" | "muted" | "shared" | "faint";
     text: string;
     action?: {
       label: string;
@@ -125,14 +136,14 @@
           ).length
         : 0;
       return {
-        tone: "muted",
+        tone: "shared",
         text:
           s.role === "owner"
             ? `Shared with ${plural(others, "person", "people")} · up to date`
             : `From ${s.owner?.displayName ?? "a friend"} · up to date`,
       };
     }
-    return { tone: "muted", text: "Not shared" };
+    return { tone: "faint", text: "Not shared" };
   });
 
   const DOT = {
@@ -140,12 +151,17 @@
     accent: "bg-(--accent)",
     online: "bg-(--online)",
     muted: "bg-(--text-faint)",
+    shared: "bg-(--online)",
+    // Hollow: nothing going on.
+    faint: "border border-(--text-faint)",
   };
   const TEXT = {
     warn: "text-(--warn)",
     accent: "text-(--accent)",
     online: "text-(--online)",
     muted: "text-(--text-muted)",
+    shared: "text-(--text-primary)",
+    faint: "text-(--text-faint)",
   };
 </script>
 
@@ -200,29 +216,53 @@
         class="absolute inset-0 bg-linear-to-b from-transparent from-40% to-(--bg-raise)/80"
       ></div>
     </button>
-    {#if canOpen}
-      <button
-        onclick={openInLauncher}
-        disabled={opening}
-        class="absolute top-2.5 right-2.5 flex h-7 items-center gap-1.5 rounded-md bg-black/55 px-2.5 text-xs font-medium text-white backdrop-blur-sm transition-colors hover:bg-black/75 disabled:opacity-60"
-      >
-        <Icon name="external" class="size-3.5" />Open in {instance.launcher
-          .name}
-      </button>
-    {/if}
   </div>
 
   <div class="flex flex-1 flex-col px-3.5 pt-2.5 pb-3">
-    <button onclick={open} class="text-left">
-      <b class="block truncate text-[14px] font-semibold">{instance.name}</b>
-      <small class="block truncate text-xs text-(--text-faint)">
-        {versionLabel(instance.loader, instance.minecraftVersion)} · {instance
-          .launcher.name}
-        {#if instance.lastPlayedAt}· {timeAgo(instance.lastPlayedAt)}{/if}
+    <div class="mb-3">
+      <button onclick={open} class="block w-full text-left">
+        <b class="block truncate text-[14px] font-semibold">{instance.name}</b>
+      </button>
+      <!-- The launcher's name opens the instance there. -->
+      <small
+        class="flex min-w-0 items-center gap-1 text-xs text-(--text-muted)"
+      >
+        <span class="shrink-0"
+          >{versionLabel(instance.loader, instance.minecraftVersion)} ·</span
+        >
+        {#if canOpen}
+          <button
+            onclick={openInLauncher}
+            disabled={opening}
+            title="Open in {instance.launcher.name}"
+            class="inline-flex min-w-0 items-center gap-1 rounded transition-colors hover:text-(--accent) disabled:opacity-60"
+          >
+            <span class="truncate">{instance.launcher.name}</span>
+            <Icon name="external" class="size-3 shrink-0" />
+          </button>
+        {:else}
+          <span class="truncate">{instance.launcher.name}</span>
+        {/if}
       </small>
-    </button>
+      <button
+        onclick={open}
+        tabindex="-1"
+        class="mt-1.5 flex w-full items-center gap-3 text-left text-[11.5px] text-(--text-faint)"
+      >
+        <span class="flex items-center gap-1">
+          <Icon name="cube" class="size-3" />
+          {plural(instance.contentCount, "file")}
+        </span>
+        {#if instance.lastPlayedAt}
+          <span class="flex items-center gap-1">
+            <Icon name="clock" class="size-3" />
+            Played {timeAgo(instance.lastPlayedAt)}
+          </span>
+        {/if}
+      </button>
+    </div>
 
-    <div class="mt-auto pt-3">
+    <div class="mt-auto border-t border-(--line) pt-2.5">
       {#if instance.status === "syncing" && instance.progress}
         <div
           class="flex items-center justify-between text-xs text-(--text-muted)"
@@ -253,6 +293,24 @@
               <span class="truncate">{status.text}</span>
             {/if}
           </span>
+          {#if !status.action && people.length}
+            <span
+              class="flex shrink-0 items-center gap-1"
+              title={people.map((m) => m.user.displayName).join(", ")}
+            >
+              <!-- Three slots at most: faces, then a count. Side by side, since
+                   square heads and round avatars don't overlap neatly. -->
+              {#each people.slice(0, people.length > 3 ? 2 : 3) as m (m.user.id)}
+                <Head user={m.user} size={20} />
+              {/each}
+              {#if people.length > 3}
+                <span
+                  class="grid h-5 place-items-center rounded-full bg-(--line-2) px-1.5 text-[10.5px] font-semibold text-(--text-primary) tabular-nums"
+                  >+{people.length - 2}</span
+                >
+              {/if}
+            </span>
+          {/if}
           {#if status.action}
             <Button
               size="sm"

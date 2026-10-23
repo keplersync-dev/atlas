@@ -176,3 +176,53 @@ mod tests {
         assert_eq!(h.murmur2, murmur(&data));
     }
 }
+
+#[cfg(test)]
+mod real {
+    /// Atlas's fingerprints against the ones CurseForge saved for the files in this PC's
+    /// CurseForge instances (`installedAddons` in minecraftinstance.json). Reads only.
+    /// `cargo test --release --lib real_fingerprints -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn real_fingerprints() {
+        use crate::dto::LauncherKind;
+        let (mut same, mut differ) = (0, 0);
+        for root in crate::launchers::detect(LauncherKind::Curseforge) {
+            let Ok(dirs) = std::fs::read_dir(root.join("Instances")) else {
+                continue;
+            };
+            for dir in dirs.flatten().map(|d| d.path()) {
+                let Ok(text) = std::fs::read_to_string(dir.join("minecraftinstance.json")) else {
+                    continue;
+                };
+                let json: serde_json::Value = serde_json::from_str(&text).unwrap();
+                for addon in json["installedAddons"].as_array().into_iter().flatten() {
+                    let file = &addon["installedFile"];
+                    let (Some(name), Some(expected)) = (
+                        file["fileNameOnDisk"].as_str(),
+                        // CurseForge sometimes records 0: it didn't work one out.
+                        file["packageFingerprint"].as_u64().filter(|&f| f != 0),
+                    ) else {
+                        continue;
+                    };
+                    let Some(path) = ["mods", "resourcepacks", "shaderpacks"]
+                        .iter()
+                        .map(|d| dir.join(d).join(name))
+                        .find(|p| p.is_file())
+                    else {
+                        continue;
+                    };
+                    let h = super::hash_file(&path).unwrap();
+                    if u64::from(h.murmur2) == expected {
+                        same += 1;
+                    } else {
+                        differ += 1;
+                        println!("differs: {}", path.display());
+                    }
+                }
+            }
+        }
+        println!("{same} fingerprints match CurseForge's, {differ} differ");
+        assert_eq!(differ, 0);
+    }
+}

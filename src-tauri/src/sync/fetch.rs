@@ -13,7 +13,7 @@ use std::time::{Duration, SystemTime};
 use super::manifest::{Entry, Override};
 use super::source::Source;
 use crate::dto::{ContentSource, ManualDownload};
-use crate::error::{AppError, AppResult};
+use crate::error::{AppError, AppResult, ErrorCode};
 use crate::scan::hash::hash_file;
 use crate::state::AppPaths;
 
@@ -143,6 +143,14 @@ pub async fn content(
     }
 }
 
+/// Downloads come from Modrinth, CurseForge or Atlas's file storage, so this names none.
+fn download_failed() -> AppError {
+    AppError::new(
+        ErrorCode::Offline,
+        "A download didn't finish. Check your internet connection and try again.",
+    )
+}
+
 /// Download `url` to a temporary file, then admit it to `target` if its hashes match.
 pub async fn download(
     http: &reqwest::Client,
@@ -159,13 +167,13 @@ pub async fn download(
             .and_then(|u| u.host_str().map(str::to_owned))
             .unwrap_or_default();
         tracing::warn!(error = %e, %host, "download failed");
-        AppError::offline()
+        download_failed()
     };
     std::fs::create_dir_all(target.parent().expect("cache files have a parent"))?;
     let tmp = target.with_extension("download");
     let stalled = || {
         tracing::warn!("download stalled");
-        AppError::offline()
+        download_failed()
     };
     let mut resp = tokio::time::timeout(STALL, http.get(url).send())
         .await

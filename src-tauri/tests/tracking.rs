@@ -27,7 +27,10 @@ fn launchers_can_be_added_once_and_only_where_they_exist() {
     assert_eq!(launcher["name"], "Prism Launcher");
     assert_eq!(launcher["rootPath"], clean(&prism));
     assert_eq!(launcher["instanceCount"], 2);
-    assert_eq!(launcher["canCreateInstances"], true);
+    assert_eq!(
+        launcher["creatableLoaders"],
+        json!(["vanilla", "fabric", "quilt", "forge", "neoforge"])
+    );
     assert_eq!(launcher["addedByUser"], true);
 
     assert_eq!(

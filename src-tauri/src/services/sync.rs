@@ -54,7 +54,11 @@ pub async fn info(state: &AppState, row: &InstanceRow) -> AppResult<Option<Insta
     };
     let rows = db::content::list(&state.db, &row.id).await?;
     let manifest = row.synced_manifest();
-    let changes = sync_state::local_changes(role, &rows, manifest.as_ref()).count();
+    let versions_differ = manifest
+        .as_ref()
+        .is_some_and(|m| sync_state::version_change(row, m).is_some());
+    let changes =
+        sync_state::local_changes(role, &rows, manifest.as_ref(), versions_differ).count();
     Ok(Some(InstanceSyncInfo {
         shared_instance_id: shared.to_string(),
         role,
@@ -132,7 +136,8 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
         changes: plan.changes,
         download_bytes,
         manual_downloads: manual,
-        overwritten_local_changes: sync_state::local_changes(role, &rows, synced.as_ref()).removed,
+        overwritten_local_changes: sync_state::local_changes(role, &rows, synced.as_ref(), false)
+            .removed,
         config_conflicts,
         launcher_change: prism_versions::change(&row, &target),
         game_running: state.is_running(id),

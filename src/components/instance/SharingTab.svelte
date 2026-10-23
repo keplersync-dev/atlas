@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from "$lib/api";
+  import { confirmAction } from "$lib/confirm.svelte";
   import { resource } from "$lib/resource.svelte";
   import { social } from "$lib/stores";
   import type { InstanceSyncInfo, MemberRole, SharedMember } from "$lib/types";
@@ -33,6 +34,30 @@
       error = (e as Error).message;
     }
   }
+
+  type Role = Exclude<MemberRole, "owner">;
+  const ROLES: { id: Role; label: string; hint: string }[] = [
+    {
+      id: "editor",
+      label: "Editor",
+      hint: "Can publish changes and invite friends",
+    },
+    { id: "viewer", label: "Viewer", hint: "Gets updates when you publish" },
+  ];
+
+  /** Shown at once, then saved; put back if the server says no. */
+  function setRole(m: SharedMember, role: Role) {
+    const before = m.role;
+    m.role = role;
+    change(async () => {
+      try {
+        await api.setSharedMemberRole(sync.sharedInstanceId, m.user.id, role);
+      } catch (e) {
+        m.role = before;
+        throw e;
+      }
+    });
+  }
 </script>
 
 <p class="mt-4 mb-2 text-[12.5px] text-(--text-muted)">
@@ -46,6 +71,19 @@
   {/if}
 </p>
 
+{#if isOwner}
+  <!-- What the two roles mean, next to where they're changed. -->
+  <p class="mb-3 text-xs text-(--text-faint)">
+    {#each ROLES as r, i (r.id)}
+      <b class="font-semibold text-(--text-muted)">{r.label}</b>: {r.hint.toLowerCase()}{i <
+      ROLES.length - 1
+        ? " · "
+        : "."}
+    {/each}
+    Change anyone's role at any time.
+  </p>
+{/if}
+
 {#if error}<p class="mb-2 text-xs text-(--danger)" role="alert">{error}</p>{/if}
 
 {#if shared.loading && !shared.data}
@@ -56,7 +94,7 @@
   {#each shared.data.members as m (m.user.id)}
     {@const status = memberStatus(m)}
     <div
-      class="grid grid-cols-[32px_minmax(0,1fr)_120px_100px_32px] items-center gap-3.5 rounded-md px-2 py-2 hover:bg-(--bg-hover)"
+      class="grid grid-cols-[32px_minmax(0,1fr)_100px_auto_32px] items-center gap-3.5 rounded-md px-2 py-2 hover:bg-(--bg-hover)"
     >
       <Head user={m.user} size={32} />
       <div class="min-w-0">
@@ -70,29 +108,42 @@
       <span class="text-[12px] {status.cls}">{status.text}</span>
 
       {#if isOwner && m.role !== "owner"}
-        <!-- A plain <select>: onchange fires with the new value; we save it, then reload. -->
-        <select
-          value={m.role}
-          onchange={(e) =>
-            change(() =>
-              api.setSharedMemberRole(
-                sync.sharedInstanceId,
-                m.user.id,
-                e.currentTarget.value as Exclude<MemberRole, "owner">,
-              ),
-            )}
+        <div
+          role="radiogroup"
           aria-label="Role for {m.user.displayName}"
-          class="rounded bg-transparent px-1 py-0.5 text-[12.5px] text-(--text-muted) hover:bg-(--bg-hover)"
+          class="inline-flex gap-0.5 rounded-md bg-(--bg) p-0.5"
         >
-          <option value="editor" class="bg-(--bg-raise-2)">Editor</option>
-          <option value="viewer" class="bg-(--bg-raise-2)">Viewer</option>
-        </select>
+          {#each ROLES as r (r.id)}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={m.role === r.id}
+              title={r.hint}
+              onclick={() => m.role !== r.id && setRole(m, r.id)}
+              class="rounded px-2.5 py-0.5 text-[11.5px] font-medium transition-colors
+                {m.role === r.id
+                ? 'bg-(--bg-raise-2) text-(--text-primary)'
+                : 'text-(--text-faint) hover:text-(--text-primary)'}"
+            >
+              {r.label}
+            </button>
+          {/each}
+        </div>
         <button
           aria-label="Remove {m.user.displayName}"
-          onclick={() =>
-            change(() =>
-              api.removeSharedMember(sync.sharedInstanceId, m.user.id),
-            )}
+          onclick={async () => {
+            const ok = await confirmAction({
+              title: `Remove ${m.user.displayName}?`,
+              message:
+                "They stop getting updates. Their copy stays on their PC as a normal instance.",
+              confirmLabel: "Remove",
+              danger: true,
+            });
+            if (ok)
+              change(() =>
+                api.removeSharedMember(sync.sharedInstanceId, m.user.id),
+              );
+          }}
           class="grid size-8 place-items-center rounded-md text-(--text-faint) hover:bg-(--bg-hover) hover:text-(--danger)"
         >
           <Icon name="close" class="size-3.5" />

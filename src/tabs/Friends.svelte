@@ -8,6 +8,7 @@
 </script>
 
 <script lang="ts">
+  import { confirmAction } from "$lib/confirm.svelte";
   import { plural, timeAgo } from "$lib/format";
   import { social } from "$lib/stores";
   import type { Friend } from "$lib/types";
@@ -101,13 +102,23 @@
   let error = $state<string | null>(null);
 
   async function remove(f: Friend, block: boolean) {
-    const verb = block ? "Block" : "Remove";
-    if (
-      !confirm(
-        `${verb} ${f.user.displayName}?${block ? " They won't be able to send you requests." : ""}`,
-      )
-    )
-      return;
+    const name = f.user.displayName;
+    const ok = await confirmAction(
+      block
+        ? {
+            title: `Block ${name}?`,
+            message: `${name} is removed from your friends and can't send you requests anymore.`,
+            confirmLabel: "Block",
+            danger: true,
+          }
+        : {
+            title: `Remove ${name}?`,
+            message: "You can add each other again later with a friend code.",
+            confirmLabel: "Remove friend",
+            danger: true,
+          },
+    );
+    if (!ok) return;
     error = null;
     try {
       await social.removeFriend(f.user.id, block);
@@ -138,7 +149,7 @@
       <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-3">
         <label class="relative block w-64">
           <span
-            class="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-(--text-faint)"
+            class="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2 text-(--text-faint)"
           >
             <Icon name="search" class="size-3.5" />
           </span>
