@@ -7,7 +7,7 @@
     type Choice,
   } from "$lib/confirm.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
-  import { plural, versionLabel } from "$lib/format";
+  import { openLabel, plural, versionLabel } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
   import { instances, social } from "$lib/stores";
   import type { Id } from "$lib/types";
@@ -311,8 +311,7 @@
           disabled={busy}
           onclick={() => run(() => api.openInLauncher(id))}
         >
-          <Icon name="external" class="size-3.5" />Open in {summary.launcher
-            .name}
+          <Icon name="external" class="size-3.5" />{openLabel(summary.launcher)}
         </Button>
       {/if}
 

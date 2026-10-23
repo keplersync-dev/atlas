@@ -86,7 +86,7 @@ export interface AtlasApi {
   updateInstance(id: Id, patch: UpdateInstanceInput): Promise<InstanceSummary>;
   /** Re-read the folder and launcher metadata now (Atlas also watches folders and rescans on its own). */
   rescanInstance(id: Id): Promise<InstanceSummary>;
-  /** Opens the launcher; Prism/MultiMC can launch the instance directly. */
+  /** Opens the launcher: Prism opens on the instance itself; the others just open. */
   openInLauncher(id: Id): Promise<void>;
   /** Closes the instance's launcher as its close button would. A new Modrinth App instance waits for this to get its picture. */
   closeLauncher(id: Id): Promise<void>;

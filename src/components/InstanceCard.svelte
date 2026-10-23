@@ -17,6 +17,7 @@
   import { api } from "$lib/api";
   import { openDialog } from "$lib/dialogs.svelte";
   import {
+    openLabel,
     plural,
     timeAgo,
     versionLabel,
@@ -243,7 +244,7 @@
           <button
             onclick={openInLauncher}
             disabled={opening}
-            title="Open in {instance.launcher.name}"
+            title={openLabel(instance.launcher)}
             class="inline-flex min-w-0 items-center gap-1 rounded transition-colors hover:text-(--accent) disabled:opacity-60"
           >
             <span class="truncate">{instance.launcher.name}</span>

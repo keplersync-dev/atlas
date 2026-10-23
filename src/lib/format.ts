@@ -1,6 +1,6 @@
 // Small display helpers. Plain functions: no Svelte, easy to test, usable anywhere.
 
-import type { InstanceWork, IsoDate, Loader } from "$lib/types";
+import type { InstanceWork, IsoDate, LauncherKind, Loader } from "$lib/types";
 
 const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
@@ -86,3 +86,16 @@ export function workPercent(w: InstanceWork): number | null {
   return w.total ? Math.round((w.done / w.total) * 100) : null;
 }
 
+/**
+ * The open button's label. Only Prism opens on the instance itself; the other launchers
+ * can only be opened, so the label says just that: "Open in Prism Launcher",
+ * "Open Modrinth App".
+ */
+export function openLabel(launcher: {
+  kind: LauncherKind;
+  name: string;
+}): string {
+  return launcher.kind === "prism"
+    ? `Open in ${launcher.name}`
+    : `Open ${launcher.name}`;
+}

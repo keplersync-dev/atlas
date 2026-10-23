@@ -308,11 +308,23 @@ pub fn open(kind: LauncherKind, root: &Path, launcher_instance_id: &str) -> Resu
     let Some(exe) = program else {
         return Err(OpenError::NoProgram);
     };
-    let mut command = std::process::Command::new(&exe);
-    if matches!(kind, LauncherKind::Prism | LauncherKind::Multimc) {
-        command.arg("--launch").arg(launcher_instance_id);
+    std::process::Command::new(&exe)
+        .args(open_args(kind, launcher_instance_id))
+        .spawn()
+        .map(|_| ())
+        .map_err(OpenError::Spawn)
+}
+
+/// What to pass the launcher so it opens on the instance, where it can. Prism's `--show`
+/// opens the instance's own window (only when Prism isn't already running: a running
+/// Prism just comes to the front). The others can only launch the game for a specific
+/// instance (MultiMC's `--launch`, the Modrinth App's `modrinth://launch/…`) or have no
+/// way at all, so they open as they are.
+fn open_args(kind: LauncherKind, launcher_instance_id: &str) -> Vec<String> {
+    match kind {
+        LauncherKind::Prism => vec!["--show".into(), launcher_instance_id.into()],
+        _ => vec![],
     }
-    command.spawn().map(|_| ()).map_err(OpenError::Spawn)
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -326,6 +338,22 @@ pub enum OpenError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn opening_never_starts_the_game() {
+        assert_eq!(
+            open_args(LauncherKind::Prism, "Fabric 1.21.1"),
+            ["--show", "Fabric 1.21.1"]
+        );
+        for kind in [
+            LauncherKind::Multimc,
+            LauncherKind::Modrinth,
+            LauncherKind::Curseforge,
+            LauncherKind::Official,
+        ] {
+            assert!(open_args(kind, "x").is_empty(), "{kind:?}");
+        }
+    }
 
     /// Lists what the adapters find in this PC's real launchers. Opt-in, prints only:
     /// `cargo test --lib real_launchers -- --ignored --nocapture`
