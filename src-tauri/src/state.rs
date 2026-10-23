@@ -42,6 +42,9 @@ pub struct AppState {
     pub modrinth_api: Option<String>,
     /// Instances with a lookup in flight, so a burst of scans doesn't ask twice.
     pub resolving: Arc<Mutex<HashSet<String>>>,
+    /// New instances whose download shouldn't wait for the launcher to close to get their
+    /// picture: the player chose to skip it (see accept.rs).
+    pub skip_picture: Arc<Mutex<HashSet<String>>>,
     /// The Atlas server and the signed-in session.
     pub cloud: Arc<Cloud>,
     /// A friend or group link waiting for the UI (crate::links).
@@ -70,6 +73,7 @@ impl AppState {
                 .expect("http client"),
             modrinth_api: Some(crate::resolve::modrinth::API.to_string()),
             resolving: Arc::default(),
+            skip_picture: Arc::default(),
             cloud: Arc::new(Cloud::new(
                 db.clone(),
                 Cloud::server_url_from_env(),

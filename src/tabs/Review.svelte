@@ -85,6 +85,7 @@
 
   const STAGES: Record<SyncProgress["stage"], string> = {
     waiting_for_game_exit: "Waiting for you to close Minecraft…",
+    waiting_for_launcher_exit: "Waiting for the launcher to close…",
     backup: "Backing up files…",
     download: "Downloading…",
     waiting_for_manual_downloads: "Waiting for manual downloads…",

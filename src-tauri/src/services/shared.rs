@@ -355,6 +355,27 @@ async fn show_icons(state: &AppState, list: &mut [SharedInstance]) {
     }
 }
 
+/// The shared picture of the instance this one is linked to, if it's in the icon cache
+/// (fetched when the shared list loads, or when accepting). For launchers Atlas can't put
+/// a picture into, like the Modrinth App. No network access.
+pub async fn cached_icon(state: &AppState, row: &InstanceRow) -> Option<String> {
+    let file = cached_icon_file(state, row).await?;
+    Some(crate::util::asset::url(&format!("file:{}", file.display())))
+}
+
+/// `cached_icon`'s picture itself.
+pub async fn cached_icon_bytes(state: &AppState, row: &InstanceRow) -> Option<Vec<u8>> {
+    tokio::fs::read(cached_icon_file(state, row).await?)
+        .await
+        .ok()
+}
+
+async fn cached_icon_file(state: &AppState, row: &InstanceRow) -> Option<std::path::PathBuf> {
+    let shared = cached(state, server_id(row)?).await.ok()??;
+    let file = crate::scan::icons::shared_icon_file(&state.paths.icons, icon_sha256(&shared)?);
+    file.is_file().then_some(file)
+}
+
 /// The picture's sha256, as the server sends it: "sha256:<hex>".
 fn icon_sha256(s: &SharedInstance) -> Option<&str> {
     s.icon

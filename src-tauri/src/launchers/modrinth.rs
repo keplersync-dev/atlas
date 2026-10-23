@@ -1,6 +1,7 @@
 //! Modrinth App.
 //!
-//! <root>/app.db (SQLite, the app's own; opened read-only, never written)
+//! <root>/app.db (SQLite, the app's own; opened read-only. The one exception is
+//! `set_icon`: a picture for an instance Atlas had it make, written only while it's closed.)
 //! <root>/profiles/<path>/ is the game dir.
 //!
 //! Current schema (checked against Modrinth App, migration 20260918120000):
@@ -19,7 +20,9 @@ use std::time::{Duration, Instant};
 use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection, SqliteRow};
 use sqlx::{Connection, FromRow};
 
-use super::util::{env_dir, file_stem, first_existing, from_unix_seconds, loader_from};
+use super::util::{
+    any_running, env_dir, file_stem, first_existing, from_unix_seconds, image_ext, loader_from,
+};
 use super::{FoundInstance, NewInstance, ReadError, ReadResult};
 use crate::dto::Loader;
 
@@ -247,6 +250,95 @@ fn open_pack(pack: &Path) -> ReadResult<()> {
     Ok(())
 }
 
+pub fn running() -> bool {
+    any_running(&["modrinth app.exe"])
+}
+
+/// Ask the app to close, the way its own close button does (not a forced kill). True once
+/// it has; false if it's still open after 15 s (a dialog of its own may be in the way).
+pub async fn close() -> bool {
+    let ask = tokio::task::spawn_blocking(|| {
+        let mut taskkill = std::process::Command::new("taskkill");
+        taskkill.args(["/IM", "Modrinth App.exe"]);
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+            taskkill.creation_flags(CREATE_NO_WINDOW);
+        }
+        taskkill.output()
+    });
+    if let Ok(Err(e)) = ask.await {
+        tracing::warn!(error = %e, "couldn't ask the Modrinth App to close");
+    }
+    for _ in 0..30 {
+        if !running() {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    false
+}
+
+/// Give an instance a picture when it has none. Packs can't carry one, so instances Atlas
+/// has the app make start without. Only while the app is closed: it keeps instances in
+/// memory and would write over the change. Copies the picture into the app's icon cache
+/// (named by its sha1, as the app names them) and sets `icon_path`, nothing else.
+/// Ok(false) when the app is open, the instance has a picture, or the database isn't the
+/// layout Atlas knows.
+pub async fn set_icon(root: &Path, instance_path: &str, icon: &[u8]) -> ReadResult<bool> {
+    if running() {
+        return Ok(false);
+    }
+    set_icon_while_closed(root, instance_path, icon).await
+}
+
+async fn set_icon_while_closed(root: &Path, instance_path: &str, icon: &[u8]) -> ReadResult<bool> {
+    use sha1::{Digest, Sha1};
+    let db = root.join("app.db");
+    let Some(ext) = image_ext(icon) else {
+        return Ok(false);
+    };
+    if !db.is_file() {
+        return Ok(false);
+    }
+    let options = SqliteConnectOptions::new()
+        .filename(&db)
+        .busy_timeout(Duration::from_secs(2));
+    let mut conn = SqliteConnection::connect_with(&options).await?;
+    let known: Option<(String,)> =
+        sqlx::query_as("SELECT name FROM pragma_table_info('instances') WHERE name = 'icon_path'")
+            .fetch_optional(&mut conn)
+            .await?;
+    let current: Option<(Option<String>,)> = match known {
+        Some(_) => {
+            sqlx::query_as("SELECT icon_path FROM instances WHERE path = ?")
+                .bind(instance_path)
+                .fetch_optional(&mut conn)
+                .await?
+        }
+        None => None,
+    };
+    if !matches!(current, Some((None,))) {
+        conn.close().await?;
+        return Ok(false);
+    }
+    let dir = root.join("caches").join("icons");
+    std::fs::create_dir_all(&dir)?;
+    let file = dir.join(format!("{}.{ext}", hex::encode(Sha1::digest(icon))));
+    if !file.is_file() {
+        std::fs::write(&file, icon)?;
+    }
+    let done =
+        sqlx::query("UPDATE instances SET icon_path = ? WHERE path = ? AND icon_path IS NULL")
+            .bind(file.to_string_lossy().as_ref())
+            .bind(instance_path)
+            .execute(&mut conn)
+            .await?;
+    conn.close().await?;
+    Ok(done.rows_affected() == 1)
+}
+
 #[derive(FromRow)]
 struct Stage {
     path: String,
@@ -307,6 +399,41 @@ mod tests {
         }
         c.close().await.unwrap();
         root
+    }
+
+    #[tokio::test]
+    async fn pictures_go_only_to_instances_without_one() {
+        let root = fixture().await;
+        let png = b"\x89PNG\r\n\x1a\nnot really a picture".to_vec();
+        assert!(set_icon_while_closed(&root, "New", &png).await.unwrap());
+        assert!(
+            !set_icon_while_closed(&root, "New", &png).await.unwrap(),
+            "it has one now"
+        );
+        assert!(
+            !set_icon_while_closed(&root, "Better MC [FABRIC] - BMC2", &png)
+                .await
+                .unwrap(),
+            "never replaces the user's own"
+        );
+        assert!(!set_icon_while_closed(&root, "Gone", &png).await.unwrap());
+        assert!(
+            !set_icon_while_closed(&root, "New", b"not an image")
+                .await
+                .unwrap()
+        );
+
+        let new = list(&root)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|i| i.launcher_instance_id == "New")
+            .unwrap();
+        let icon = new.icon.unwrap();
+        let file = PathBuf::from(icon.strip_prefix("file:").unwrap());
+        assert!(file.starts_with(root.join("caches").join("icons")));
+        assert_eq!(std::fs::read(&file).unwrap(), png);
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[tokio::test]

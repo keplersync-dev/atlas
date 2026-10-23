@@ -143,6 +143,43 @@ impl NewInstance {
     }
 }
 
+/// Launchers that can't take a picture with a new instance, so Atlas sets it afterwards
+/// while they're closed (see `set_missing_icon`).
+pub fn sets_icon_later(kind: LauncherKind) -> bool {
+    kind == LauncherKind::Modrinth
+}
+
+pub fn is_running(kind: LauncherKind) -> bool {
+    match kind {
+        LauncherKind::Modrinth => modrinth::running(),
+        LauncherKind::Official => official::running(),
+        LauncherKind::Curseforge => curseforge::running(),
+        _ => false,
+    }
+}
+
+/// Ask the launcher to close, as its own close button would. True once it has.
+pub async fn close(kind: LauncherKind) -> bool {
+    match kind {
+        LauncherKind::Modrinth => modrinth::close().await,
+        _ => !is_running(kind),
+    }
+}
+
+/// Give an instance the launcher has no picture for this one. Only for `sets_icon_later`
+/// launchers, only while they're closed. Ok(true) when it did.
+pub async fn set_missing_icon(
+    kind: LauncherKind,
+    root: &Path,
+    instance_id: &str,
+    icon: &[u8],
+) -> ReadResult<bool> {
+    match kind {
+        LauncherKind::Modrinth => modrinth::set_icon(root, instance_id, icon).await,
+        _ => Ok(false),
+    }
+}
+
 /// Why Atlas can't create an instance there right now, if it can't.
 pub fn create_blocker(kind: LauncherKind) -> Option<&'static str> {
     match kind {

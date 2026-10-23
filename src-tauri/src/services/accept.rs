@@ -14,7 +14,7 @@ use super::shared::segment;
 use crate::db;
 use crate::dto::{
     BackupReason, Id, InstanceSummary, LauncherKind, Loader, MemberStatus, SharedInstance,
-    TrackInstanceRef,
+    SyncStage, TrackInstanceRef,
 };
 use crate::error::{AppError, AppResult};
 use crate::jobs;
@@ -102,6 +102,7 @@ pub async fn into_new<R: Runtime>(
         src,
         manifest,
         install_optional,
+        true,
     )
     .await
 }
@@ -137,6 +138,7 @@ pub async fn into_existing<R: Runtime>(
         src,
         manifest,
         install_optional,
+        false,
     )
     .await
 }
@@ -210,7 +212,37 @@ fn server_source(shared: &SharedInstance) -> Source {
     }
 }
 
+/// A new instance in a launcher that only takes a picture while it's closed (the Modrinth
+/// App, which is still open from making the instance): ask the player to close it before
+/// downloading, unless they skip the picture.
+async fn picture_first<R: Runtime>(state: &AppState, progress: &jobs::Progress<R>) {
+    let id = &progress.instance_id;
+    let Ok(Some(row)) = db::instances::get(&state.db, id).await else {
+        return;
+    };
+    let kind = row.kind();
+    if !launchers::sets_icon_later(kind)
+        || row.icon.is_some()
+        || super::shared::cached_icon_bytes(state, &row)
+            .await
+            .is_none()
+    {
+        return;
+    }
+    let skipped = || state.skip_picture.lock().unwrap().contains(id);
+    if launchers::is_running(kind) {
+        progress.stage(SyncStage::WaitingForLauncherExit);
+        while launchers::is_running(kind) && !skipped() {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        }
+    }
+    state.skip_picture.lock().unwrap().remove(id);
+    super::instances::give_launcher_picture(state, &row).await;
+}
+
 /// Link the folder and start installing the shared files. Returns once the job started.
+/// `new_instance`: Atlas just made it, so it may still need its picture.
+#[allow(clippy::too_many_arguments)]
 async fn install<R: Runtime>(
     state: &AppState,
     app: &AppHandle<R>,
@@ -219,11 +251,15 @@ async fn install<R: Runtime>(
     src: Source,
     manifest: crate::sync::manifest::Manifest,
     install_optional: Vec<String>,
+    new_instance: bool,
 ) -> AppResult<InstanceSummary> {
     db::instances::set_link(&state.db, instance_id, Some((&shared.id, shared.my_role))).await?;
     let revision = shared.latest_revision;
     let state2 = state.clone();
     jobs::spawn(state, app, instance_id, move |progress| async move {
+        if new_instance {
+            picture_first(&state2, &progress).await;
+        }
         let req = apply::Request {
             revision,
             manifest,

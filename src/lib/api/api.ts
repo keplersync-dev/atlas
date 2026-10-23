@@ -88,6 +88,10 @@ export interface AtlasApi {
   rescanInstance(id: Id): Promise<InstanceSummary>;
   /** Opens the launcher; Prism/MultiMC can launch the instance directly. */
   openInLauncher(id: Id): Promise<void>;
+  /** Closes the instance's launcher as its close button would. A new Modrinth App instance waits for this to get its picture. */
+  closeLauncher(id: Id): Promise<void>;
+  /** A new instance downloads without waiting to give its launcher the picture. */
+  skipLauncherPicture(id: Id): Promise<void>;
   openInstanceFolder(id: Id): Promise<void>;
   /** Renames the file to/from ".disabled". Fails with "conflict" while the game is running. */
   setContentEnabled(

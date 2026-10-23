@@ -106,13 +106,18 @@ async fn full_summary(
     count: u32,
 ) -> AppResult<InstanceSummary> {
     let sync = super::sync::info(state, row).await?;
-    Ok(summary(
+    let mut s = summary(
         row,
         count,
         state.is_running(&row.id),
         sync,
         state.jobs.status(&row.id),
-    ))
+    );
+    // The launcher has no picture for it: show the shared one.
+    if s.icon.is_none() {
+        s.icon = super::shared::cached_icon(state, row).await;
+    }
+    Ok(s)
 }
 
 pub async fn summary_of(state: &AppState, row: &InstanceRow) -> AppResult<InstanceSummary> {
@@ -288,6 +293,50 @@ pub async fn update(
     summary_of(state, &row(state, id).await?).await
 }
 
+/// Close the instance's launcher, the way its own close button does.
+pub async fn close_launcher(state: &AppState, id: &str) -> AppResult<()> {
+    let kind = row(state, id).await?.kind();
+    if launchers::close(kind).await {
+        return Ok(());
+    }
+    Err(AppError::conflict(format!(
+        "{} didn't close. Close it yourself, or download without the picture.",
+        launchers::display_name(kind)
+    )))
+}
+
+/// Some launchers can't take a picture with a new instance (the Modrinth App), so a
+/// linked instance there starts without one. Atlas puts the shared picture in, but only
+/// while the launcher is closed. True when it did.
+pub async fn give_launcher_picture(state: &AppState, row: &InstanceRow) -> bool {
+    let kind = row.kind();
+    if !launchers::sets_icon_later(kind) || row.icon.is_some() {
+        return false;
+    }
+    let (Some(launcher_id), Some(instance)) = (&row.launcher_id, &row.launcher_instance_id) else {
+        return false;
+    };
+    let Some(icon) = super::shared::cached_icon_bytes(state, row).await else {
+        return false;
+    };
+    let Ok(Some(launcher)) = db::launchers::get(&state.db, launcher_id).await else {
+        return false;
+    };
+    let root = Path::new(&launcher.root_path);
+    match launchers::set_missing_icon(kind, root, instance, &icon).await {
+        Ok(done) => {
+            if done {
+                tracing::info!(instance = %row.name, "gave the launcher the shared picture");
+            }
+            done
+        }
+        Err(e) => {
+            tracing::warn!(instance = %row.name, error = %e, "couldn't give the launcher the picture");
+            false
+        }
+    }
+}
+
 /// Re-read the launcher's metadata and whether the folder still exists.
 /// Returns the updated row and whether anything changed.
 async fn refresh_metadata(state: &AppState, id: &str) -> AppResult<(InstanceRow, bool)> {
@@ -332,7 +381,11 @@ pub async fn rescan<R: Runtime>(
         return summary_by_id(state, id).await;
     }
     let _scanning = state.scan_lock(id).await;
-    let (row, meta_changed) = refresh_metadata(state, id).await?;
+    let (mut row, mut meta_changed) = refresh_metadata(state, id).await?;
+    if give_launcher_picture(state, &row).await {
+        (row, _) = refresh_metadata(state, id).await?;
+        meta_changed = true;
+    }
     let game_dir = Path::new(&row.game_dir);
     let files_changed = if row.status() == InstanceStatus::Ready {
         if !state.watcher.is_watching(id) {

@@ -90,6 +90,20 @@ pub async fn open_in_launcher(state: State<'_, AppState>, id: Id) -> AppResult<(
     instances::open_in_launcher(&state, &id).await
 }
 
+/// Close the instance's launcher, as its own close button would: a new Modrinth App
+/// instance waits for that to get its picture.
+#[tauri::command]
+pub async fn close_launcher(state: State<'_, AppState>, id: Id) -> AppResult<()> {
+    instances::close_launcher(&state, &id).await
+}
+
+/// Download a new instance's files without waiting to give the launcher its picture.
+#[tauri::command]
+pub async fn skip_launcher_picture(state: State<'_, AppState>, id: Id) -> AppResult<()> {
+    state.skip_picture.lock().unwrap().insert(id);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn open_instance_folder<R: Runtime>(
     app: AppHandle<R>,

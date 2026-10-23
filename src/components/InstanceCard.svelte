@@ -28,6 +28,7 @@
   import { instances, social } from "$lib/stores";
   import Button from "./Button.svelte";
   import Head from "./Head.svelte";
+  import CloseLauncherPrompt from "./instance/CloseLauncherPrompt.svelte";
   import Icon from "./Icon.svelte";
 
   let { instance }: { instance: InstanceSummary } = $props();
@@ -271,7 +272,9 @@
     </div>
 
     <div class="mt-auto border-t border-(--line) pt-2.5">
-      {#if instance.status === "syncing" && instance.progress}
+      {#if instance.progress?.stage === "waiting_for_launcher_exit"}
+        <CloseLauncherPrompt {instance} compact />
+      {:else if instance.status === "syncing" && instance.progress}
         <div
           class="flex items-center justify-between text-xs text-(--text-muted)"
         >

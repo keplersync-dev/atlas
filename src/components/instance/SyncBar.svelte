@@ -4,6 +4,7 @@
   import type { InstanceSummary, SyncProgress } from "$lib/types";
   import Button from "../Button.svelte";
   import Icon from "../Icon.svelte";
+  import CloseLauncherPrompt from "./CloseLauncherPrompt.svelte";
 
   // The one-line status strip under the instance header. Shows the single most
   // important thing about this folder right now, or nothing when all is well.
@@ -23,6 +24,7 @@
 
   const STAGES: Record<SyncProgress["stage"], string> = {
     waiting_for_game_exit: "Waiting for you to close Minecraft…",
+    waiting_for_launcher_exit: "Waiting for the launcher to close…",
     backup: "Backing up files…",
     download: "Downloading…",
     waiting_for_manual_downloads: "Waiting for manual downloads…",
@@ -86,6 +88,9 @@
         style="width: {instance.progress.percent}%"
       ></div>
     </div>
+    {#if instance.progress.stage === "waiting_for_launcher_exit"}
+      <div class="mt-3"><CloseLauncherPrompt {instance} /></div>
+    {/if}
   </div>
 {:else if work}
   {@const percent = workPercent(work)}
