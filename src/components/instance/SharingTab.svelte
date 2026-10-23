@@ -94,7 +94,7 @@
   {#each shared.data.members as m (m.user.id)}
     {@const status = memberStatus(m)}
     <div
-      class="grid grid-cols-[32px_minmax(0,1fr)_100px_auto_32px] items-center gap-3.5 rounded-md px-2 py-2 hover:bg-(--bg-hover)"
+      class="grid grid-cols-[32px_minmax(0,1fr)_100px_136px_32px] items-center gap-3.5 rounded-md px-2 py-2 hover:bg-(--bg-hover)"
     >
       <Head user={m.user} size={32} />
       <div class="min-w-0">
@@ -111,7 +111,7 @@
         <div
           role="radiogroup"
           aria-label="Role for {m.user.displayName}"
-          class="inline-flex gap-0.5 rounded-md bg-(--bg) p-0.5"
+          class="inline-flex gap-0.5 justify-self-start rounded-md bg-(--bg) p-0.5"
         >
           {#each ROLES as r (r.id)}
             <button
@@ -149,7 +149,8 @@
           <Icon name="close" class="size-3.5" />
         </button>
       {:else}
-        <span class="text-[12.5px] text-(--text-muted) capitalize"
+        <!-- pl-3: lines up with the first label of the role switch above or below. -->
+        <span class="pl-3 text-[12.5px] text-(--text-muted) capitalize"
           >{m.role}</span
         >
         <span></span>
