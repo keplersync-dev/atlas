@@ -19,12 +19,13 @@ Signing in needs an Atlas server. Development builds use one at `http://localhos
 $env:ATLAS_SERVER_URL = "https://atlas.example.com"; pnpm tauri dev
 ```
 
-To try two accounts on one PC, start a second copy with its own data folder and sign-in while the first is running (development builds only). Run it from a copy of the exe, so it doesn't stop `pnpm tauri dev` from rebuilding:
+To try two accounts on one PC, run a second copy with its own data folder and sign-in next to `pnpm tauri dev` (development builds only). It restarts whenever `pnpm tauri dev` rebuilds the app, so both stay on the same code:
 
 ```powershell
-Copy-Item src-tauri\target\debug\atlas.exe src-tauri\target\debug\atlas-2.exe
-$env:ATLAS_PROFILE = "2"; src-tauri\target\debug\atlas-2.exe
+pnpm dev:profile
 ```
+
+`pnpm dev:profile 3` starts a third, and so on.
 
 ## Tests
 
