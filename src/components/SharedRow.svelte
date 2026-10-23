@@ -54,7 +54,8 @@
       if (behind) parts.push(`${behind} not updated yet`);
       else if (active.length) parts.push("everyone up to date");
       if (invited) parts.push(`${invited} invited`);
-      if (!local) return { tone: "muted", text: "Not on this PC", action: add(s) };
+      if (!local)
+        return { tone: "muted", text: "Not on this PC", action: add(s) };
       return { tone: "muted", text: parts.join(" · ") };
     }
     if (s.myStatus === "invited")
@@ -70,7 +71,8 @@
         text: "Frozen · the owner left, no more updates",
         action: local ? undefined : add(s),
       };
-    if (!local) return { tone: "muted", text: "Not on this PC", action: add(s) };
+    if (!local)
+      return { tone: "muted", text: "Not on this PC", action: add(s) };
     if (local.isRunning) return { tone: "online", text: "Playing now" };
     if (local.sync?.state === "update_available")
       return {
