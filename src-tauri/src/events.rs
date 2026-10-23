@@ -7,7 +7,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Runtime};
 
-use crate::dto::{ActivityItem, Id, InstanceStatus, Presence, SyncProgress};
+use crate::dto::{ActivityItem, Id, InstanceStatus, Presence, SyncProgress, Work};
 
 pub const CHANNEL: &str = "atlas://event";
 
@@ -24,6 +24,9 @@ pub enum AtlasEvent {
         status: InstanceStatus,
         progress: Option<SyncProgress>,
     },
+    /// Work outside a job (reading files, uploading, saving a version). `work: None` = done.
+    #[serde(rename = "instance.work")]
+    InstanceWork { instance_id: Id, work: Option<Work> },
     #[serde(rename = "instance.running")]
     InstanceRunning { instance_id: Id, is_running: bool },
     #[serde(rename = "instance.changed")]
@@ -101,6 +104,25 @@ mod tests {
                 is_running: true
             }),
             json!({ "type": "instance.running", "instanceId": "i1", "isRunning": true })
+        );
+        assert_eq!(
+            to_json(AtlasEvent::InstanceWork {
+                instance_id: "i1".into(),
+                work: Some(crate::dto::Work {
+                    stage: crate::dto::WorkStage::Reading,
+                    done: 3,
+                    total: 300
+                })
+            }),
+            json!({ "type": "instance.work", "instanceId": "i1",
+                    "work": { "stage": "reading", "done": 3, "total": 300 } })
+        );
+        assert_eq!(
+            to_json(AtlasEvent::InstanceWork {
+                instance_id: "i1".into(),
+                work: None
+            }),
+            json!({ "type": "instance.work", "instanceId": "i1", "work": null })
         );
         assert_eq!(
             to_json(AtlasEvent::SessionChanged {}),

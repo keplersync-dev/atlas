@@ -11,6 +11,7 @@ pub mod publish;
 pub mod session;
 pub mod shared;
 pub mod sync;
+pub mod work;
 
 /// Path as stored and shown: canonical (real case, no `\\?\` prefix) when it exists.
 pub fn clean_path(path: &std::path::Path) -> String {

@@ -213,6 +213,17 @@ export interface ManualDownload {
 }
 
 /** Progress of an update/restore Atlas is applying to a folder. */
+/**
+ * What Atlas is doing to an instance outside an update, so it doesn't look stuck:
+ * reading its files after it's tracked, or uploading and saving while sharing.
+ * `done` of `total` files (both 0 while saving).
+ */
+export interface InstanceWork {
+  stage: "reading" | "uploading" | "saving";
+  done: number;
+  total: number;
+}
+
 export interface SyncProgress {
   stage:
     | "waiting_for_game_exit"
@@ -499,6 +510,8 @@ export type AtlasEvent =
       status: InstanceStatus;
       progress: SyncProgress | null;
     }
+  /** Work outside an update; `work: null` when it's over. */
+  | { type: "instance.work"; instanceId: Id; work: InstanceWork | null }
   | { type: "instance.running"; instanceId: Id; isRunning: boolean }
   /** Rescan found changes (files edited in the launcher, metadata changed, folder missing). */
   | { type: "instance.changed"; instanceId: Id }

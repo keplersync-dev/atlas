@@ -16,7 +16,7 @@
 //! mcmod.info `logoFile`, and `pack.png` for resource and data packs.
 
 use std::fs::File;
-use std::io::Read;
+use std::io::{BufReader, Cursor, Read, Seek};
 use std::path::Path;
 
 use serde_json::Value;
@@ -34,16 +34,25 @@ pub struct ModInfo {
 /// Read a jar's metadata. Anything unreadable gives an empty ModInfo (never an error):
 /// the file is still tracked under its file name.
 pub fn read_jar(path: &Path) -> ModInfo {
+    // Only for jars too big to read into memory (see `read_jar_bytes`).
     let Ok(file) = File::open(path) else {
         return ModInfo::default();
     };
-    let Ok(mut zip) = zip::ZipArchive::new(file) else {
+    let Ok(mut zip) = zip::ZipArchive::new(BufReader::new(file)) else {
         return ModInfo::default();
     };
     read_archive(&mut zip)
 }
 
-fn read_archive(zip: &mut zip::ZipArchive<File>) -> ModInfo {
+/// `read_jar` for a jar already read into memory (the scan reads it once to hash it).
+pub fn read_jar_bytes(data: &[u8]) -> ModInfo {
+    let Ok(mut zip) = zip::ZipArchive::new(Cursor::new(data)) else {
+        return ModInfo::default();
+    };
+    read_archive(&mut zip)
+}
+
+fn read_archive<R: Read + Seek>(zip: &mut zip::ZipArchive<R>) -> ModInfo {
     let mut text = |name: &str| -> Option<String> {
         let mut entry = zip.by_name(name).ok()?;
         if entry.size() > 1_000_000 {
@@ -77,15 +86,29 @@ fn read_archive(zip: &mut zip::ZipArchive<File>) -> ModInfo {
 /// Copy a mod's or pack's icon out of its archive into `out` (a .png path). Returns
 /// false when it has none (or it isn't a PNG/JPEG under 2 MB). Blocking.
 pub fn extract_icon(archive: &Path, out: &Path) -> bool {
+    // From memory when it fits: the zip reader jumps around the file, which is slow
+    // from disk even buffered (about 20x for a pack's worth of jars).
+    let small = std::fs::metadata(archive).is_ok_and(|m| m.len() <= super::hash::IN_MEMORY);
+    if small {
+        let Ok(data) = std::fs::read(archive) else {
+            return false;
+        };
+        return match zip::ZipArchive::new(Cursor::new(data.as_slice())) {
+            Ok(mut zip) => save_icon(&mut zip, out),
+            Err(_) => false,
+        };
+    }
     let Ok(file) = File::open(archive) else {
         return false;
     };
-    let Ok(mut zip) = zip::ZipArchive::new(file) else {
+    let Ok(mut zip) = zip::ZipArchive::new(BufReader::new(file)) else {
         return false;
     };
-    let inner = read_archive(&mut zip)
-        .icon
-        .unwrap_or_else(|| "pack.png".into());
+    save_icon(&mut zip, out)
+}
+
+fn save_icon<R: Read + Seek>(zip: &mut zip::ZipArchive<R>, out: &Path) -> bool {
+    let inner = read_archive(zip).icon.unwrap_or_else(|| "pack.png".into());
     let Ok(mut entry) = zip.by_name(inner.trim_start_matches('/')) else {
         return false;
     };

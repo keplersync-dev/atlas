@@ -31,6 +31,11 @@ wire_enum!(BackupReason {
     BeforeRevert
 });
 
+wire_enum!(
+    /// Work on an instance outside a job: see `Work`.
+    WorkStage { Reading, Uploading, Saving }
+);
+
 wire_enum!(SyncStage {
     WaitingForGameExit,
     Backup,

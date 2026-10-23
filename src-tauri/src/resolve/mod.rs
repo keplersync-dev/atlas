@@ -549,7 +549,7 @@ mod real {
                     )
                     .await
                     .unwrap();
-                    scan::files::scan(&pool, &row.id, &found.game_dir)
+                    scan::files::scan(&pool, &row.id, &found.game_dir, None)
                         .await
                         .unwrap();
                     let start = std::time::Instant::now();

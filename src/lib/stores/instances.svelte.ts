@@ -1,5 +1,5 @@
 import { api } from "$lib/api";
-import type { Id, InstanceSummary } from "$lib/types";
+import type { Id, InstanceSummary, InstanceWork } from "$lib/types";
 
 /**
  * The tracked instances, shared by every component that shows them.
@@ -14,6 +14,8 @@ class InstancesStore {
   error = $state<string | null>(null);
   /** Why the last update/restore of an instance failed, until dismissed or retried. */
   failures = $state<Record<Id, string>>({});
+  /** Work under way outside an update: reading files, uploading, saving a version. */
+  work = $state<Record<Id, InstanceWork>>({});
 
   /** Instances with something waiting on the user: an update to review or changes to publish. */
   needingAttention = $derived(

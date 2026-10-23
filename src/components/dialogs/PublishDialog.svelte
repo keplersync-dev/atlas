@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from "$lib/api";
-  import { plural, versionLabel } from "$lib/format";
+  import { plural, versionLabel, workLabel } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
   import { instances } from "$lib/stores";
   import type { Id, ShareMode } from "$lib/types";
@@ -17,6 +17,8 @@
     $props();
 
   const instance = $derived(instances.byId(instanceId));
+  // Reading the folder while the plan loads; uploading and saving while publishing.
+  const work = $derived(instances.work[instanceId]);
   // Every file with its setting, plus what disappears (disabled/deleted shared files).
   const plan = resource(() => api.preparePublish(instanceId));
 
@@ -99,8 +101,10 @@
   {/snippet}
 
   {#if plan.loading}
-    <p class="py-4 text-[12.5px] text-(--text-muted)">
-      Comparing your folder with v{nextVersion - 1}…
+    <p class="py-4 text-[12.5px] text-(--text-muted) tabular-nums">
+      {work
+        ? workLabel(work)
+        : `Comparing your folder with v${nextVersion - 1}…`}
     </p>
   {:else if plan.error}
     <p class="py-4 text-[12.5px] text-(--danger)">{plan.error}</p>
@@ -164,7 +168,11 @@
   {/if}
 
   {#snippet footer()}
-    {#if error}
+    {#if submitting && work}
+      <span class="mr-auto text-xs text-(--text-muted) tabular-nums"
+        >{workLabel(work)}</span
+      >
+    {:else if error}
       <span class="mr-auto text-xs text-(--danger)" role="alert">{error}</span>
     {:else if needsRights && !rights}
       <span class="mr-auto text-xs text-(--warn)"

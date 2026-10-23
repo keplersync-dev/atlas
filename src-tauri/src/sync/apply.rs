@@ -199,7 +199,7 @@ pub async fn run<R: Runtime>(
 
     // 6. The database follows the folder.
     let _scanning = state.scan_lock(&id).await;
-    scan::files::scan(&state.db, &id, &game_dir).await?;
+    scan::files::scan(&state.db, &id, &game_dir, None).await?;
     adopt::adopt(&state.db, &id, req.revision, &req.manifest).await?;
     scan::icons::fill(&state.db, &state.paths.icons, &id, &game_dir).await?;
     Ok(())

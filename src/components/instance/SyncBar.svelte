@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { plural } from "$lib/format";
+  import { plural, workLabel, workPercent } from "$lib/format";
+  import { instances } from "$lib/stores";
   import type { InstanceSummary, SyncProgress } from "$lib/types";
   import Button from "../Button.svelte";
   import Icon from "../Icon.svelte";
@@ -29,6 +30,8 @@
   };
 
   const s = $derived(instance.sync);
+  // Reading files after tracking, or uploading while sharing.
+  const work = $derived(instances.work[instance.id]);
 </script>
 
 {#snippet bar(
@@ -81,6 +84,25 @@
       <div
         class="h-full bg-(--accent) transition-[width] duration-300"
         style="width: {instance.progress.percent}%"
+      ></div>
+    </div>
+  </div>
+{:else if work}
+  {@const percent = workPercent(work)}
+  <div class="mt-5 rounded-lg bg-(--bg-raise) px-4 py-3">
+    <div class="flex justify-between text-[12.5px]">
+      <span class="tabular-nums">{workLabel(work)}</span>
+      {#if percent !== null}<span class="text-(--text-muted) tabular-nums"
+          >{percent}%</span
+        >{/if}
+    </div>
+    <div class="mt-2 h-1 overflow-hidden rounded-full bg-(--line-2)">
+      <div
+        class="h-full bg-(--accent) transition-[width] duration-300 {percent ===
+        null
+          ? 'w-full animate-pulse'
+          : ''}"
+        style={percent === null ? undefined : `width: ${percent}%`}
       ></div>
     </div>
   </div>

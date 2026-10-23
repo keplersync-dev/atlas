@@ -20,13 +20,33 @@ pub struct Hashes {
 }
 
 const CHUNK: usize = 64 * 1024;
+/// Files up to this size (nearly every mod) are read into memory once. Bigger ones are
+/// streamed twice, since murmur2 needs its input's length before the first byte.
+pub const IN_MEMORY: u64 = 64 * 1024 * 1024;
 
 fn is_ignored(b: u8) -> bool {
     matches!(b, b'\t' | b'\n' | b'\r' | b' ')
 }
 
+/// `is_ignored` as a table, for the in-memory path's tight loop.
+const KEEP: [bool; 256] = {
+    let mut t = [true; 256];
+    t[b'\t' as usize] = false;
+    t[b'\n' as usize] = false;
+    t[b'\r' as usize] = false;
+    t[b' ' as usize] = false;
+    t
+};
+
 /// Hash a file. Blocking: call it from a blocking thread.
 pub fn hash_file(path: &Path) -> io::Result<Hashes> {
+    hash_file_with(path, IN_MEMORY)
+}
+
+fn hash_file_with(path: &Path, in_memory: u64) -> io::Result<Hashes> {
+    if std::fs::metadata(path)?.len() <= in_memory {
+        return Ok(hash_bytes(&std::fs::read(path)?));
+    }
     // Pass 1: sha1 + sha256, and how many bytes murmur2 will see (it needs the length first).
     let mut sha1 = Sha1::new();
     let mut sha256 = Sha256::new();
@@ -52,6 +72,34 @@ pub fn hash_file(path: &Path) -> io::Result<Hashes> {
         sha256: hex::encode(sha256.finalize()),
         murmur2: murmur.finish(),
     })
+}
+
+/// All three hashes of a file read into memory.
+pub fn hash_bytes(data: &[u8]) -> Hashes {
+    // Copy every byte, but only move past the kept ones: no branch per byte.
+    let mut kept = vec![0u8; data.len()];
+    let mut n = 0;
+    for &b in data {
+        kept[n] = b;
+        n += usize::from(KEEP[b as usize]);
+    }
+    kept.truncate(n);
+    Hashes {
+        sha1: hex::encode(Sha1::digest(data)),
+        sha256: hex::encode(Sha256::digest(data)),
+        murmur2: murmur2(&kept),
+    }
+}
+
+/// MurmurHash2 (seed 1) over bytes already stripped of whitespace, four at a time.
+fn murmur2(kept: &[u8]) -> u32 {
+    let mut m = Murmur2::new(kept.len() as u32);
+    let mut words = kept.chunks_exact(4);
+    for w in &mut words {
+        m.word(u32::from_le_bytes([w[0], w[1], w[2], w[3]]));
+    }
+    words.remainder().iter().for_each(|&b| m.push(b));
+    m.finish()
 }
 
 fn for_each_chunk(path: &Path, mut f: impl FnMut(&[u8])) -> io::Result<()> {
@@ -88,13 +136,17 @@ impl Murmur2 {
         self.block[self.filled] = b;
         self.filled += 1;
         if self.filled == 4 {
-            let mut k = u32::from_le_bytes(self.block);
-            k = k.wrapping_mul(M);
-            k ^= k >> 24;
-            k = k.wrapping_mul(M);
-            self.h = self.h.wrapping_mul(M) ^ k;
+            self.word(u32::from_le_bytes(self.block));
             self.filled = 0;
         }
+    }
+
+    /// Mix in four bytes at once (only between whole blocks).
+    fn word(&mut self, mut k: u32) {
+        k = k.wrapping_mul(M);
+        k ^= k >> 24;
+        k = k.wrapping_mul(M);
+        self.h = self.h.wrapping_mul(M) ^ k;
     }
 
     fn finish(mut self) -> u32 {
@@ -144,6 +196,23 @@ mod tests {
             h.sha256,
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
+    }
+
+    #[test]
+    fn read_once_and_streamed_give_the_same_hashes() {
+        // Whitespace spread through it, and every tail length for the word-at-a-time path.
+        for len in [0, 1, 2, 3, 4, 5, 200_003] {
+            let data: Vec<u8> = (0..len as u32)
+                .map(|i| if i % 7 == 0 { b'\n' } else { (i % 251) as u8 })
+                .collect();
+            let p = std::env::temp_dir().join(format!("atlas-hash-{}", crate::util::ids::new_id()));
+            std::fs::write(&p, &data).unwrap();
+            let once = hash_file_with(&p, u64::MAX).unwrap();
+            let streamed = hash_file_with(&p, 0).unwrap();
+            std::fs::remove_file(&p).ok();
+            assert_eq!(once, streamed, "{len} bytes");
+            assert_eq!(once.murmur2, murmur(&data));
+        }
     }
 
     #[test]

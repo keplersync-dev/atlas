@@ -379,7 +379,7 @@ async fn restore_job<R: Runtime>(
 
     let _scanning = state.scan_lock(&id).await;
     backup::restore_snapshot(&state.db, &id, &snapshot).await?;
-    scan::files::scan(&state.db, &id, &game_dir).await?;
+    scan::files::scan(&state.db, &id, &game_dir, None).await?;
     drop(_scanning);
     backup::prune(&state.db, &state.paths, &id).await
 }

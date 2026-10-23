@@ -26,6 +26,10 @@ export function connectStores() {
           instances.dismissFailure(e.instanceId);
         break;
       }
+      case "instance.work":
+        if (e.work) instances.work[e.instanceId] = e.work;
+        else delete instances.work[e.instanceId];
+        break;
       case "instance.jobFailed":
         instances.failures[e.instanceId] = e.message;
         break;

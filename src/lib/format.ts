@@ -1,6 +1,6 @@
 // Small display helpers. Plain functions: no Svelte, easy to test, usable anywhere.
 
-import type { IsoDate, Loader } from "$lib/types";
+import type { InstanceWork, IsoDate, Loader } from "$lib/types";
 
 const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
@@ -68,3 +68,21 @@ export function normalizeCode(input: string): string {
 export function formatCode(code: string): string {
   return code.length === 8 ? `${code.slice(0, 4)}-${code.slice(4)}` : code;
 }
+
+/** "Reading files… 120 of 300", "Uploading 3 of 41 files…", "Saving the new version…" */
+export function workLabel(w: InstanceWork): string {
+  switch (w.stage) {
+    case "reading":
+      return `Reading files… ${w.done} of ${w.total}`;
+    case "uploading":
+      return `Uploading ${w.done} of ${plural(w.total, "file")}…`;
+    case "saving":
+      return "Saving the new version…";
+  }
+}
+
+/** 0–100 for a progress bar; null while there's nothing to count. */
+export function workPercent(w: InstanceWork): number | null {
+  return w.total ? Math.round((w.done / w.total) * 100) : null;
+}
+

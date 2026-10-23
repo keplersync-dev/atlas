@@ -10,11 +10,12 @@ use reqwest::Method;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Runtime};
 
+use super::work::Reporter;
 use crate::db::{self, content::ContentRow, instances::InstanceRow};
 use crate::dto::{
     ContentKind, ContentSource, CreateRevision, CreateSharedInstance, InstanceSummary,
     ManualDownload, MemberRole, PublishInput, PublishItem, PublishPlan, RevisionSummary,
-    ShareInstanceInput, ShareMode, SharedInstance, Side, Storage, from_wire, to_wire,
+    ShareInstanceInput, ShareMode, SharedInstance, Side, Storage, WorkStage, from_wire, to_wire,
 };
 use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
@@ -253,12 +254,13 @@ fn walk(dir: &Path, rel: &str, out: &mut Vec<(String, PathBuf)>) {
 
 /// Upload what the version needs that the server doesn't have yet: files on no mod site
 /// that are shared, and the config files. Returns the configs as overrides.
-async fn send_files(
+async fn send_files<R: Runtime>(
     state: &AppState,
     row: &InstanceRow,
     rows: &[ContentRow],
     modes: &HashMap<String, ShareMode>,
     confirmed_rights: bool,
+    work: &Reporter<R>,
 ) -> AppResult<Vec<Override>> {
     let uploads: Vec<&ContentRow> = live(rows)
         .filter(|r| modes.get(&r.id) != Some(&ShareMode::Private) && is_upload(r))
@@ -325,8 +327,13 @@ async fn send_files(
             "Not enough storage left. Set some files to Only me.",
         ));
     }
-    for (file, sha256, size, name) in &wanted {
+    let total = wanted.len() as u64;
+    for (i, (file, sha256, size, name)) in wanted.iter().enumerate() {
+        work.report(WorkStage::Uploading, i as u64, total);
         state.cloud.upload(file, sha256, *size, name).await?;
+    }
+    if total > 0 {
+        work.report(WorkStage::Uploading, total, total);
     }
     if !wanted.is_empty() {
         tracing::info!(files = wanted.len(), bytes = new_bytes, "uploaded files");
@@ -487,9 +494,19 @@ pub async fn share<R: Runtime>(
     let description = input.description.flatten();
     // Check the manifest builds before uploading anything.
     build(&row, &rows, &modes, description.clone(), Vec::new(), None)?;
-    let overrides = send_files(state, &row, &rows, &modes, input.confirmed_upload_rights).await?;
+    let work = Reporter::new(app, id);
+    let overrides = send_files(
+        state,
+        &row,
+        &rows,
+        &modes,
+        input.confirmed_upload_rights,
+        &work,
+    )
+    .await?;
     let icon = send_icon(state, &row).await;
     let m = build(&row, &rows, &modes, description.clone(), overrides, icon)?;
+    work.report(WorkStage::Saving, 0, 0);
     let body = CreateSharedInstance {
         name: row.name.clone(),
         description,
@@ -538,7 +555,16 @@ pub async fn publish<R: Runtime>(
     let modes = modes(&rows, &input.share_modes);
     let description = row.synced_manifest().and_then(|m| m.description);
     build(&row, &rows, &modes, description.clone(), Vec::new(), None)?;
-    let overrides = send_files(state, &row, &rows, &modes, input.confirmed_upload_rights).await?;
+    let work = Reporter::new(app, id);
+    let overrides = send_files(
+        state,
+        &row,
+        &rows,
+        &modes,
+        input.confirmed_upload_rights,
+        &work,
+    )
+    .await?;
     // The owner's picture is the shared one; editors keep it.
     let icon = if row.role() == Some(MemberRole::Owner) {
         send_icon(state, &row).await
@@ -549,6 +575,7 @@ pub async fn publish<R: Runtime>(
     if row.synced_manifest_hash.as_deref() == Some(manifest::hash(&m).as_str()) {
         return Err(AppError::invalid_input("Nothing to publish"));
     }
+    work.report(WorkStage::Saving, 0, 0);
     let body = CreateRevision {
         base_revision: base,
         manifest: m.clone(),

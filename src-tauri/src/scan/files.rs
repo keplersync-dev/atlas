@@ -15,8 +15,8 @@ use std::time::UNIX_EPOCH;
 
 use sqlx::SqlitePool;
 
-use super::hash::{Hashes, hash_file};
-use super::metadata::{ModInfo, read_jar};
+use super::hash::{Hashes, IN_MEMORY, hash_bytes, hash_file};
+use super::metadata::{ModInfo, read_jar, read_jar_bytes};
 use crate::db::content::{self, ContentRow, FileFacts, NewFile};
 use crate::dto::{ContentKind, ShareMode, from_wire, to_wire};
 use crate::error::{AppError, AppResult};
@@ -117,28 +117,65 @@ struct Read {
     info: ModInfo,
 }
 
-/// Hash (and, for jars, read) files on up to 4 threads. Blocking. Results match `files`.
-fn read_all(files: &[PathBuf]) -> Vec<std::io::Result<Read>> {
+/// Windows: run the current thread at background priority, which lowers its disk priority
+/// too, so scanning a big pack doesn't slow down whatever the user is doing.
+fn background_priority() {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::System::Threading::{
+            GetCurrentThread, SetThreadPriority, THREAD_MODE_BACKGROUND_BEGIN,
+        };
+        // SAFETY: changes only this thread's own priority; it ends with the thread.
+        unsafe { SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN) };
+    }
+}
+
+/// Hash a file and, for a jar, read what it says about itself. Files up to `IN_MEMORY`
+/// are read from disk once for both.
+fn read_one(path: &Path) -> std::io::Result<Read> {
+    let jar = has_extension(&path.to_string_lossy(), "jar");
+    if std::fs::metadata(path)?.len() <= IN_MEMORY {
+        let data = std::fs::read(path)?;
+        return Ok(Read {
+            hashes: hash_bytes(&data),
+            info: if jar {
+                read_jar_bytes(&data)
+            } else {
+                ModInfo::default()
+            },
+        });
+    }
+    Ok(Read {
+        hashes: hash_file(path)?,
+        info: if jar {
+            read_jar(path)
+        } else {
+            ModInfo::default()
+        },
+    })
+}
+
+/// Hash (and, for jars, read) files on up to 4 background threads. Blocking. Results
+/// match `files`.
+fn read_all(files: &[PathBuf], progress: Option<&Progress>) -> Vec<std::io::Result<Read>> {
     use std::sync::Mutex;
     use std::sync::atomic::{AtomicUsize, Ordering};
     let next = AtomicUsize::new(0);
+    let finished = AtomicUsize::new(0);
     let results: Mutex<Vec<Option<std::io::Result<Read>>>> =
         Mutex::new((0..files.len()).map(|_| None).collect());
     std::thread::scope(|s| {
         for _ in 0..4.min(files.len()) {
             s.spawn(|| {
+                background_priority();
                 loop {
                     let i = next.fetch_add(1, Ordering::Relaxed);
                     let Some(path) = files.get(i) else { break };
-                    let r = hash_file(path).map(|hashes| Read {
-                        info: if has_extension(&path.to_string_lossy(), "jar") {
-                            read_jar(path)
-                        } else {
-                            ModInfo::default()
-                        },
-                        hashes,
-                    });
-                    results.lock().unwrap()[i] = Some(r);
+                    results.lock().unwrap()[i] = Some(read_one(path));
+                    let done = finished.fetch_add(1, Ordering::Relaxed) + 1;
+                    if let Some(p) = progress {
+                        p(done, files.len());
+                    }
                 }
             });
         }
@@ -164,8 +201,17 @@ impl ScanResult {
     }
 }
 
+/// Told how many of the files to read are done: `(done, total)`. Called from the reading
+/// threads.
+pub type Progress = std::sync::Arc<dyn Fn(usize, usize) + Send + Sync>;
+
 /// Bring the instance's rows in line with its folder. Does nothing if the folder is missing.
-pub async fn scan(db: &SqlitePool, instance_id: &str, game_dir: &Path) -> AppResult<ScanResult> {
+pub async fn scan(
+    db: &SqlitePool,
+    instance_id: &str,
+    game_dir: &Path,
+    progress: Option<Progress>,
+) -> AppResult<ScanResult> {
     if !game_dir.is_dir() {
         return Ok(ScanResult::default());
     }
@@ -188,7 +234,7 @@ pub async fn scan(db: &SqlitePool, instance_id: &str, game_dir: &Path) -> AppRes
         })
         .collect();
     let paths: Vec<PathBuf> = to_hash.iter().map(|f| f.absolute.clone()).collect();
-    let hashes = blocking(move || read_all(&paths)).await?;
+    let hashes = blocking(move || read_all(&paths, progress.as_ref())).await?;
     let hashed: HashMap<String, Read> = to_hash
         .iter()
         .zip(hashes)
@@ -364,7 +410,7 @@ mod tests {
             std::fs::write(self.dir.join(rel), bytes).unwrap();
         }
         async fn scan(&self) -> ScanResult {
-            scan(&self.pool, &self.id, &self.dir).await.unwrap()
+            scan(&self.pool, &self.id, &self.dir, None).await.unwrap()
         }
         async fn rows(&self) -> Vec<ContentRow> {
             let mut rows = content::list(&self.pool, &self.id).await.unwrap();
@@ -377,6 +423,32 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.dir);
         }
+    }
+
+    #[tokio::test]
+    async fn reports_how_many_files_are_read() {
+        let f = Fixture::new().await;
+        for i in 0..5 {
+            f.write(&format!("mods/mod-{i}.jar"), format!("mod {i}").as_bytes());
+        }
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = seen.clone();
+        let progress: Progress = std::sync::Arc::new(move |done, total| {
+            log.lock().unwrap().push((done, total));
+        });
+        scan(&f.pool, &f.id, &f.dir, Some(progress)).await.unwrap();
+        let mut seen = seen.lock().unwrap().clone();
+        seen.sort();
+        assert_eq!(seen, (1..=5).map(|d| (d, 5)).collect::<Vec<_>>());
+
+        // Nothing changed: nothing to read, nothing reported.
+        let quiet = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let count = quiet.clone();
+        let progress: Progress = std::sync::Arc::new(move |_, _| {
+            count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        });
+        scan(&f.pool, &f.id, &f.dir, Some(progress)).await.unwrap();
+        assert_eq!(quiet.load(std::sync::atomic::Ordering::Relaxed), 0);
     }
 
     #[tokio::test]
@@ -552,7 +624,7 @@ mod tests {
         f.write("mods/a.jar", b"a");
         f.scan().await;
         let gone = f.dir.join("gone");
-        assert!(!scan(&f.pool, &f.id, &gone).await.unwrap().changed());
+        assert!(!scan(&f.pool, &f.id, &gone, None).await.unwrap().changed());
         assert_eq!(f.rows().await.len(), 1);
     }
 }
@@ -594,10 +666,14 @@ mod real {
                     .await
                     .unwrap();
                     let start = std::time::Instant::now();
-                    let first = super::scan(&pool, &row.id, &found.game_dir).await.unwrap();
+                    let first = super::scan(&pool, &row.id, &found.game_dir, None)
+                        .await
+                        .unwrap();
                     let first_time = start.elapsed();
                     let start = std::time::Instant::now();
-                    let second = super::scan(&pool, &row.id, &found.game_dir).await.unwrap();
+                    let second = super::scan(&pool, &row.id, &found.game_dir, None)
+                        .await
+                        .unwrap();
                     let rows = db::content::list(&pool, &row.id).await.unwrap();
                     let mb: i64 = rows.iter().map(|r| r.size_bytes).sum::<i64>() / 1_048_576;
                     let disabled = rows.iter().filter(|r| !r.enabled).count();

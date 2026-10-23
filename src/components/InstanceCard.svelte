@@ -16,10 +16,16 @@
 <script lang="ts">
   import { api } from "$lib/api";
   import { openDialog } from "$lib/dialogs.svelte";
-  import { plural, timeAgo, versionLabel } from "$lib/format";
+  import {
+    plural,
+    timeAgo,
+    versionLabel,
+    workLabel,
+    workPercent,
+  } from "$lib/format";
   import { go } from "$lib/nav.svelte";
   import { kindFor, wallPixels } from "$lib/pixel";
-  import { social } from "$lib/stores";
+  import { instances, social } from "$lib/stores";
   import Button from "./Button.svelte";
   import Head from "./Head.svelte";
   import Icon from "./Icon.svelte";
@@ -58,6 +64,8 @@
       !iconFailed,
   );
   const open = () => go({ page: "instance", id: instance.id });
+  // Reading files after tracking, or uploading while sharing.
+  const work = $derived(instances.work[instance.id]);
 
   // Who else has it, as faces on shared cards.
   const people = $derived.by(() => {
@@ -276,6 +284,22 @@
             class="h-full bg-(--accent) transition-[width] duration-300"
             style="width: {instance.progress.percent}%"
           ></div>
+        </div>
+      {:else if work}
+        {@const percent = workPercent(work)}
+        <div class="flex min-h-7 flex-col justify-center">
+          <span class="truncate text-xs text-(--text-muted) tabular-nums"
+            >{workLabel(work)}</span
+          >
+          <div class="mt-1.5 h-1 overflow-hidden rounded-full bg-(--line-2)">
+            <div
+              class="h-full bg-(--accent) transition-[width] duration-300 {percent ===
+              null
+                ? 'w-full animate-pulse'
+                : ''}"
+              style={percent === null ? undefined : `width: ${percent}%`}
+            ></div>
+          </div>
         </div>
       {:else}
         <div class="flex min-h-7 items-center gap-2.5">

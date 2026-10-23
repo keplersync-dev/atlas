@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     BackupReason, ContentKind, ContentSource, Id, InstanceStatus, IsoDate, LauncherKind, Loader,
-    MemberRole, PublicUser, ShareMode, Side, SyncStage, SyncState,
+    MemberRole, PublicUser, ShareMode, Side, SyncStage, SyncState, WorkStage,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,6 +40,17 @@ pub struct ManualDownload {
     pub content_name: String,
     pub file_name: String,
     pub page_url: String,
+}
+
+/// What Atlas is doing to an instance outside an update, so it doesn't look stuck:
+/// reading its files after it's tracked, or uploading files and saving a version while
+/// sharing. `done` of `total` files (both 0 for `Saving`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Work {
+    pub stage: WorkStage,
+    pub done: u64,
+    pub total: u64,
 }
 
 /// Progress of an update/restore Atlas is applying to a folder.

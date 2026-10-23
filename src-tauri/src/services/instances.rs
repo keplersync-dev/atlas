@@ -15,13 +15,17 @@ use crate::db::{
 };
 use crate::dto::{
     InstanceDetail, InstanceStatus, InstanceSummary, InstanceSyncInfo, LauncherKind, LauncherRef,
-    MemberRole, ShareMode, SyncProgress, TrackInstanceRef, UpdateInstanceInput, from_wire, to_wire,
+    MemberRole, ShareMode, SyncProgress, TrackInstanceRef, UpdateInstanceInput, WorkStage,
+    from_wire, to_wire,
 };
 use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
 use crate::launchers::{self, FoundInstance, OpenError};
 use crate::scan;
 use crate::state::AppState;
+
+/// Reading this many files or more shows progress (a newly tracked pack); fewer is quick.
+const READ_PROGRESS_FROM: usize = 20;
 
 fn not_found() -> AppError {
     AppError::not_found("Instance not found")
@@ -334,11 +338,20 @@ pub async fn rescan<R: Runtime>(
         if !state.watcher.is_watching(id) {
             state.watcher.watch(id, game_dir);
         }
-        let result = scan::files::scan(&state.db, id, game_dir).await?;
+        // Big reads (a newly tracked pack) show their progress; quick rescans stay quiet.
+        let work = std::sync::Arc::new(super::work::Reporter::new(app, id));
+        let reporter = work.clone();
+        let progress: scan::files::Progress = std::sync::Arc::new(move |done, total| {
+            if total >= READ_PROGRESS_FROM {
+                reporter.report(WorkStage::Reading, done as u64, total as u64);
+            }
+        });
+        let result = scan::files::scan(&state.db, id, game_dir, Some(progress)).await?;
         if result.changed() {
             tracing::debug!(instance = %row.name, ?result, "content changed");
         }
         let icons = scan::icons::fill(&state.db, &state.paths.icons, id, game_dir).await?;
+        drop(work);
         result.changed() || icons > 0
     } else {
         state.watcher.unwatch(id);

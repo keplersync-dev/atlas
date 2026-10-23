@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from "$lib/api";
-  import { plural } from "$lib/format";
+  import { plural, workLabel } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
   import { instances, social } from "$lib/stores";
   import type { Id, ShareMode } from "$lib/types";
@@ -20,6 +20,8 @@
     $props();
 
   const instance = $derived(instances.byId(instanceId));
+  // Reading the folder while the plan loads; uploading and saving while sharing.
+  const work = $derived(instances.work[instanceId]);
   const sharedId = $derived(instance?.sync?.sharedInstanceId ?? null);
 
   // Only load what this mode needs. Promise.resolve(null) = "nothing to load".
@@ -255,8 +257,10 @@
         What friends get
       </h3>
       {#if plan.loading}
-        <p class="text-[12.5px] text-(--text-muted)">
-          Checking which files friends can download…
+        <p class="text-[12.5px] text-(--text-muted) tabular-nums">
+          {work
+            ? workLabel(work)
+            : "Checking which files friends can download…"}
         </p>
       {:else if plan.error}
         <p class="text-[12.5px] text-(--danger)">{plan.error}</p>
@@ -275,8 +279,12 @@
   {/if}
 
   {#snippet footer()}
-    {#if error}<span class="mr-auto text-xs text-(--danger)" role="alert"
-        >{error}</span
+    {#if submitting && work}<span
+        class="mr-auto text-xs text-(--text-muted) tabular-nums"
+        >{workLabel(work)}</span
+      >{:else if error}<span
+        class="mr-auto text-xs text-(--danger)"
+        role="alert">{error}</span
       >{:else if mode === "share" && needsRights && !rights}<span
         class="mr-auto text-xs text-(--warn)"
         >Confirm you can share the uploaded files</span
