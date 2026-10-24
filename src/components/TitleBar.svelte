@@ -85,7 +85,7 @@
       <button
         onclick={run}
         aria-label="{label} window"
-        class="grid w-11.5 place-items-center text-(--text-faint) transition-colors duration-150 hover:text-white
+        class="grid w-11.5 cursor-default! place-items-center text-(--text-faint) transition-colors duration-150 hover:text-white
           {destructive ? 'hover:bg-[#c42b1c]' : 'hover:bg-(--bg-hover)'}"
       >
         <Icon name={icon} class="size-4" />
