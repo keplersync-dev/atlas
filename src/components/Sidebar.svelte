@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { api } from "$lib/api";
   import { go, isActive, type View } from "$lib/nav.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
   import { instances, social } from "$lib/stores";
@@ -27,6 +28,10 @@
   /** Something waiting on the user: an update to review or changes to publish. */
   const needsYou = (i: InstanceSummary) =>
     instances.needingAttention.includes(i);
+
+  function openLegal(page: "terms" | "privacy") {
+    api.openLegalPage(page).catch((e) => (signInError = (e as Error).message));
+  }
 
   /** Opens the browser. Calling it again while waiting starts over. */
   async function signIn() {
@@ -185,6 +190,22 @@
           {signInError}
         </p>
       {/if}
+      <p
+        class="mt-2.5 text-center text-[11px] leading-snug text-(--text-faint)"
+      >
+        By signing in you agree to the
+        <button
+          type="button"
+          class="underline hover:text-(--text-primary)"
+          onclick={() => openLegal("terms")}>Terms</button
+        >
+        and
+        <button
+          type="button"
+          class="underline hover:text-(--text-primary)"
+          onclick={() => openLegal("privacy")}>Privacy Policy</button
+        >.
+      </p>
     </div>
   {/if}
 </aside>

@@ -4,6 +4,7 @@
   import AccountDialog from "./dialogs/AccountDialog.svelte";
   import LinkDialog from "./dialogs/LinkDialog.svelte";
   import PublishDialog from "./dialogs/PublishDialog.svelte";
+  import ReportDialog from "./dialogs/ReportDialog.svelte";
   import ShareDialog from "./dialogs/ShareDialog.svelte";
   import TrackDialog from "./dialogs/TrackDialog.svelte";
 
@@ -33,5 +34,7 @@
     <AccountDialog onclose={closeDialog} />
   {:else if active?.kind === "link"}
     <LinkDialog link={active.link} onclose={closeDialog} />
+  {:else if active?.kind === "report"}
+    <ReportDialog about={active.about} onclose={closeDialog} />
   {/if}
 {/key}

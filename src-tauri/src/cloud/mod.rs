@@ -401,6 +401,15 @@ impl Cloud {
         })
     }
 
+    /// A page on the server's website (not the API): `/terms`, `/privacy`.
+    pub fn page_url(&self, path: &str) -> AppResult<Url> {
+        let base = self.base.as_ref().ok_or_else(|| {
+            AppError::unknown("This copy of Atlas isn't connected to an Atlas server")
+        })?;
+        base.join(path)
+            .map_err(|_| AppError::unknown("Bad server address"))
+    }
+
     fn url(&self, path: &str) -> AppResult<Url> {
         let base = self.base.as_ref().ok_or_else(|| {
             AppError::unknown("This copy of Atlas isn't connected to an Atlas server")

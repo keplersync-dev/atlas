@@ -55,6 +55,12 @@ fn sample(command: &str, key: &str) -> Value {
         ("invite_to_shared_instance", "input") => {
             json!({ "friendIds": ["u1"], "groupIds": ["g1"], "role": "editor" })
         }
+        ("report", "input") => json!({
+            "targetType": "user", "targetId": "u1", "reason": "abuse", "details": null
+        }),
+        (_, "reason") => json!("copyright"),
+        (_, "details") => json!("It's my pack"),
+        (_, "page") => json!("terms"),
         (_, "patch") => json!({}),
         ("sync_instance", "options") => {
             json!({ "configChoices": { "config/a.json": "mine" }, "installOptional": ["AANobbMI"] })

@@ -9,6 +9,7 @@
 
 <script lang="ts">
   import { confirmAction } from "$lib/confirm.svelte";
+  import { openDialog } from "$lib/dialogs.svelte";
   import { plural, timeAgo } from "$lib/format";
   import { social } from "$lib/stores";
   import type { Friend } from "$lib/types";
@@ -252,6 +253,19 @@
                       label: "Block",
                       danger: true,
                       onselect: () => remove(f, true),
+                    },
+                    "divider",
+                    {
+                      label: "Report…",
+                      onselect: () =>
+                        openDialog({
+                          kind: "report",
+                          about: {
+                            kind: "user",
+                            id: f.user.id,
+                            name: f.user.displayName,
+                          },
+                        }),
                     },
                   ]}
                 />

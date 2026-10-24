@@ -63,6 +63,18 @@ export type SyncState =
 
 /** Any Atlas user as seen by others. */
 /** A friend or group link Atlas was opened with (`atlas://friend/<code>`). */
+/** What a report is about, and why. */
+export type ReportTarget = "user" | "shared_instance" | "group" | "blob";
+export type ReportReason = "copyright" | "malware" | "abuse" | "other";
+
+/** Report something that breaks the rules. Uploaded files go through `reportFile`. */
+export interface ReportInput {
+  targetType: Exclude<ReportTarget, "blob">;
+  targetId: Id;
+  reason: ReportReason;
+  details: string | null;
+}
+
 /** How Atlas behaves on this PC, outside any account. */
 export interface AppSettings {
   /** A Windows notification for new activity while Atlas isn't in front. */

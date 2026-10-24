@@ -4,7 +4,9 @@ use reqwest::Method;
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_opener::OpenerExt;
 
-use crate::dto::{AuthProvider, Me, Session, UpdateProfileInput};
+use crate::dto::{
+    AuthProvider, Me, NewReport, ReportReason, ReportTarget, Session, UpdateProfileInput,
+};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
@@ -65,6 +67,58 @@ pub async fn delete_account(state: &AppState) -> AppResult<()> {
         .call::<()>(Method::DELETE, "/me", None::<&()>)
         .await?;
     state.cloud.forget_session().await
+}
+
+/// Tell Atlas about a file, shared instance, group or person that breaks the rules.
+pub async fn report(state: &AppState, input: NewReport) -> AppResult<()> {
+    state
+        .cloud
+        .call::<()>(Method::POST, "/reports", Some(&input))
+        .await
+}
+
+/// An uploaded file in a shared instance, by its row here: the server wants its sha256 and
+/// the shared instance it's in.
+pub async fn report_file(
+    state: &AppState,
+    instance_id: &str,
+    content_id: &str,
+    reason: ReportReason,
+    details: Option<String>,
+) -> AppResult<()> {
+    let row = crate::db::instances::get(&state.db, instance_id)
+        .await?
+        .ok_or_else(|| AppError::not_found("Instance not found"))?;
+    let shared = super::shared::server_id(&row)
+        .ok_or_else(|| AppError::conflict("This instance isn't shared"))?
+        .to_owned();
+    let rows = crate::db::content::list(&state.db, instance_id).await?;
+    let file = rows
+        .iter()
+        .find(|r| r.id == content_id)
+        .ok_or_else(|| AppError::not_found("That file isn't in this instance any more"))?;
+    let input = NewReport {
+        target_type: ReportTarget::Blob,
+        target_id: file.sha256.clone(),
+        reason,
+        details,
+        shared_instance_id: Some(shared),
+    };
+    report(state, input).await
+}
+
+/// The Terms of Service or Privacy Policy, in the browser, from this Atlas's server.
+pub fn open_legal_page<R: Runtime>(
+    app: &AppHandle<R>,
+    state: &AppState,
+    page: &str,
+) -> AppResult<()> {
+    let path = match page {
+        "terms" => "/terms",
+        "privacy" => "/privacy",
+        _ => return Err(AppError::invalid_input("No such page")),
+    };
+    open(app, state.cloud.page_url(path)?.as_str())
 }
 
 fn open<R: Runtime>(app: &AppHandle<R>, url: &str) -> AppResult<()> {

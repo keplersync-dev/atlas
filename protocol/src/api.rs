@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::enums::{
     ActivityType, AuthProvider, ContentKind, GroupMemberRole, GroupRole, InviteRole, Loader,
-    MemberRole, MemberStatus, PresenceState, RequestDirection, Side,
+    MemberRole, MemberStatus, PresenceState, ReportReason, ReportTarget, RequestDirection, Side,
 };
 use crate::manifest::Manifest;
 use crate::{Id, IsoDate};
@@ -513,6 +513,23 @@ pub struct CurseForgeFile {
     /// The file's page on curseforge.com.
     pub page_url: String,
     pub side: Side,
+}
+
+// ── Reports ────────────────────────────────────────────────────────────
+
+/// `POST /reports`: tell Atlas about something that breaks the rules. Only things the
+/// reporter can see: a member's shared instance, a group they're in, any user, or an
+/// uploaded file (`target_id` is its sha256) in `shared_instance_id`, which they're in.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewReport {
+    pub target_type: ReportTarget,
+    pub target_id: String,
+    pub reason: ReportReason,
+    #[serde(default)]
+    pub details: Option<String>,
+    #[serde(default)]
+    pub shared_instance_id: Option<Id>,
 }
 
 // ── Activity ───────────────────────────────────────────────────────────

@@ -102,6 +102,16 @@ wire_enum!(ActivityType {
     GroupJoined,
 });
 
+wire_enum!(
+    /// What a report is about.
+    ReportTarget { User, SharedInstance, Group, Blob }
+);
+
+wire_enum!(
+    /// Why something was reported.
+    ReportReason { Copyright, Malware, Abuse, Other }
+);
+
 /// Which program a session belongs to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

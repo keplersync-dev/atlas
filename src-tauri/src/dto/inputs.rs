@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-pub use atlas_protocol::api::UpdateProfileInput;
+pub use atlas_protocol::api::{NewReport, UpdateProfileInput};
 
 use super::{ConfigChoice, Id, InviteRole, LauncherKind, ShareMode};
 

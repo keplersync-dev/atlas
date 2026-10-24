@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from "$lib/api";
+  import { openDialog } from "$lib/dialogs.svelte";
   import type {
     ContentKind,
     ContentSource,
@@ -131,6 +132,11 @@
       .sort((a, b) => Number(first.has(b.id)) - Number(first.has(a.id))),
   );
 
+  /** An uploaded file from someone else's shared version: it can be reported. Files from
+   *  Modrinth or CurseForge are reported on those sites. */
+  const reportable = (c: InstanceContent) =>
+    c.isManaged && c.source === "upload" && instance.sync?.role !== "owner";
+
   /** Viewers: optional items from the shared version can be downloaded or removed freely. */
   const isOptionalExtra = (c: InstanceContent) =>
     !canSetModes && c.isManaged && c.shareMode === "optional";
@@ -246,6 +252,23 @@
               : " · not downloaded"}
           {:else if ownerName}
             · {item.isManaged ? `from ${ownerName}` : "your addition"}
+          {/if}
+          {#if reportable(item)}
+            ·
+            <button
+              type="button"
+              class="hover:text-(--text-primary) hover:underline"
+              onclick={() =>
+                openDialog({
+                  kind: "report",
+                  about: {
+                    kind: "file",
+                    instanceId: instance.id,
+                    contentId: item.id,
+                    name: item.name,
+                  },
+                })}>Report</button
+            >
           {/if}
         </small>
       </div>

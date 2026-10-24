@@ -355,6 +355,19 @@
       </p>{/if}
   {/if}
 
+  <p class="mt-6 text-center text-[11.5px] text-(--text-faint)">
+    {#each [{ page: "terms", label: "Terms of Service" }, { page: "privacy", label: "Privacy Policy" }] as const as l, i (l.page)}
+      {#if i}·{/if}
+      <button
+        type="button"
+        class="hover:text-(--text-primary) hover:underline"
+        onclick={() =>
+          api.openLegalPage(l.page).catch((e) => (error = e.message))}
+        >{l.label}</button
+      >
+    {/each}
+  </p>
+
   {#snippet footer()}
     {#if me}
       <Button

@@ -1,6 +1,8 @@
 import type {
   ActivityItem,
   AppSettings,
+  ReportInput,
+  ReportReason,
   AtlasEvent,
   AuthProvider,
   Backup,
@@ -193,6 +195,19 @@ export interface AtlasApi {
   blockUser(userId: Id): Promise<void>;
   /** The friend or group link Atlas was opened with, once (null if none is waiting). */
   takeOpenedLink(): Promise<OpenedLink | null>;
+
+  // ── Reports and legal pages ──────────────────────────────────────────
+  /** A shared instance, group or person that breaks the rules. */
+  report(input: ReportInput): Promise<void>;
+  /** An uploaded file in a shared instance, by its content row. */
+  reportFile(
+    instanceId: Id,
+    contentId: Id,
+    reason: ReportReason,
+    details: string | null,
+  ): Promise<void>;
+  /** Opens the Terms of Service or Privacy Policy in the browser. */
+  openLegalPage(page: "terms" | "privacy"): Promise<void>;
 
   // ── This PC ──────────────────────────────────────────────────────────
   getAppSettings(): Promise<AppSettings>;
