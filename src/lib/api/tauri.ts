@@ -103,6 +103,10 @@ export const tauriApi: AtlasApi = {
   blockUser: (userId) => call("block_user", { userId }),
   takeOpenedLink: () => call("take_opened_link"),
 
+  getAppSettings: () => call("get_app_settings"),
+  updateAppSettings: (patch) => call("update_app_settings", { patch }),
+  windowReady: () => call("window_ready"),
+
   listGroups: () => call("list_groups"),
   getGroup: (id) => call("get_group", { id }),
   createGroup: (input) => call("create_group", { input }),

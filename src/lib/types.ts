@@ -63,6 +63,16 @@ export type SyncState =
 
 /** Any Atlas user as seen by others. */
 /** A friend or group link Atlas was opened with (`atlas://friend/<code>`). */
+/** How Atlas behaves on this PC, outside any account. */
+export interface AppSettings {
+  /** A Windows notification for new activity while Atlas isn't in front. */
+  notifications: boolean;
+  /** The close button hides Atlas to the tray instead of quitting it. */
+  closeToTray: boolean;
+  /** Atlas starts in the tray when you sign in to Windows. */
+  startWithWindows: boolean;
+}
+
 export interface OpenedLink {
   kind: "friend" | "group";
   /** Normalized: a friend code or a group invite code. */

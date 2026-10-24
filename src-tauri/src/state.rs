@@ -45,6 +45,9 @@ pub struct AppState {
     /// New instances whose download shouldn't wait for the launcher to close to get their
     /// picture: the player chose to skip it (see accept.rs).
     pub skip_picture: Arc<Mutex<HashSet<String>>>,
+    /// The tray and notification settings, kept here for the close button and incoming
+    /// activity, which can't wait on the database (see desktop.rs).
+    pub prefs: Arc<crate::desktop::Prefs>,
     /// The Atlas server and the signed-in session.
     pub cloud: Arc<Cloud>,
     /// A friend or group link waiting for the UI (crate::links).
@@ -74,6 +77,7 @@ impl AppState {
             modrinth_api: Some(crate::resolve::modrinth::API.to_string()),
             resolving: Arc::default(),
             skip_picture: Arc::default(),
+            prefs: Arc::default(),
             cloud: Arc::new(Cloud::new(
                 db.clone(),
                 Cloud::server_url_from_env(),

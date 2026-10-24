@@ -1,5 +1,6 @@
 import type {
   ActivityItem,
+  AppSettings,
   AtlasEvent,
   AuthProvider,
   Backup,
@@ -192,6 +193,13 @@ export interface AtlasApi {
   blockUser(userId: Id): Promise<void>;
   /** The friend or group link Atlas was opened with, once (null if none is waiting). */
   takeOpenedLink(): Promise<OpenedLink | null>;
+
+  // ── This PC ──────────────────────────────────────────────────────────
+  getAppSettings(): Promise<AppSettings>;
+  /** Only the fields given change. */
+  updateAppSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
+  /** The page has drawn: show the window, unless Atlas started with Windows (it stays in the tray). */
+  windowReady(): Promise<void>;
 
   // ── Groups ───────────────────────────────────────────────────────────
   listGroups(): Promise<Group[]>;

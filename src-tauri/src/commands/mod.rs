@@ -5,6 +5,7 @@
 //! into these snake_case parameters). tests/contract.rs checks that for every command.
 
 pub mod activity;
+pub mod app;
 pub mod friends;
 pub mod groups;
 pub mod instances;

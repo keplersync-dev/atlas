@@ -4,6 +4,7 @@
 pub mod cloud;
 pub mod commands;
 pub mod db;
+pub mod desktop;
 pub mod dto;
 pub mod error;
 pub mod events;
@@ -22,6 +23,7 @@ use tauri::{Manager, Runtime};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tracing_subscriber::{EnvFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt};
 
+use crate::events::AtlasEvent;
 use crate::state::{AppPaths, AppState};
 
 /// Every command the UI can call. Public so tests can build a mock app with the same
@@ -52,6 +54,9 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::instances::untrack_instance,
         commands::instances::update_instance,
         commands::instances::rescan_instance,
+        commands::app::get_app_settings,
+        commands::app::update_app_settings,
+        commands::app::window_ready,
         commands::instances::open_in_launcher,
         commands::instances::close_launcher,
         commands::instances::skip_launcher_picture,
@@ -152,7 +157,17 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
 
     let db = tauri::async_runtime::block_on(db::open(&paths.database()))?;
     let state = AppState::new(db, paths);
+    if let Err(e) = tauri::async_runtime::block_on(state.prefs.load(&state.db)) {
+        tracing::warn!(error = %e, "couldn't read the tray and notification settings");
+    }
     app.manage(state.clone());
+    let tooltip = match &profile {
+        Some(profile) => format!("Atlas ({profile})"),
+        None => "Atlas".to_owned(),
+    };
+    if let Err(e) = desktop::add_tray(app.handle(), &tooltip) {
+        tracing::warn!(error = %e, "couldn't add the tray icon");
+    }
 
     // Friend and group links. A development build registers the scheme for this exe (an
     // installed Atlas registers it when installed); a profile copy leaves it to the main one.
@@ -179,8 +194,9 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     let handle = app.handle().clone();
 
     // The page shows the window once it has drawn (it starts hidden). If the page never
-    // loads, show it anyway rather than leave Atlas invisible.
-    {
+    // loads, show it anyway rather than leave Atlas invisible. Started with Windows, it
+    // stays in the tray.
+    if !state.prefs.started_hidden {
         let handle = handle.clone();
         tauri::async_runtime::spawn(async move {
             tokio::time::sleep(std::time::Duration::from_secs(10)).await;
@@ -243,7 +259,12 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     // and the server socket opened in the background.
     {
         let handle = handle.clone();
-        state.cloud.on_event(move |e| events::emit(&handle, e));
+        state.cloud.on_event(move |e| {
+            if let AtlasEvent::ActivityNew { item } = &e {
+                desktop::notify_activity(&handle, item);
+            }
+            events::emit(&handle, e)
+        });
         let state = state.clone();
         tauri::async_runtime::spawn(async move {
             state.cloud.restore().await;
@@ -265,7 +286,13 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
 
 /// Coming back to Atlas: catch changes the watcher can't see (launcher metadata),
 /// for instances not scanned in the last 30 seconds.
+/// Closing the window hides Atlas to the tray, when that's on (see desktop.rs).
 fn on_window_event<R: Runtime>(window: &tauri::Window<R>, event: &tauri::WindowEvent) {
+    if let tauri::WindowEvent::CloseRequested { api, .. } = event
+        && desktop::close_to_tray(window)
+    {
+        api.prevent_close();
+    }
     if let tauri::WindowEvent::Focused(true) = event {
         let app = window.app_handle().clone();
         tauri::async_runtime::spawn(async move {
@@ -291,6 +318,11 @@ pub fn run() {
     builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec![desktop::STARTED_BY_WINDOWS]),
+        ))
         .setup(setup)
         .on_window_event(on_window_event)
         .invoke_handler(invoke_handler())

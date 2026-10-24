@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { api } from "$lib/api";
   import { nav } from "$lib/nav.svelte";
   import { connectStores, social } from "$lib/stores";
   import Icon from "../components/Icon.svelte";
@@ -19,10 +19,10 @@
   onMount(connectStores);
 
   // The window starts hidden so it never shows a blank page while this loads; show it
-  // once the first frame is drawn.
+  // once the first frame is drawn (it stays in the tray when Atlas started with Windows).
   onMount(() => {
     if ("__TAURI_INTERNALS__" in window) {
-      requestAnimationFrame(() => void getCurrentWindow().show());
+      requestAnimationFrame(() => void api.windowReady());
     }
   });
 </script>

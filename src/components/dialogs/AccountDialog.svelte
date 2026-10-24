@@ -1,9 +1,10 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import { api } from "$lib/api";
   import { confirmAction } from "$lib/confirm.svelte";
   import { fileSize, formatCode } from "$lib/format";
   import { social } from "$lib/stores";
-  import type { AuthProvider } from "$lib/types";
+  import type { AppSettings, AuthProvider } from "$lib/types";
   import Button from "../Button.svelte";
   import Dialog from "../Dialog.svelte";
   import Head from "../Head.svelte";
@@ -71,6 +72,31 @@
   // ── Everything else saves instantly ──
   let error = $state<string | null>(null);
   let busy = $state<string | null>(null);
+
+  // This PC's settings, which aren't part of the account.
+  let pc = $state<AppSettings | null>(null);
+  api
+    .getAppSettings()
+    .then((s) => (pc = s))
+    .catch(() => {});
+  const PC_SETTINGS: { key: keyof AppSettings; title: string; hint: string }[] =
+    [
+      {
+        key: "notifications",
+        title: "Notifications",
+        hint: "When Atlas isn't in front: friend requests, invites and new versions of shared instances.",
+      },
+      {
+        key: "closeToTray",
+        title: "Keep running in the tray",
+        hint: "Closing the window leaves Atlas in the tray, so it keeps your instances up to date.",
+      },
+      {
+        key: "startWithWindows",
+        title: "Start with Windows",
+        hint: "Atlas starts in the tray when you sign in to Windows.",
+      },
+    ];
 
   async function act(key: string, action: () => Promise<unknown>) {
     busy = key;
@@ -214,6 +240,29 @@
           act("offline", () => social.updateProfile({ appearOffline: next }))}
       />
     </div>
+
+    <!-- ── This PC: saves the moment you flip it, like Privacy ── -->
+    {#if pc}
+      {@const settings = pc}
+      {@render section("This PC")}
+      {#each PC_SETTINGS as s (s.key)}
+        <div class="flex items-start gap-3 not-first:mt-3">
+          <div class="flex-1">
+            <b class="block font-medium">{s.title}</b>
+            <small class="text-[11.5px] text-(--text-faint)">{s.hint}</small>
+          </div>
+          <Switch
+            checked={settings[s.key]}
+            label={s.title}
+            disabled={busy === s.key}
+            onchange={(next) =>
+              act(s.key, async () => {
+                pc = await api.updateAppSettings({ [s.key]: next });
+              })}
+          />
+        </div>
+      {/each}
+    {/if}
 
     <!-- ── Sign-in methods ── -->
     {@render section("Sign in with")}

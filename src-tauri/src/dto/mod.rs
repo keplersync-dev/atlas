@@ -7,6 +7,7 @@
 //! - DTOs are separate from database rows: services convert rows into these.
 
 pub mod activity;
+pub mod app;
 pub mod enums;
 pub mod groups;
 pub mod inputs;
@@ -15,6 +16,7 @@ pub mod people;
 pub mod shared;
 
 pub use activity::*;
+pub use app::*;
 pub use enums::*;
 pub use groups::*;
 pub use inputs::*;
