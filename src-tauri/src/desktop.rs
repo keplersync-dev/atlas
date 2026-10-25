@@ -133,8 +133,16 @@ pub fn notify_activity<R: Runtime>(app: &AppHandle<R>, item: &ActivityItem) {
         .get_webview_window("main")
         .is_some_and(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false));
     if !in_front {
-        let (title, body) = describe(item);
-        notify(app, &title, &body);
+        // Worded for the signed-in user ("You now own …"), whose id is in the saved session.
+        let (app, item) = (app.clone(), item.clone());
+        tauri::async_runtime::spawn(async move {
+            let me = match app.try_state::<AppState>() {
+                Some(state) => state.cloud.session().await.ok().and_then(|s| s.user),
+                None => None,
+            };
+            let (title, body) = describe(&item, me.as_ref().map(|m| m.user.id.as_str()));
+            notify(&app, &title, &body);
+        });
     }
 }
 
@@ -144,8 +152,9 @@ fn notify<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
     }
 }
 
-/// A notification's title and text, worded like the activity feed.
-fn describe(a: &ActivityItem) -> (String, String) {
+/// A notification's title and text, worded like the activity feed. `me` is the signed-in
+/// user's id.
+fn describe(a: &ActivityItem, me: Option<&str>) -> (String, String) {
     let who = a
         .actor
         .as_ref()
@@ -174,7 +183,14 @@ fn describe(a: &ActivityItem) -> (String, String) {
         ),
         ActivityType::MemberJoined => ("Instance added", format!("{who} added {what}")),
         ActivityType::MemberLeft => ("Instance left", format!("{who} left {what}")),
-        ActivityType::OwnershipTransferred => ("New owner", format!("{who} now owns {what}")),
+        ActivityType::OwnershipTransferred => (
+            "New owner",
+            if a.actor.as_ref().map(|u| u.id.as_str()) == me && me.is_some() {
+                format!("You now own {what}")
+            } else {
+                format!("{who} now owns {what}")
+            },
+        ),
         ActivityType::InstanceFrozen => (
             "Instance frozen",
             format!("{what} was frozen: the owner left"),
@@ -257,21 +273,31 @@ mod tests {
     #[test]
     fn notifications_read_like_the_feed() {
         assert_eq!(
-            describe(&item(ActivityType::InstanceUpdated)),
+            describe(&item(ActivityType::InstanceUpdated), None),
             (
                 "Update available".to_owned(),
                 "dakep published v4 of SkyFactory 4 fixed".to_owned()
             )
         );
         assert_eq!(
-            describe(&item(ActivityType::InstanceInvite)).1,
+            describe(&item(ActivityType::InstanceInvite), None).1,
             "dakep shared SkyFactory 4 fixed with you"
         );
         let mut frozen = item(ActivityType::InstanceFrozen);
         frozen.actor = None;
         assert_eq!(
-            describe(&frozen).1,
+            describe(&frozen, None).1,
             "SkyFactory 4 fixed was frozen: the owner left"
+        );
+        let owner = item(ActivityType::OwnershipTransferred);
+        assert_eq!(
+            describe(&owner, Some("x")).1,
+            "dakep now owns SkyFactory 4 fixed"
+        );
+        assert_eq!(
+            describe(&owner, Some("u")).1,
+            "You now own SkyFactory 4 fixed",
+            "to the new owner themselves"
         );
     }
 }

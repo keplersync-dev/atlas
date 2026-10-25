@@ -12,8 +12,12 @@
     "instance_frozen",
   ]);
 
-  /** One event as a sentence in three parts, so the names can be bold. */
-  function describe(a: ActivityItem): {
+  /** One event as a sentence in three parts, so the names can be bold. `me` is the
+   * signed-in user's id. */
+  function describe(
+    a: ActivityItem,
+    me: string | undefined,
+  ): {
     who: string | null;
     verb: string;
     what: string;
@@ -43,7 +47,9 @@
       case "member_left":
         return { who, verb: "left", what, tail: "" };
       case "ownership_transferred":
-        return { who, verb: "now owns", what, tail: "" };
+        return a.actor && a.actor.id === me
+          ? { who: "You", verb: "now own", what, tail: "" }
+          : { who, verb: "now owns", what, tail: "" };
       case "instance_frozen":
         return {
           who: null,
@@ -83,7 +89,7 @@
 </script>
 
 {#snippet sentence(a: ActivityItem)}
-  {@const d = describe(a)}
+  {@const d = describe(a, social.session?.user?.id)}
   {#if d.who}<b class="font-semibold">{d.who}</b>{/if}
   {d.verb}
   <b class="font-semibold">{d.what}</b>{d.tail}
