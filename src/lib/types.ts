@@ -86,6 +86,13 @@ export interface AppSettings {
   startWithWindows: boolean;
 }
 
+/** A newer Atlas on the release page. */
+export interface AvailableUpdate {
+  version: string;
+  /** The release notes. */
+  notes: string | null;
+}
+
 export interface OpenedLink {
   kind: "friend" | "group";
   /** Normalized: a friend code or a group invite code. */
@@ -559,7 +566,11 @@ export type AtlasEvent =
   | { type: "groups.changed"; groupId: Id | null }
   | { type: "activity.new"; item: ActivityItem }
   /** Atlas was opened with a friend or group link: take it with `takeOpenedLink`. */
-  | { type: "link.opened" };
+  | { type: "link.opened" }
+  /** Downloading an update; `total` is null when the size isn't known. */
+  | { type: "update.progress"; downloaded: number; total: number | null }
+  /** The server refused this version as too old: it needs updating to sync. */
+  | { type: "update.required" };
 
 // ── Inputs ─────────────────────────────────────────────────────────────
 

@@ -111,6 +111,9 @@ export const tauriApi: AtlasApi = {
   getAppSettings: () => call("get_app_settings"),
   updateAppSettings: (patch) => call("update_app_settings", { patch }),
   windowReady: () => call("window_ready"),
+  checkForUpdate: () => call("check_for_update"),
+  installUpdate: () => call("install_update"),
+  openReleasePage: () => call("open_release_page"),
 
   listGroups: () => call("list_groups"),
   getGroup: (id) => call("get_group", { id }),

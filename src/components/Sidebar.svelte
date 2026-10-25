@@ -8,6 +8,7 @@
   import Head from "./Head.svelte";
   import Icon from "./Icon.svelte";
   import ProviderIcon from "./ProviderIcon.svelte";
+  import UpdateCard from "./UpdateCard.svelte";
 
   let legalError = $state<string | null>(null);
 
@@ -131,6 +132,7 @@
     {/each}
   </div>
 
+  <UpdateCard />
   {#if social.session?.user}
     <button
       onclick={() => openDialog({ kind: "account" })}

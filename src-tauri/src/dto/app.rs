@@ -20,3 +20,12 @@ pub struct AppSettingsPatch {
     pub close_to_tray: Option<bool>,
     pub start_with_windows: Option<bool>,
 }
+
+/// A newer Atlas on the release page.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AvailableUpdate {
+    pub version: String,
+    /// The release notes.
+    pub notes: Option<String>,
+}

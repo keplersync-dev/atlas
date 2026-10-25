@@ -50,6 +50,12 @@ pub enum AtlasEvent {
     /// `take_opened_link`.
     #[serde(rename = "link.opened")]
     LinkOpened {},
+    /// Downloading an update (`install_update`). `total` is None when the size isn't known.
+    #[serde(rename = "update.progress")]
+    UpdateProgress { downloaded: u64, total: Option<u64> },
+    /// The server refused this version of Atlas as too old: it needs updating to sync.
+    #[serde(rename = "update.required")]
+    UpdateRequired {},
 }
 
 /// Send an event to the UI. A closed window isn't an error worth handling.

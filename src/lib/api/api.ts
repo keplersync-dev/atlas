@@ -1,6 +1,7 @@
 import type {
   ActivityItem,
   AppSettings,
+  AvailableUpdate,
   ReportInput,
   ReportReason,
   AtlasEvent,
@@ -215,6 +216,12 @@ export interface AtlasApi {
   updateAppSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
   /** The page has drawn: show the window, unless Atlas started with Windows (it stays in the tray). */
   windowReady(): Promise<void>;
+  /** The newest release if it's newer than this one. Always null in development builds. */
+  checkForUpdate(): Promise<AvailableUpdate | null>;
+  /** Downloads and installs it (`update.progress` events), then Atlas restarts. */
+  installUpdate(): Promise<void>;
+  /** The release page in the browser, to download an update by hand. */
+  openReleasePage(): Promise<void>;
 
   // ── Groups ───────────────────────────────────────────────────────────
   listGroups(): Promise<Group[]>;
@@ -259,6 +266,7 @@ export type ApiErrorCode =
   | "invalid_input"
   | "rate_limited"
   | "quota_exceeded"
+  | "client_outdated"
   | "unknown";
 
 /** Thrown by any API method. `code` is stable and safe to switch on in the UI. */

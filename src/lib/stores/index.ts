@@ -2,8 +2,9 @@ import { api } from "$lib/api";
 import { openDialog } from "$lib/dialogs.svelte";
 import { instances } from "./instances.svelte";
 import { social } from "./social.svelte";
+import { updates } from "./updates.svelte";
 
-export { instances, social };
+export { instances, social, updates };
 
 /**
  * Loads every store and keeps them fresh from live events.
@@ -12,11 +13,18 @@ export { instances, social };
 export function connectStores() {
   instances.load();
   social.load();
+  const stopChecking = updates.start();
   // A link may have started Atlas before the page was ready to hear about it.
   showOpenedLink();
 
-  return api.subscribe((e) => {
+  const unsubscribe = api.subscribe((e) => {
     switch (e.type) {
+      case "update.progress":
+        updates.setProgress(e.downloaded, e.total);
+        break;
+      case "update.required":
+        updates.require();
+        break;
       case "instance.progress": {
         // Progress carries the new data, so patch in place instead of refetching.
         const i = instances.byId(e.instanceId);
@@ -61,6 +69,10 @@ export function connectStores() {
         break;
     }
   });
+  return () => {
+    unsubscribe();
+    stopChecking();
+  };
 }
 
 /** Ask about a friend or group link Atlas was opened with, if one is waiting. */

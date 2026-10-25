@@ -79,7 +79,7 @@ fn sample(command: &str, key: &str) -> Value {
     }
 }
 
-const ERROR_CODES: [&str; 9] = [
+const ERROR_CODES: [&str; 10] = [
     "not_found",
     "not_signed_in",
     "forbidden",
@@ -88,6 +88,7 @@ const ERROR_CODES: [&str; 9] = [
     "invalid_input",
     "rate_limited",
     "quota_exceeded",
+    "client_outdated",
     "unknown",
 ];
 

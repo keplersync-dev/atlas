@@ -11,6 +11,7 @@ pub mod publish;
 pub mod session;
 pub mod shared;
 pub mod sync;
+pub mod updates;
 pub mod work;
 
 /// Path as stored and shown: canonical (real case, no `\\?\` prefix) when it exists.

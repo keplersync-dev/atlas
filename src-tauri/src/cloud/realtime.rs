@@ -81,7 +81,10 @@ impl Cloud {
                         End::Lost => tracing::info!("connection to the Atlas server lost"),
                     }
                 }
-                Err(e) if e.code == ErrorCode::NotSignedIn => return,
+                // Retrying won't help until Atlas is updated.
+                Err(e) if matches!(e.code, ErrorCode::NotSignedIn | ErrorCode::ClientOutdated) => {
+                    return;
+                }
                 Err(e) => tracing::debug!(error = %e, "couldn't connect to the Atlas server"),
             }
             self.set_online(false);
@@ -117,6 +120,13 @@ impl Cloud {
                     if res.status() == 401 && !force_refresh =>
                 {
                     continue;
+                }
+                Err(tokio_tungstenite::tungstenite::Error::Http(res)) if res.status() == 426 => {
+                    self.emit(AtlasEvent::UpdateRequired {});
+                    return Err(AppError::new(
+                        ErrorCode::ClientOutdated,
+                        "This version of Atlas is too old",
+                    ));
                 }
                 Err(e) => {
                     tracing::debug!(error = %e, "WebSocket handshake failed");

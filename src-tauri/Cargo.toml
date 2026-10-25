@@ -52,6 +52,7 @@ url = "2.5.8"
 rand = "0.10.3"
 tokio-tungstenite = { version = "0.30.0", features = ["native-tls"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tauri-plugin-updater = "2"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_Threading"] }

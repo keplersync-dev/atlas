@@ -60,6 +60,9 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::app::get_app_settings,
         commands::app::update_app_settings,
         commands::app::window_ready,
+        commands::app::check_for_update,
+        commands::app::install_update,
+        commands::app::open_release_page,
         commands::instances::open_in_launcher,
         commands::instances::close_launcher,
         commands::instances::skip_launcher_picture,
@@ -322,6 +325,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec![desktop::STARTED_BY_WINDOWS]),

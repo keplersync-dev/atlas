@@ -17,6 +17,8 @@ pub enum ErrorCode {
     InvalidInput,
     RateLimited,
     QuotaExceeded,
+    /// The server needs a newer Atlas.
+    ClientOutdated,
     Unknown,
 }
 

@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Atlas",
-  "version": "0.1.0",
   "identifier": "dev.keplerhaloxx.atlas",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -39,14 +38,17 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "createUpdaterArtifacts": true
   },
   "plugins": {
     "deep-link": {
@@ -54,6 +56,16 @@
         "schemes": [
           "atlas"
         ]
+      }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDdFMEJCMjI0N0FDNjc3MkYKUldRdmQ4WjZKTElMZnBkVG1kbEVyWjBwRHFTUFAzdHVVRWUxd2pwZjBDTXRJRnFRM3czUnpRdHoK",
+      "endpoints": [
+        "https://github.com/xhalo-dev/atlas/releases/latest/download/latest.json"
+      ],
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

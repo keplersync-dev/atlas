@@ -446,7 +446,11 @@ impl Cloud {
             AppError::unknown("The Atlas server's answer was cut off")
         })?;
         if !status.is_success() {
-            return Err(server_error(status, &bytes));
+            let error = server_error(status, &bytes);
+            if error.code == ErrorCode::ClientOutdated {
+                self.emit(AtlasEvent::UpdateRequired {});
+            }
+            return Err(error);
         }
         let json = if bytes.is_empty() {
             serde_json::Value::Null
@@ -513,7 +517,8 @@ fn server_error(status: StatusCode, bytes: &[u8]) -> AppError {
         WireCode::Conflict => ErrorCode::Conflict,
         WireCode::QuotaExceeded => ErrorCode::QuotaExceeded,
         WireCode::RateLimited => ErrorCode::RateLimited,
-        WireCode::ClientOutdated | WireCode::Unknown => ErrorCode::Unknown,
+        WireCode::ClientOutdated => ErrorCode::ClientOutdated,
+        WireCode::Unknown => ErrorCode::Unknown,
     };
     AppError::new(code, error.message)
 }
