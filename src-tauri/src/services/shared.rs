@@ -40,6 +40,7 @@ pub async fn list<R: Runtime>(
         .cloud
         .cached_get(CACHE_KEY, "/shared-instances")
         .await?;
+    db::instances::sync_roles(&state.db, &list).await?;
     let rows = db::instances::list(&state.db).await?;
     if state.cloud.is_online() {
         for row in &rows {
@@ -263,12 +264,17 @@ pub async fn report_synced(state: &AppState, row: &InstanceRow) {
 
 /// Refresh the cached list (so summaries see the new latest revision) and tell the UI.
 pub async fn changed<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) {
-    if let Err(e) = state
+    match state
         .cloud
         .cached_get::<Vec<SharedInstance>>(CACHE_KEY, "/shared-instances")
         .await
     {
-        tracing::info!(error = %e, "couldn't refresh shared instances");
+        Ok(list) => {
+            if let Err(e) = db::instances::sync_roles(&state.db, &list).await {
+                tracing::warn!(error = %e, "couldn't update roles");
+            }
+        }
+        Err(e) => tracing::info!(error = %e, "couldn't refresh shared instances"),
     }
     emit(
         app,

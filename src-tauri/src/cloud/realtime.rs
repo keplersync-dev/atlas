@@ -193,8 +193,14 @@ impl Cloud {
                 let refreshed = self
                     .cached_get::<Vec<SharedInstance>>(SHARED_CACHE_KEY, "/shared-instances")
                     .await;
-                if let Err(e) = refreshed {
-                    tracing::info!(error = %e, "couldn't refresh shared instances");
+                match refreshed {
+                    // A changed role (the owner made them an editor) applies straight away.
+                    Ok(list) => {
+                        if let Err(e) = crate::db::instances::sync_roles(&self.db, &list).await {
+                            tracing::warn!(error = %e, "couldn't update roles");
+                        }
+                    }
+                    Err(e) => tracing::info!(error = %e, "couldn't refresh shared instances"),
                 }
                 AtlasEvent::SharedChanged { shared_instance_id }
             }

@@ -214,6 +214,25 @@ pub async fn content_counts(db: &SqlitePool) -> sqlx::Result<HashMap<String, u32
     Ok(rows.into_iter().map(|(id, n)| (id, n as u32)).collect())
 }
 
+/// Keep up with role changes: each linked copy takes its role from the server's list of
+/// shared instances (the owner can change a member's role at any time).
+pub async fn sync_roles(
+    db: &SqlitePool,
+    shared: &[crate::dto::SharedInstance],
+) -> sqlx::Result<()> {
+    for s in shared {
+        sqlx::query(
+            "UPDATE instance SET shared_role = ? WHERE shared_instance_id = ? AND shared_role IS NOT ?",
+        )
+        .bind(to_wire(s.my_role))
+        .bind(&s.id)
+        .bind(to_wire(s.my_role))
+        .execute(db)
+        .await?;
+    }
+    Ok(())
+}
+
 /// Link to a shared instance (or unlink with `None`): role and sync columns.
 pub async fn set_link(
     db: &SqlitePool,
@@ -243,4 +262,51 @@ pub async fn set_link(
         }
     };
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::dto::{MemberRole, SharedInstance};
+
+    #[tokio::test]
+    async fn roles_follow_the_server() {
+        let db = crate::db::open_in_memory().await.unwrap();
+        let row = insert(
+            &db,
+            NewInstance {
+                launcher_id: None,
+                kind: LauncherKind::Folder,
+                launcher_instance_id: None,
+                game_dir: "C:/Games/Pack".into(),
+                meta: Metadata {
+                    name: "Pack".into(),
+                    icon: None,
+                    minecraft_version: None,
+                    loader: None,
+                    loader_version: None,
+                    last_played_at: None,
+                    total_playtime_seconds: None,
+                },
+            },
+        )
+        .await
+        .unwrap();
+        set_link(&db, &row.id, Some(("s1", MemberRole::Viewer)))
+            .await
+            .unwrap();
+
+        let shared: SharedInstance = serde_json::from_value(serde_json::json!({
+            "id": "s1", "name": "Pack", "description": null, "icon": null, "owner": null,
+            "minecraftVersion": "1.21.1", "loader": "fabric", "loaderVersion": null,
+            "latestRevision": 1, "contentCount": 0, "sizeBytes": 0,
+            "updatedAt": "2026-10-25T00:00:00.000Z", "frozen": false, "myRole": "editor",
+            "myStatus": "active", "myViaGroup": null, "invitedBy": null, "invitedAt": null,
+            "members": [], "groups": [], "optionalItems": []
+        }))
+        .unwrap();
+        sync_roles(&db, &[shared]).await.unwrap();
+        let row = get(&db, &row.id).await.unwrap().unwrap();
+        assert_eq!(row.role(), Some(MemberRole::Editor), "made an editor");
+    }
 }
