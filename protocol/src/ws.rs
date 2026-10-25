@@ -58,6 +58,10 @@ pub enum ServerMessage {
     PresenceChanged { user_id: Id, presence: Presence },
     #[serde(rename = "friends.changed")]
     FriendsChanged {},
+    /// Your own account changed somewhere else: storage used (an upload, or old files
+    /// cleaned up), or a profile change from another PC. Fetch `/me` again.
+    #[serde(rename = "me.changed")]
+    MeChanged {},
     #[serde(rename = "shared.changed", rename_all = "camelCase")]
     SharedChanged {
         shared_instance_id: Id,
@@ -67,7 +71,7 @@ pub enum ServerMessage {
     #[serde(rename = "groups.changed", rename_all = "camelCase")]
     GroupsChanged { group_id: Id },
     #[serde(rename = "notification.new")]
-    NotificationNew { item: ActivityItem },
+    NotificationNew { item: Box<ActivityItem> },
     #[serde(rename = "session.revoked")]
     SessionRevoked {},
     #[serde(rename = "pong")]

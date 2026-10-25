@@ -22,6 +22,10 @@ class SocialStore {
   /** Newest first. */
   activity = $state<ActivityItem[]>([]);
   loaded = $state(false);
+  /** The browser sign-in in progress, and why the last one failed. */
+  signingIn = $state<AuthProvider | null>(null);
+  signInError = $state<string | null>(null);
+  #signInAttempt = 0;
 
   signedIn = $derived(!!this.session?.user);
   invites = $derived(this.shared.filter((s) => s.myStatus === "invited"));
@@ -61,9 +65,22 @@ class SocialStore {
     this.loaded = true;
   }
 
+  /** Opens the browser. Calling it again while waiting starts over. Failures go in
+   * `signInError`. */
   async signIn(provider: AuthProvider) {
-    await api.signIn(provider);
-    await this.load();
+    const attempt = ++this.#signInAttempt;
+    this.signingIn = provider;
+    this.signInError = null;
+    try {
+      await api.signIn(provider);
+      await this.load();
+    } catch (err) {
+      // Starting over rejects the earlier call; only the latest one counts.
+      if (attempt === this.#signInAttempt)
+        this.signInError = (err as Error).message;
+    } finally {
+      if (attempt === this.#signInAttempt) this.signingIn = null;
+    }
   }
 
   // ── Account ──

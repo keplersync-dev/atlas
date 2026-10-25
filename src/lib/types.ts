@@ -41,6 +41,7 @@ export type MemberStatus = "invited" | "active" | "declined";
 export type GroupRole = "owner" | "admin" | "member";
 export type PresenceState = "offline" | "online" | "playing";
 export type AuthProvider = "minecraft" | "discord";
+export type AvatarSource = "minecraft" | "discord";
 
 /**
  * Derived, never stored:
@@ -95,7 +96,9 @@ export interface PublicUser {
   id: Id;
   username: string;
   displayName: string;
-  /** Discord avatar if linked. Otherwise render the Minecraft head from minecraftUuid, else initials. */
+  /** The picture they chose: their Minecraft skin (draw the face from it) or a picture
+   * (the Discord avatar). Both null = initials. */
+  skinUrl: string | null;
   avatarUrl: string | null;
   minecraftUuid: string | null;
   minecraftUsername: string | null;
@@ -119,6 +122,11 @@ export interface Me extends PublicUser {
   /** When the username can next be changed (null = now). */
   usernameChangeAvailableAt: IsoDate | null;
   storage: { usedBytes: number; quotaBytes: number; maxFileBytes: number };
+  /** Which picture they chose, and both to choose from (null = not linked, or no custom
+   * skin / avatar). */
+  avatarSource: AvatarSource;
+  minecraftSkinUrl: string | null;
+  discordAvatarUrl: string | null;
 }
 
 export interface Session {
@@ -578,6 +586,7 @@ export interface UpdateProfileInput {
   username?: string;
   displayName?: string;
   appearOffline?: boolean;
+  avatarSource?: AvatarSource;
 }
 
 export interface ShareInstanceInput {

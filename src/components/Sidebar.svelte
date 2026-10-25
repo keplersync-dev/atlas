@@ -3,14 +3,13 @@
   import { go, isActive, type View } from "$lib/nav.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
   import { instances, social } from "$lib/stores";
-  import type { InstanceSummary } from "$lib/types";
+  import type { AuthProvider, InstanceSummary } from "$lib/types";
   import ContentIcon from "./ContentIcon.svelte";
   import Head from "./Head.svelte";
   import Icon from "./Icon.svelte";
+  import ProviderIcon from "./ProviderIcon.svelte";
 
-  let signingIn = $state(false);
-  let signInError = $state<string | null>(null);
-  let signInAttempt = 0;
+  let legalError = $state<string | null>(null);
 
   const links: { view: View; label: string; icon: string }[] = [
     { view: { page: "home" }, label: "Home", icon: "home" },
@@ -30,23 +29,14 @@
     instances.needingAttention.includes(i);
 
   function openLegal(page: "terms" | "privacy") {
-    api.openLegalPage(page).catch((e) => (signInError = (e as Error).message));
+    legalError = null;
+    api.openLegalPage(page).catch((e) => (legalError = (e as Error).message));
   }
 
-  /** Opens the browser. Calling it again while waiting starts over. */
-  async function signIn() {
-    const attempt = ++signInAttempt;
-    signingIn = true;
-    signInError = null;
-    try {
-      await social.signIn("discord");
-    } catch (err) {
-      // Starting over rejects the earlier call; only the latest one counts.
-      if (attempt === signInAttempt) signInError = (err as Error).message;
-    } finally {
-      if (attempt === signInAttempt) signingIn = false;
-    }
-  }
+  const SIGN_IN: { id: AuthProvider; label: string }[] = [
+    { id: "minecraft", label: "Sign in with Minecraft" },
+    { id: "discord", label: "Sign in with Discord" },
+  ];
 </script>
 
 <aside class="flex min-h-0 flex-col border-r border-white/2.5 bg-(--bg-side)">
@@ -170,29 +160,34 @@
       <Icon name="more" class="size-4 text-(--text-faint)" />
     </button>
   {:else if social.loaded}
-    <div class="px-5 pt-3 pb-4">
-      <button
-        onclick={signIn}
-        disabled={signingIn}
-        class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg-raise-2) font-medium hover:bg-[#252b33] disabled:opacity-50"
-      >
-        {signingIn ? "Waiting for your browser…" : "Sign in with Discord"}
-      </button>
-      {#if signingIn}
-        <p class="mt-2 text-center text-[11.5px] text-(--text-faint)">
+    <div class="grid gap-1.5 px-5 pt-3 pb-4">
+      {#each SIGN_IN as p (p.id)}
+        <button
+          onclick={() => social.signIn(p.id)}
+          disabled={social.signingIn !== null && social.signingIn !== p.id}
+          class="flex h-8 w-full items-center justify-center gap-2 rounded-md border border-(--line-2) bg-(--bg-raise-2) font-medium hover:bg-[#252b33] disabled:opacity-50"
+        >
+          <ProviderIcon provider={p.id} class="size-4" />
+          {social.signingIn === p.id ? "Waiting for your browser…" : p.label}
+        </button>
+      {/each}
+      {#if social.signingIn}
+        <p class="mt-0.5 text-center text-[11.5px] text-(--text-faint)">
           Finish signing in there.
-          <button onclick={signIn} class="underline hover:text-(--text-primary)"
-            >Start again</button
+          <button
+            onclick={() => social.signingIn && social.signIn(social.signingIn)}
+            class="underline hover:text-(--text-primary)">Start again</button
           >
         </p>
-      {:else if signInError}
-        <p class="mt-2 text-center text-[11.5px] text-(--danger)" role="alert">
-          {signInError}
+      {:else if social.signInError || legalError}
+        <p
+          class="mt-0.5 text-center text-[11.5px] text-(--danger)"
+          role="alert"
+        >
+          {social.signInError ?? legalError}
         </p>
       {/if}
-      <p
-        class="mt-2.5 text-center text-[11px] leading-snug text-(--text-faint)"
-      >
+      <p class="mt-1 text-center text-[11px] leading-snug text-(--text-faint)">
         By signing in you agree to the
         <button
           type="button"

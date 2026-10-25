@@ -21,6 +21,7 @@
     SHARING_TYPES,
   } from "../components/shared/ActivityFeed.svelte";
   import ShareButton from "../components/shared/ShareButton.svelte";
+  import SignInButtons from "../components/SignInButtons.svelte";
   import StorageMeter from "../components/shared/StorageMeter.svelte";
 
   // Every shared instance, split by direction. To see one friend's instances,
@@ -239,13 +240,7 @@
     <b class="block text-sm text-(--text-primary)">Sign in to share instances</b
     >
     Your tracked instances keep working without an account.
-    <div>
-      <Button
-        variant="primary"
-        class="mt-4"
-        onclick={() => social.signIn("minecraft")}>Sign in</Button
-      >
-    </div>
+    <SignInButtons />
   </div>
 {:else}
   <!-- Lists on the left; activity and storage in a column on the right (like Friends). -->

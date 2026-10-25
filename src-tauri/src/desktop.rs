@@ -239,6 +239,7 @@ mod tests {
                 id: "u".into(),
                 username: "dakep".into(),
                 display_name: "dakep".into(),
+                skin_url: None,
                 avatar_url: None,
                 minecraft_uuid: None,
                 minecraft_username: None,

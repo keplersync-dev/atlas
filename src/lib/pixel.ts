@@ -1,4 +1,4 @@
-// Generated pixel art: an 8×8 "block" texture per instance and a Minecraft-style head per person.
+// Generated pixel art: an 8×8 "block" texture per instance.
 // Deterministic from a seed string, so the same instance always gets the same block.
 
 export type Pixel = { x: number; y: number; fill: string };
@@ -72,49 +72,6 @@ export function blockPixels(kind: BlockKind, seed: string): Pixel[] {
       if (b.top && (y < 2 || (y === 2 && r() > 0.45))) fill = pick(b.top);
       else if (b.spot && spots.has(`${x},${y}`)) fill = pick(b.spot);
       else fill = pick(b.body);
-      px.push({ x, y, fill });
-    }
-  }
-  return px;
-}
-
-const SKIN = ["#f1c7a5", "#d9a37c", "#b57b52", "#8a5a3a", "#5e3b26"];
-const HAIR = [
-  "#2b1d14",
-  "#4a2f1b",
-  "#7a4a22",
-  "#c99a4b",
-  "#1d1d22",
-  "#b23a2a",
-  "#e8e2d0",
-];
-const EYES = ["#3a5fcd", "#3d7a3a", "#5a3a22", "#2a2a2a"];
-
-const darken = (hex: string) =>
-  hex.replace(/[0-9a-f]{2}/gi, (h) =>
-    Math.max(0, parseInt(h, 16) - 22)
-      .toString(16)
-      .padStart(2, "0"),
-  );
-
-/** A Minecraft-style face. Seed with the Minecraft username so it's stable. */
-export function headPixels(seed: string): Pixel[] {
-  const r = rng(seed);
-  const skin = SKIN[Math.floor(r() * SKIN.length)];
-  const hair = HAIR[Math.floor(r() * HAIR.length)];
-  const eye = EYES[Math.floor(r() * EYES.length)];
-  const fringe = Math.floor(r() * 3);
-  const px: Pixel[] = [];
-  for (let y = 0; y < 8; y++) {
-    for (let x = 0; x < 8; x++) {
-      let fill = skin;
-      if (y < 2 || (y === 2 && (x < 1 + fringe || x > 6 - fringe || r() > 0.7)))
-        fill = r() > 0.8 ? darken(hair) : hair;
-      else if (y === 3 && (x === 0 || x === 7)) fill = hair;
-      else if (y === 4 && (x === 1 || x === 6)) fill = "#f4f4f4";
-      else if (y === 4 && (x === 2 || x === 5)) fill = eye;
-      else if (y === 6 && (x === 3 || x === 4)) fill = darken(darken(skin));
-      else if (r() > 0.85) fill = darken(skin);
       px.push({ x, y, fill });
     }
   }

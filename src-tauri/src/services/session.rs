@@ -21,7 +21,7 @@ pub async fn sign_in<R: Runtime>(
 ) -> AppResult<Session> {
     let session = match provider {
         AuthProvider::Discord => state.cloud.sign_in_discord(|url| open(app, url)).await?,
-        AuthProvider::Minecraft => return Err(minecraft_not_ready()),
+        AuthProvider::Minecraft => state.cloud.sign_in_minecraft(|url| open(app, url)).await?,
     };
     super::presence::refresh(state).await;
     state.cloud.start_realtime();
@@ -35,7 +35,7 @@ pub async fn link<R: Runtime>(
 ) -> AppResult<Me> {
     match provider {
         AuthProvider::Discord => state.cloud.link_discord(|url| open(app, url)).await,
-        AuthProvider::Minecraft => Err(minecraft_not_ready()),
+        AuthProvider::Minecraft => state.cloud.link_minecraft(|url| open(app, url)).await,
     }
 }
 
@@ -126,8 +126,4 @@ fn open<R: Runtime>(app: &AppHandle<R>, url: &str) -> AppResult<()> {
         tracing::error!(error = %e, "couldn't open the browser");
         AppError::unknown("Couldn't open your browser")
     })
-}
-
-fn minecraft_not_ready() -> AppError {
-    AppError::unknown("Minecraft sign-in isn't available yet. Use Discord for now.")
 }

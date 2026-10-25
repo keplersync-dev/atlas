@@ -85,6 +85,9 @@ wire_enum!(PresenceState {
     Online,
     Playing
 });
+// Where someone's picture comes from: their Minecraft skin's face or their Discord avatar.
+wire_enum!(AvatarSource { Minecraft, Discord });
+
 wire_enum!(AuthProvider { Minecraft, Discord });
 
 wire_enum!(RequestDirection { Incoming, Outgoing });

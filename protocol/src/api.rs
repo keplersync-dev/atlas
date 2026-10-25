@@ -4,8 +4,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::enums::{
-    ActivityType, AuthProvider, ContentKind, GroupMemberRole, GroupRole, InviteRole, Loader,
-    MemberRole, MemberStatus, PresenceState, ReportReason, ReportTarget, RequestDirection, Side,
+    ActivityType, AuthProvider, AvatarSource, ContentKind, GroupMemberRole, GroupRole, InviteRole,
+    Loader, MemberRole, MemberStatus, PresenceState, ReportReason, ReportTarget, RequestDirection,
+    Side,
 };
 use crate::manifest::Manifest;
 use crate::{Id, IsoDate};
@@ -19,6 +20,9 @@ pub struct PublicUser {
     pub id: Id,
     pub username: String,
     pub display_name: String,
+    /// The picture to show, whichever they chose: their Minecraft skin (draw its face) or
+    /// a picture (the Discord avatar). Both None = initials.
+    pub skin_url: Option<String>,
     pub avatar_url: Option<String>,
     pub minecraft_uuid: Option<String>,
     pub minecraft_username: Option<String>,
@@ -56,6 +60,12 @@ pub struct Me {
     /// When the username can next be changed (None = now).
     pub username_change_available_at: Option<IsoDate>,
     pub storage: Storage,
+    /// Which picture they chose, and both to choose from (None = not linked, or no
+    /// custom skin / avatar). Defaults so a `Me` the app saved before this existed loads.
+    #[serde(default = "discord")]
+    pub avatar_source: AvatarSource,
+    pub minecraft_skin_url: Option<String>,
+    pub discord_avatar_url: Option<String>,
 }
 
 /// `PATCH /me`. Missing fields stay as they are.
@@ -68,6 +78,12 @@ pub struct UpdateProfileInput {
     pub display_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub appear_offline: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub avatar_source: Option<AvatarSource>,
+}
+
+fn discord() -> AvatarSource {
+    AvatarSource::Discord
 }
 
 // ── Friends ────────────────────────────────────────────────────────────
@@ -618,6 +634,25 @@ pub struct RefreshRequest {
     pub refresh_token: String,
 }
 
+/// Answer to `POST /auth/minecraft/challenge`. The app joins this one-time server id with
+/// its Minecraft session (Mojang's `session/minecraft/join`), the way the game joins a
+/// server, then sends it back for the server to check.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MinecraftChallenge {
+    pub server_id: String,
+}
+
+/// After joining: `POST /auth/minecraft/verify` signs in with it, and
+/// `POST /me/identities/minecraft` links it to the signed-in account instead.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MinecraftVerify {
+    pub server_id: String,
+    /// The Minecraft name the app joined with.
+    pub username: String,
+}
+
 // ── Errors ─────────────────────────────────────────────────────────────
 
 /// `{ "error": { "code": "conflict", "message": "…" } }` on every non-2xx answer.
@@ -681,6 +716,7 @@ mod tests {
                 id: "u1".into(),
                 username: "alex".into(),
                 display_name: "Alex".into(),
+                skin_url: None,
                 avatar_url: None,
                 minecraft_uuid: None,
                 minecraft_username: None,
@@ -699,6 +735,9 @@ mod tests {
                 quota_bytes: 524_288_000,
                 max_file_bytes: 104_857_600,
             },
+            avatar_source: AvatarSource::Discord,
+            minecraft_skin_url: None,
+            discord_avatar_url: None,
         };
         let v = serde_json::to_value(&me).unwrap();
         assert_eq!(v["displayName"], "Alex");

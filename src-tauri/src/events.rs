@@ -45,7 +45,7 @@ pub enum AtlasEvent {
     #[serde(rename = "groups.changed")]
     GroupsChanged { group_id: Option<Id> },
     #[serde(rename = "activity.new")]
-    ActivityNew { item: ActivityItem },
+    ActivityNew { item: Box<ActivityItem> },
     /// Atlas was opened with a friend or group link: the UI takes it with
     /// `take_opened_link`.
     #[serde(rename = "link.opened")]

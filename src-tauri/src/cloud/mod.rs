@@ -4,6 +4,7 @@
 
 pub mod files;
 pub mod loopback;
+pub mod microsoft;
 pub mod realtime;
 pub mod tokens;
 
@@ -12,7 +13,8 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use atlas_protocol::api::{
-    AuthResult, ErrorBody, ErrorCode as WireCode, ExchangeRequest, Me, Tokens,
+    AuthResult, ErrorBody, ErrorCode as WireCode, ExchangeRequest, Me, MinecraftChallenge,
+    MinecraftVerify, Tokens,
 };
 use atlas_protocol::pkce;
 use atlas_protocol::ws::PresenceUpdate;
@@ -190,6 +192,55 @@ impl Cloud {
         Ok(me)
     }
 
+    /// Sign in with Minecraft: Microsoft in the browser, then the server checks with Mojang.
+    pub async fn sign_in_minecraft(
+        &self,
+        open: impl FnOnce(&str) -> AppResult<()>,
+    ) -> AppResult<Session> {
+        let joined = self.minecraft_flow(open).await?;
+        let result: AuthResult = self
+            .send(Method::POST, "/auth/minecraft/verify", None, Some(&joined))
+            .await?;
+        self.start_session(&result.tokens).await;
+        self.set_me(&result.user).await?;
+        self.session().await
+    }
+
+    /// Add a Minecraft account to the signed-in account.
+    pub async fn link_minecraft(&self, open: impl FnOnce(&str) -> AppResult<()>) -> AppResult<Me> {
+        if !self.is_signed_in() {
+            return Err(AppError::not_signed_in());
+        }
+        let joined = self.minecraft_flow(open).await?;
+        let me: Me = self
+            .call(Method::POST, "/me/identities/minecraft", Some(&joined))
+            .await?;
+        self.set_me(&me).await?;
+        Ok(me)
+    }
+
+    /// Sign in to Minecraft on this PC and join a challenge from the server with it.
+    async fn minecraft_flow(
+        &self,
+        open: impl FnOnce(&str) -> AppResult<()>,
+    ) -> AppResult<MinecraftVerify> {
+        self.check_reachable().await?;
+        let cancelled = self.new_attempt();
+        let player = tokio::select! {
+            player = microsoft::sign_in(&self.http, open) => player?,
+            _ = cancelled => return Err(AppError::invalid_input("Sign-in was restarted")),
+        };
+        // Asked for after the browser part, which can take longer than a challenge lasts.
+        let challenge: MinecraftChallenge = self
+            .send(Method::POST, "/auth/minecraft/challenge", None, None::<&()>)
+            .await?;
+        microsoft::join(&self.http, &player, &challenge.server_id).await?;
+        Ok(MinecraftVerify {
+            server_id: challenge.server_id,
+            username: player.name.clone(),
+        })
+    }
+
     /// Open the server's start page in the browser and wait for the one-time code to come
     /// back to a loopback listener. Returns `(code, PKCE verifier)`.
     async fn browser_flow(
@@ -204,16 +255,26 @@ impl Cloud {
             .append_pair("port", &listener.port.to_string())
             .append_pair("challenge", &pkce::challenge(&verifier));
 
+        let cancelled = self.new_attempt();
+        open(url.as_str())?;
+        let expect = loopback::Expect {
+            path: "/callback",
+            state: None,
+        };
+        let code = tokio::select! {
+            code = listener.wait_for_code(expect) => code,
+            _ = cancelled => Err(AppError::invalid_input("Sign-in was restarted")),
+        };
+        Ok((code?, verifier))
+    }
+
+    /// A new browser sign-in cancels the one in progress (left open in the browser).
+    fn new_attempt(&self) -> oneshot::Receiver<()> {
         let (cancel, cancelled) = oneshot::channel();
         if let Some(previous) = self.attempt.lock().unwrap().replace(cancel) {
             let _ = previous.send(());
         }
-        open(url.as_str())?;
-        let code = tokio::select! {
-            code = listener.wait_for_code() => code,
-            _ = cancelled => Err(AppError::invalid_input("Sign-in was restarted")),
-        };
-        Ok((code?, verifier))
+        cancelled
     }
 
     /// Is the server up? Asked before opening the browser, which would otherwise show its
@@ -461,7 +522,8 @@ fn server_error(status: StatusCode, bytes: &[u8]) -> AppError {
 mod tests {
     use super::*;
 
-    /// Signed in earlier, with the user saved, against `server`.
+    /// Signed in earlier, with the user saved by an older version (fields added since are
+    /// missing), against `server`.
     async fn signed_in(server: Option<Url>) -> Cloud {
         let tokens = Arc::new(tokens::MemoryStore::default());
         tokens.set("refresh-token");

@@ -8,6 +8,7 @@
   import Button from "../Button.svelte";
   import Dialog from "../Dialog.svelte";
   import Head from "../Head.svelte";
+  import ProviderIcon from "../ProviderIcon.svelte";
   import Switch from "../Switch.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
@@ -72,6 +73,7 @@
   // ── Everything else saves instantly ──
   let error = $state<string | null>(null);
   let busy = $state<string | null>(null);
+  let attempt = 0;
 
   // This PC's settings, which aren't part of the account.
   let pc = $state<AppSettings | null>(null);
@@ -99,26 +101,57 @@
     ];
 
   async function act(key: string, action: () => Promise<unknown>) {
+    const mine = ++attempt;
     busy = key;
     error = null;
     try {
       await action();
     } catch (err) {
-      error = (err as Error).message;
+      // Linking again while the browser waits starts over and rejects the first try.
+      if (mine === attempt) error = (err as Error).message;
     } finally {
-      busy = null;
+      if (mine === attempt) busy = null;
     }
   }
 
-  const PROVIDERS: {
-    id: AuthProvider;
-    label: string;
-    mark: string;
-    color: string;
-  }[] = [
-    { id: "minecraft", label: "Minecraft", mark: "M", color: "#9aa3ad" },
-    { id: "discord", label: "Discord", mark: "D", color: "#5865f2" },
+  const PROVIDERS: { id: AuthProvider; label: string }[] = [
+    { id: "minecraft", label: "Minecraft" },
+    { id: "discord", label: "Discord" },
   ];
+
+  /** The two pictures to choose from, as `Head` draws them. */
+  const pictures = $derived(
+    me
+      ? [
+          {
+            id: "minecraft" as const,
+            label: "Minecraft skin",
+            user: {
+              displayName: me.displayName,
+              skinUrl: me.minecraftSkinUrl,
+              avatarUrl: null,
+            },
+            available: !!me.minecraftSkinUrl,
+            missing: me.identities.some((i) => i.provider === "minecraft")
+              ? "You're using a default skin"
+              : "Link Minecraft below",
+          },
+          {
+            id: "discord" as const,
+            label: "Discord picture",
+            user: {
+              displayName: me.displayName,
+              skinUrl: null,
+              avatarUrl: me.discordAvatarUrl,
+            },
+            available: !!me.discordAvatarUrl,
+            missing: me.identities.some((i) => i.provider === "discord")
+              ? "Your Discord account has no picture"
+              : "Link Discord below",
+          },
+        ]
+      : [],
+  );
 
   function signOut() {
     act("signout", async () => {
@@ -223,6 +256,46 @@
       {/if}
     </form>
 
+    <!-- ── Picture: saves the moment you pick one ── -->
+    {@render section("Picture")}
+    <div class="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Picture">
+      {#each pictures as pic (pic.id)}
+        {@const chosen = me.avatarSource === pic.id}
+        <button
+          type="button"
+          role="radio"
+          aria-checked={chosen}
+          disabled={!pic.available || busy === "picture"}
+          onclick={() =>
+            act("picture", () =>
+              social.updateProfile({ avatarSource: pic.id }),
+            )}
+          class="flex items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors disabled:cursor-default
+            {chosen && pic.available
+            ? 'border-(--accent) bg-(--accent)/8'
+            : 'border-(--line-2) enabled:hover:bg-(--bg-hover)'}"
+        >
+          {#if pic.available}
+            <Head user={pic.user} size={32} />
+          {:else}
+            <ProviderIcon provider={pic.id} class="size-8 opacity-40" />
+          {/if}
+          <span class="min-w-0">
+            <b class="block font-medium {pic.available ? '' : 'opacity-60'}"
+              >{pic.label}</b
+            >
+            <small class="block text-[11.5px] text-(--text-faint)"
+              >{pic.available
+                ? chosen
+                  ? "Showing now"
+                  : "Use this one"
+                : pic.missing}</small
+            >
+          </span>
+        </button>
+      {/each}
+    </div>
+
     <!-- ── Privacy: saves the moment you flip it ── -->
     {@render section("Privacy")}
     <div class="flex items-start gap-3">
@@ -269,10 +342,7 @@
     {#each PROVIDERS as p (p.id)}
       {@const linked = me.identities.find((i) => i.provider === p.id)}
       <div class="flex items-center gap-3 py-1.5">
-        <span
-          class="grid size-6 place-items-center rounded-md text-[11px] font-bold text-white"
-          style="background: {p.color}">{p.mark}</span
-        >
+        <ProviderIcon provider={p.id} />
         <div class="min-w-0 flex-1">
           <b class="block font-medium">{p.label}</b>
           <small class="text-[11.5px] text-(--text-faint)"
@@ -300,9 +370,9 @@
         {:else}
           <Button
             size="sm"
-            disabled={busy !== null}
+            disabled={busy !== null && busy !== p.id}
             onclick={() => act(p.id, () => social.linkIdentity(p.id))}
-            >Link</Button
+            >{busy === p.id ? "Start again" : "Link"}</Button
           >
         {/if}
       </div>

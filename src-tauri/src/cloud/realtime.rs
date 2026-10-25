@@ -181,6 +181,11 @@ impl Cloud {
                 AtlasEvent::PresenceChanged { user_id, presence }
             }
             ServerMessage::FriendsChanged {} => AtlasEvent::FriendsChanged {},
+            ServerMessage::MeChanged {} => {
+                // Saving the new `Me` tells the UI (`session.changed`).
+                self.restore().await;
+                return;
+            }
             ServerMessage::NotificationNew { item } => AtlasEvent::ActivityNew { item },
             ServerMessage::SharedChanged {
                 shared_instance_id, ..

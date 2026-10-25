@@ -14,7 +14,7 @@
   import { social } from "$lib/stores";
   import type { Friend } from "$lib/types";
   import AttentionBadges from "../components/AttentionBadges.svelte";
-  import Button from "../components/Button.svelte";
+
   import Head from "../components/Head.svelte";
   import Icon from "../components/Icon.svelte";
   import Menu from "../components/Menu.svelte";
@@ -24,6 +24,7 @@
   } from "../components/SharedRow.svelte";
   import GroupsCard from "../components/friends/GroupsCard.svelte";
   import RequestsCard from "../components/friends/RequestsCard.svelte";
+  import SignInButtons from "../components/SignInButtons.svelte";
   import YouCard from "../components/friends/YouCard.svelte";
 
   const FILTERS = [
@@ -133,13 +134,7 @@
   <div class="py-12 text-center text-(--text-muted)">
     <b class="block text-sm text-(--text-primary)">Sign in to add friends</b>
     Friends can see what you're playing and share instances with you.
-    <div>
-      <Button
-        variant="primary"
-        class="mt-4"
-        onclick={() => social.signIn("minecraft")}>Sign in</Button
-      >
-    </div>
+    <SignInButtons />
   </div>
 {:else}
   <YouCard />
