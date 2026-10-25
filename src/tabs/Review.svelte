@@ -40,6 +40,7 @@
 
   let started = $state(false);
   let error = $state<string | null>(null);
+  let cancelled = $state(false);
 
   const hasUpdate = $derived(
     !!summary?.sync &&
@@ -60,6 +61,13 @@
     if (!started) return;
     if (status === "syncing") sawSyncing = true;
     else if (status === "ready" && sawSyncing) {
+      if (cancelled) {
+        started = false;
+        sawSyncing = false;
+        cancelled = false;
+        error = "Update cancelled. Your files weren't changed.";
+        return;
+      }
       // A failure arrives just before "ready": stay here and say why.
       const failed = instances.failures[id];
       if (failed) {
@@ -337,11 +345,24 @@
         <span class="text-[12.5px] text-(--text-muted)"
           >{STAGES[progress.stage]}</span
         >
-        <div class="h-1 w-56 overflow-hidden rounded-full bg-(--line-2)">
-          <div
-            class="h-full bg-(--accent) transition-[width] duration-300"
-            style="width: {progress.percent}%"
-          ></div>
+        <div class="flex items-center gap-3">
+          <div class="h-1 w-56 overflow-hidden rounded-full bg-(--line-2)">
+            <div
+              class="h-full bg-(--accent) transition-[width] duration-300"
+              style="width: {progress.percent}%"
+            ></div>
+          </div>
+          {#if progress.stage !== "apply"}
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={cancelled}
+              onclick={() => {
+                cancelled = true;
+                api.cancelJob(id).catch(() => (cancelled = false));
+              }}>Cancel</Button
+            >
+          {/if}
         </div>
       {:else}
         <span

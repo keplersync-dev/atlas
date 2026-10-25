@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { api } from "$lib/api";
   import { plural, workLabel, workPercent } from "$lib/format";
   import { instances } from "$lib/stores";
   import type { InstanceSummary, SyncProgress } from "$lib/types";
@@ -32,6 +33,22 @@
   };
 
   const s = $derived(instance.sync);
+  let cancelling = $state(false);
+  // Once files are being changed, the job can't stop.
+  const cancellable = $derived(
+    instance.progress && instance.progress.stage !== "apply",
+  );
+
+  async function cancel() {
+    cancelling = true;
+    try {
+      await api.cancelJob(instance.id);
+    } catch {
+      // It finished meanwhile.
+    } finally {
+      cancelling = false;
+    }
+  }
   // Reading files after tracking, or uploading while sharing.
   const work = $derived(instances.work[instance.id]);
 </script>
@@ -76,11 +93,16 @@
   )}
 {:else if instance.status === "syncing" && instance.progress}
   <div class="mt-5 rounded-lg bg-(--bg-raise) px-4 py-3">
-    <div class="flex justify-between text-[12.5px]">
-      <span>{STAGES[instance.progress.stage]}</span>
+    <div class="flex items-center justify-between gap-3 text-[12.5px]">
+      <span class="flex-1">{STAGES[instance.progress.stage]}</span>
       <span class="text-(--text-muted) tabular-nums"
         >{instance.progress.percent}%</span
       >
+      {#if cancellable}
+        <Button size="sm" variant="ghost" disabled={cancelling} onclick={cancel}
+          >Cancel</Button
+        >
+      {/if}
     </div>
     <div class="mt-2 h-1 overflow-hidden rounded-full bg-(--line-2)">
       <div

@@ -50,6 +50,7 @@ export const tauriApi: AtlasApi = {
     call("set_content_enabled", { instanceId, contentId, enabled }),
   restoreBackup: (instanceId, backupId) =>
     call("restore_backup", { instanceId, backupId }),
+  cancelJob: (instanceId) => call("cancel_job", { instanceId }),
   setShareMode: (instanceId, contentId, mode) =>
     call("set_share_mode", { instanceId, contentId, mode }),
   setOptionalInstalled: (instanceId, contentId, installed) =>

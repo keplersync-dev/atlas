@@ -69,6 +69,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::instances::open_instance_folder,
         commands::instances::set_content_enabled,
         commands::instances::restore_backup,
+        commands::instances::cancel_job,
         commands::instances::set_share_mode,
         commands::instances::set_optional_installed,
         commands::instances::dev_link_manifest,

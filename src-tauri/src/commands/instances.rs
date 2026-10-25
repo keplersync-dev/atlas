@@ -125,6 +125,17 @@ pub async fn restore_backup<R: Runtime>(
     instances::summary_by_id(&state, &instance_id).await
 }
 
+/// Stop the instance's update, install or restore, if it hasn't started changing files.
+/// The job then ends as usual (`instance.progress` with status "ready").
+#[tauri::command]
+pub async fn cancel_job(state: State<'_, AppState>, instance_id: Id) -> AppResult<()> {
+    if state.jobs.cancel(&instance_id) {
+        Ok(())
+    } else {
+        Err(crate::error::AppError::conflict("Nothing is running on it"))
+    }
+}
+
 /// Download or remove an optional item from the shared version (waits until done).
 #[tauri::command]
 pub async fn set_optional_installed<R: Runtime>(

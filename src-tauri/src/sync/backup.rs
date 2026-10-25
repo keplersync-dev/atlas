@@ -97,6 +97,19 @@ pub async fn create(
     Ok((id, folder))
 }
 
+/// Remove a backup that turned out not to be needed (the job stopped before changing
+/// anything). Best effort.
+pub async fn discard(db: &SqlitePool, paths: &AppPaths, instance_id: &str, backup_id: &str) {
+    let _ = std::fs::remove_dir_all(dir(paths, instance_id, backup_id));
+    if let Err(e) = sqlx::query("DELETE FROM backup WHERE id = ?")
+        .bind(backup_id)
+        .execute(db)
+        .await
+    {
+        tracing::warn!(error = %e, "couldn't remove an unused backup");
+    }
+}
+
 /// Keep the newest `backups_to_keep` (default 3) backups of an instance.
 pub async fn prune(db: &SqlitePool, paths: &AppPaths, instance_id: &str) -> AppResult<()> {
     let keep: usize = db::settings::get_or(db, "backups_to_keep", 3usize).await?;

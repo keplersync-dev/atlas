@@ -233,7 +233,13 @@ async fn picture_first<R: Runtime>(state: &AppState, progress: &jobs::Progress<R
     if launchers::is_running(kind) {
         progress.stage(SyncStage::WaitingForLauncherExit);
         while launchers::is_running(kind) && !skipped() {
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            if progress
+                .sleep(std::time::Duration::from_secs(1))
+                .await
+                .is_err()
+            {
+                break;
+            }
         }
     }
     state.skip_picture.lock().unwrap().remove(id);

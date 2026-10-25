@@ -1,6 +1,11 @@
 //! Long work on an instance folder (update, accept, restore, revert, optional download),
 //! one job per instance at a time.
 //!
+//! A job can be cancelled while it waits or downloads, never once files are moving: jobs
+//! wait through [`Progress::sleep`] and [`Progress::wait_for_game_exit`], and check
+//! [`Progress::check`] before they change anything. A cancelled job ends without
+//! `instance.jobFailed`.
+//!
 //! The job manager owns the runtime-only parts of `InstanceSummary`: `status: "syncing"`
 //! and `progress`. Every job ends the same way, which the UI relies on (Review.svelte
 //! waits for "syncing" and then "ready"; the failure must already be known by then):
@@ -16,6 +21,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Runtime};
+use tokio::sync::watch;
 
 use crate::db;
 use crate::dto::{InstanceStatus, ManualDownload, SyncProgress, SyncStage};
@@ -23,9 +29,15 @@ use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
 use crate::state::AppState;
 
-/// Instance id → current progress (None until the first stage is reported).
+struct Slot {
+    /// None until the first stage is reported.
+    progress: Option<SyncProgress>,
+    cancel: watch::Sender<bool>,
+}
+
+/// Instance id → the job running on it.
 #[derive(Clone, Default)]
-pub struct Jobs(Arc<Mutex<HashMap<String, Option<SyncProgress>>>>);
+pub struct Jobs(Arc<Mutex<HashMap<String, Slot>>>);
 
 impl Jobs {
     pub fn is_busy(&self, instance_id: &str) -> bool {
@@ -33,24 +45,55 @@ impl Jobs {
     }
     /// Some(progress) while a job runs.
     pub fn status(&self, instance_id: &str) -> Option<Option<SyncProgress>> {
-        self.0.lock().unwrap().get(instance_id).cloned()
+        self.0
+            .lock()
+            .unwrap()
+            .get(instance_id)
+            .map(|s| s.progress.clone())
     }
-    fn claim(&self, instance_id: &str) -> bool {
+    /// Ask the instance's job to stop. False if there's none.
+    pub fn cancel(&self, instance_id: &str) -> bool {
+        match self.0.lock().unwrap().get(instance_id) {
+            Some(slot) => {
+                slot.cancel.send_replace(true);
+                true
+            }
+            None => false,
+        }
+    }
+    fn claim(&self, instance_id: &str) -> Option<watch::Receiver<bool>> {
         let mut jobs = self.0.lock().unwrap();
         if jobs.contains_key(instance_id) {
-            return false;
+            return None;
         }
-        jobs.insert(instance_id.to_string(), None);
-        true
+        let (cancel, cancelled) = watch::channel(false);
+        jobs.insert(
+            instance_id.to_string(),
+            Slot {
+                progress: None,
+                cancel,
+            },
+        );
+        Some(cancelled)
     }
     fn set(&self, instance_id: &str, p: SyncProgress) {
         if let Some(slot) = self.0.lock().unwrap().get_mut(instance_id) {
-            *slot = Some(p);
+            slot.progress = Some(p);
         }
     }
-    fn release(&self, instance_id: &str) {
-        self.0.lock().unwrap().remove(instance_id);
+    /// Remove the job. True if it had been cancelled.
+    fn release(&self, instance_id: &str) -> bool {
+        self.0
+            .lock()
+            .unwrap()
+            .remove(instance_id)
+            .is_some_and(|s| *s.cancel.borrow())
     }
+}
+
+/// What a job returns when it stopped because it was cancelled.
+pub fn cancelled() -> AppError {
+    AppError::invalid_input("Cancelled")
 }
 
 /// Handed to a job to report what it's doing.
@@ -59,10 +102,16 @@ pub struct Progress<R: Runtime> {
     jobs: Jobs,
     pub instance_id: String,
     current: Mutex<(SyncProgress, Instant)>,
+    cancel: watch::Receiver<bool>,
 }
 
 impl<R: Runtime> Progress<R> {
-    fn new(app: AppHandle<R>, jobs: Jobs, instance_id: String) -> Self {
+    fn new(
+        app: AppHandle<R>,
+        jobs: Jobs,
+        instance_id: String,
+        cancel: watch::Receiver<bool>,
+    ) -> Self {
         let p = SyncProgress {
             stage: SyncStage::Backup,
             percent: 0,
@@ -75,7 +124,43 @@ impl<R: Runtime> Progress<R> {
             jobs,
             instance_id,
             current: Mutex::new((p, Instant::now() - Duration::from_secs(1))),
+            cancel,
         }
+    }
+
+    /// Err once the job has been cancelled. Jobs check it before they change files.
+    pub fn check(&self) -> AppResult<()> {
+        if *self.cancel.borrow() {
+            Err(cancelled())
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Resolves when the job is cancelled.
+    pub async fn cancelled(&self) {
+        let mut cancel = self.cancel.clone();
+        let _ = cancel.wait_for(|c| *c).await;
+    }
+
+    /// Wait, unless the job is cancelled meanwhile.
+    pub async fn sleep(&self, how_long: Duration) -> AppResult<()> {
+        tokio::select! {
+            _ = tokio::time::sleep(how_long) => Ok(()),
+            _ = self.cancelled() => Err(cancelled()),
+        }
+    }
+
+    /// Never write under a running game: wait until it's closed (or the job is cancelled).
+    pub async fn wait_for_game_exit(&self, state: &AppState) -> AppResult<()> {
+        if !state.is_running(&self.instance_id) {
+            return self.check();
+        }
+        self.stage(SyncStage::WaitingForGameExit);
+        while state.is_running(&self.instance_id) {
+            self.sleep(Duration::from_secs(2)).await?;
+        }
+        self.check()
     }
 
     /// Move to a stage (always sent right away).
@@ -172,9 +257,9 @@ fn begin<R: Runtime>(
     app: &AppHandle<R>,
     instance_id: &str,
 ) -> AppResult<Progress<R>> {
-    if !state.jobs.claim(instance_id) {
+    let Some(cancel) = state.jobs.claim(instance_id) else {
         return Err(AppError::conflict("Wait for the current update to finish"));
-    }
+    };
     emit(
         app,
         AtlasEvent::InstanceProgress {
@@ -187,6 +272,7 @@ fn begin<R: Runtime>(
         app.clone(),
         state.jobs.clone(),
         instance_id.to_string(),
+        cancel,
     ))
 }
 
@@ -197,14 +283,15 @@ async fn finish<R: Runtime>(
     result: &AppResult<()>,
     report_failure: bool,
 ) {
-    state.jobs.release(id);
+    let was_cancelled = state.jobs.release(id);
     let status = match db::instances::get(&state.db, id).await {
         Ok(Some(row)) if !Path::new(&row.game_dir).is_dir() => InstanceStatus::Missing,
         _ => InstanceStatus::Ready,
     };
     if let Err(e) = result {
         tracing::warn!(instance = %id, error = %e.message, "job failed");
-        if report_failure {
+        // Cancelling isn't a failure to tell anyone about.
+        if report_failure && !was_cancelled {
             emit(
                 app,
                 AtlasEvent::InstanceJobFailed {
@@ -228,4 +315,25 @@ async fn finish<R: Runtime>(
             instance_id: id.into(),
         },
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_cancelled_job_is_told_and_ends_quietly() {
+        let jobs = Jobs::default();
+        assert!(!jobs.cancel("i1"), "nothing running");
+        let cancel = jobs.claim("i1").unwrap();
+        assert!(jobs.claim("i1").is_none(), "one job per instance");
+        assert!(!*cancel.borrow());
+        assert!(jobs.cancel("i1"));
+        assert!(*cancel.borrow(), "the job sees it");
+        assert!(jobs.release("i1"), "ends as cancelled");
+        assert!(!jobs.is_busy("i1"));
+
+        jobs.claim("i1").unwrap();
+        assert!(!jobs.release("i1"), "a job that just finished");
+    }
 }

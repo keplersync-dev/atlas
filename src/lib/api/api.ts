@@ -104,6 +104,9 @@ export interface AtlasApi {
     enabled: boolean,
   ): Promise<void>;
   restoreBackup(instanceId: Id, backupId: Id): Promise<InstanceSummary>;
+  /** Stops the instance's update, install or restore while it waits or downloads. Once
+   * files are being changed it finishes. */
+  cancelJob(instanceId: Id): Promise<void>;
   /**
    * Owners/editors: how a file is shared (required / optional / only me).
    * Saved locally; it reaches friends with the next publish.

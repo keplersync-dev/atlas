@@ -349,8 +349,10 @@ struct Stage {
 const STAGES: &str = "SELECT path, name, install_stage FROM instances";
 const LEGACY_STAGES: &str = "SELECT path, name, install_stage FROM profiles";
 
-/// The instance the app made from the pack, once it's past installing the pack itself.
-/// From then on the app only installs the game and loader, outside the instance folder.
+/// The instance the app made from the pack, once it's past installing the pack itself and
+/// its folder exists (the app can report the stage before making the folder, while it
+/// downloads a big loader). From then on it only installs the game and loader, outside
+/// the instance folder.
 async fn find_new(root: &Path, before: &HashSet<String>, name: &str) -> ReadResult<Option<String>> {
     let stem = file_stem(name);
     let rows: Vec<Stage> = rows(root, STAGES, LEGACY_STAGES).await?;
@@ -361,7 +363,7 @@ async fn find_new(root: &Path, before: &HashSet<String>, name: &str) -> ReadResu
             matches!(
                 s.install_stage.as_str(),
                 "pack_installed" | "minecraft_installing" | "installing" | "installed"
-            )
+            ) && root.join("profiles").join(&s.path).is_dir()
         })
         .map(|s| s.path))
 }
@@ -530,6 +532,12 @@ mod tests {
             .await
             .unwrap();
         c.close().await.unwrap();
+        assert_eq!(
+            find_new(&root, &before, "Friday: SMP").await.unwrap(),
+            None,
+            "its folder isn't there yet"
+        );
+        std::fs::create_dir_all(root.join("profiles/Friday_ SMP")).unwrap();
         assert_eq!(
             find_new(&root, &before, "Friday: SMP")
                 .await

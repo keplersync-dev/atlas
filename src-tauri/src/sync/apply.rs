@@ -28,7 +28,7 @@ use super::{adopt, prism_versions};
 use crate::db::{self, instances::InstanceRow};
 use crate::dto::{BackupReason, ConfigChoice, SyncStage};
 use crate::error::{AppError, AppResult};
-use crate::jobs::Progress;
+use crate::jobs::{self, Progress};
 use crate::scan;
 use crate::state::AppState;
 use crate::util::ids::new_id;
@@ -139,12 +139,7 @@ pub async fn run<R: Runtime>(
     let id = progress.instance_id.clone();
 
     // 1. Never write under a running game.
-    if state.is_running(&id) {
-        progress.stage(SyncStage::WaitingForGameExit);
-        while state.is_running(&id) {
-            tokio::time::sleep(Duration::from_secs(2)).await;
-        }
-    }
+    progress.wait_for_game_exit(state).await?;
 
     let row = db::instances::get(&state.db, &id)
         .await?
@@ -166,7 +161,7 @@ pub async fn run<R: Runtime>(
         // 2. Back up everything that will change.
         progress.stage(SyncStage::Backup);
         let from = row.synced_revision.filter(|r| *r > 0).map(|r| r as u32);
-        let (_, backup_dir) = backup::create(
+        let (backup_id, backup_dir) = backup::create(
             &state.db,
             &state.paths,
             &id,
@@ -178,10 +173,22 @@ pub async fn run<R: Runtime>(
         )
         .await?;
 
-        // 3. Get every file into the cache, verified.
-        fetch_all(state, progress, source, &game_dir, &plan).await?;
+        // 3. Get every file into the cache, verified, then check the game wasn't started
+        // meanwhile. Nothing has changed yet, so stopping here drops the backup too.
+        let ready = async {
+            tokio::select! {
+                fetched = fetch_all(state, progress, source, &game_dir, &plan) => fetched,
+                _ = progress.cancelled() => Err(jobs::cancelled()),
+            }?;
+            progress.wait_for_game_exit(state).await
+        }
+        .await;
+        if let Err(e) = ready {
+            backup::discard(&state.db, &state.paths, &id, &backup_id).await;
+            return Err(e);
+        }
 
-        // 4. Stage, then move into place.
+        // 4. Stage, then move into place. From here on the job can't be cancelled.
         progress.stage(SyncStage::Apply);
         let (paths, actions, game, backup_dir2) = (
             state.paths.clone(),
@@ -251,7 +258,11 @@ async fn fetch_all<R: Runtime>(
                     (Route::Blob, Some(shared))
                         if !fetch::cache_file(&state.paths, &entry.sha1).is_file() =>
                     {
-                        let url = state.cloud.file_url(shared, &entry.sha256).await?;
+                        let url = state
+                            .cloud
+                            .file_url(shared, &entry.sha256)
+                            .await
+                            .map_err(|e| taken_down(e, &entry.name))?;
                         let target = fetch::cache_file(&state.paths, &entry.sha1);
                         fetch::download(
                             state.cloud.file_http(),
@@ -279,7 +290,11 @@ async fn fetch_all<R: Runtime>(
         if let Action::WriteConfig { config, .. } = a {
             match source.server_id() {
                 Some(shared) if !fetch::blob_file(&state.paths, &config.sha256).is_file() => {
-                    let url = state.cloud.file_url(shared, &config.sha256).await?;
+                    let url = state
+                        .cloud
+                        .file_url(shared, &config.sha256)
+                        .await
+                        .map_err(|e| taken_down(e, &config.path))?;
                     fetch::config_from(&state.paths, state.cloud.file_http(), config, &url).await?;
                 }
                 Some(_) => {}
@@ -294,6 +309,19 @@ async fn fetch_all<R: Runtime>(
     }
     progress.bytes(total, total);
     Ok(())
+}
+
+/// An uploaded file the server won't hand out any more: it was taken down after a report.
+/// The version can't be installed until someone publishes one without it.
+fn taken_down(e: AppError, name: &str) -> AppError {
+    if e.code == crate::error::ErrorCode::NotFound {
+        AppError::conflict(format!(
+            "{name} was taken down from Atlas, so this version can't be installed. Ask the \
+             owner to publish one without it."
+        ))
+    } else {
+        e
+    }
 }
 
 /// CurseForge files that can't be downloaded automatically: open their pages and pick the
@@ -326,7 +354,7 @@ async fn wait_for_manual_downloads<R: Runtime>(
         })
         .await
         .map_err(|e| AppError::unknown(e.to_string()))?;
-        tokio::time::sleep(Duration::from_secs(2)).await;
+        progress.sleep(Duration::from_secs(2)).await?;
     }
 }
 

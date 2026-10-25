@@ -311,12 +311,7 @@ async fn restore_job<R: Runtime>(
     from_dir: PathBuf,
 ) -> AppResult<()> {
     let id = row.id.clone();
-    if state.is_running(&id) {
-        progress.stage(SyncStage::WaitingForGameExit);
-        while state.is_running(&id) {
-            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-        }
-    }
+    progress.wait_for_game_exit(state).await?;
     let game_dir = PathBuf::from(&row.game_dir);
     let snapshot = backup::read_snapshot(&from_dir)?;
 
