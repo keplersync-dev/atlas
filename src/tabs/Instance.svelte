@@ -196,18 +196,6 @@
                 if (ok) run(() => api.leaveSharedInstance(s.sharedInstanceId));
               },
             },
-            {
-              label: "Report…",
-              onselect: () =>
-                openDialog({
-                  kind: "report",
-                  about: {
-                    kind: "shared_instance",
-                    id: s.sharedInstanceId,
-                    name: summary.name,
-                  },
-                }),
-            },
           ]
         : []),
       ...(s && s.role === "owner"
@@ -230,6 +218,23 @@
           ]
         : []),
       { label: "Stop tracking", danger: true, onselect: untrack },
+      ...(s && s.role !== "owner"
+        ? [
+            "divider" as const,
+            {
+              label: "Report…",
+              onselect: () =>
+                openDialog({
+                  kind: "report",
+                  about: {
+                    kind: "shared_instance",
+                    id: s.sharedInstanceId,
+                    name: summary.name,
+                  },
+                }),
+            },
+          ]
+        : []),
     ];
   });
 </script>
