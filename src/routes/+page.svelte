@@ -8,6 +8,7 @@
   import Sidebar from "../components/Sidebar.svelte";
   import DialogHost from "../components/DialogHost.svelte";
   import ConfirmHost from "../components/ConfirmHost.svelte";
+  import ToastHost from "../components/ToastHost.svelte";
   import Home from "../tabs/Home.svelte";
   import Shared from "../tabs/Shared.svelte";
   import Friends from "../tabs/Friends.svelte";
@@ -83,3 +84,5 @@
 <DialogHost />
 <!-- Confirmations (see $lib/confirm.svelte.ts) open above any dialog. -->
 <ConfirmHost />
+<!-- Errors from actions in long lists (see $lib/toasts.svelte.ts). -->
+<ToastHost />

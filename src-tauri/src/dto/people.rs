@@ -11,6 +11,8 @@ pub struct Session {
     pub user: Option<Me>,
     /// false = server unreachable; social data comes from the offline cache.
     pub online: bool,
+    /// false = this copy of Atlas has no server to sign in to.
+    pub server: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

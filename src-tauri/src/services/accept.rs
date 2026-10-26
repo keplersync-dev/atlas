@@ -36,10 +36,10 @@ pub async fn into_new<R: Runtime>(
 ) -> AppResult<InstanceSummary> {
     let launcher = db::launchers::get(&state.db, launcher_id)
         .await?
-        .ok_or_else(|| AppError::not_found("Launcher not found"))?;
+        .ok_or_else(|| AppError::not_found("That launcher isn't in Atlas anymore"))?;
     let kind = launcher
         .kind()
-        .ok_or_else(|| AppError::not_found("Launcher not found"))?;
+        .ok_or_else(|| AppError::not_found("That launcher isn't in Atlas anymore"))?;
     let invite = addable(state, shared_id).await?;
     if !launchers::can_create_instance(kind, invite.loader) {
         return Err(AppError::invalid_input(format!(
@@ -75,6 +75,7 @@ pub async fn into_new<R: Runtime>(
                     "{} didn't make the instance. Try again and confirm it there.",
                     launchers::display_name(kind)
                 )),
+                launchers::ReadError::Shown(m) => AppError::unknown(m),
                 _ => AppError::unknown("Couldn't create the instance in the launcher"),
             }
         })?;
@@ -117,14 +118,18 @@ pub async fn into_existing<R: Runtime>(
 ) -> AppResult<InstanceSummary> {
     let row = db::instances::get(&state.db, instance_id)
         .await?
-        .ok_or_else(|| AppError::not_found("Instance not found"))?;
+        .ok_or_else(|| {
+            AppError::not_found("That instance isn't there anymore. It may have just been removed.")
+        })?;
     if row.shared_instance_id.is_some() {
         return Err(AppError::conflict(
             "That instance is already shared. Pick another one.",
         ));
     }
     if !Path::new(&row.game_dir).is_dir() {
-        return Err(AppError::conflict("The folder is missing"));
+        return Err(AppError::conflict(
+            "The instance's folder is missing. If you moved it, track it again from its new place.",
+        ));
     }
     let invite = addable(state, shared_id).await?;
     let shared = join(state, invite).await?;
@@ -183,7 +188,9 @@ async fn addable(state: &AppState, shared_id: &str) -> AppResult<SharedInstance>
     let path = format!("/shared-instances/{}", segment(shared_id)?);
     let shared: SharedInstance = state.cloud.call(Method::GET, &path, None::<&()>).await?;
     if shared.my_status == MemberStatus::Declined {
-        return Err(AppError::conflict("No pending invite"));
+        return Err(AppError::conflict(
+            "That invite was already accepted or withdrawn",
+        ));
     }
     let rows = db::instances::list(&state.db).await?;
     if rows

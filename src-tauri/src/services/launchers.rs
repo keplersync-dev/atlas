@@ -161,7 +161,7 @@ pub async fn add<R: Runtime>(
 
 pub async fn remove<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) -> AppResult<()> {
     if !db::launchers::delete(&state.db, id).await? {
-        return Err(AppError::not_found("Launcher not found"));
+        return Err(AppError::not_found("That launcher isn't in Atlas anymore"));
     }
     emit(app, AtlasEvent::LaunchersChanged {});
     Ok(())

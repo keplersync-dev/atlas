@@ -13,9 +13,17 @@ async function call<T>(
   try {
     return await invoke<T>(command, args);
   } catch (e) {
-    // Rust commands return Err(AppError) serialised as { code, message }.
+    // Rust commands return Err(AppError) serialised as { code, message }. Anything
+    // else is Tauri's own wording, which is for us, not the player.
     const err = e as { code?: ApiError["code"]; message?: string };
-    throw new ApiError(err.code ?? "unknown", err.message ?? String(e));
+    if (err?.message === undefined) {
+      console.error(`${command} failed`, e);
+      throw new ApiError(
+        "unknown",
+        "Something went wrong in Atlas. Try again.",
+      );
+    }
+    throw new ApiError(err.code ?? "unknown", err.message);
   }
 }
 

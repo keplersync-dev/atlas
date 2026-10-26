@@ -73,7 +73,7 @@ impl AppError {
 impl From<sqlx::Error> for AppError {
     fn from(e: sqlx::Error) -> Self {
         tracing::error!(error = ?e, "database error");
-        Self::unknown("Database error")
+        Self::unknown("Atlas couldn't save or load that. Try again, or restart Atlas.")
     }
 }
 
@@ -88,13 +88,16 @@ impl From<std::io::Error> for AppError {
     fn from(e: std::io::Error) -> Self {
         use std::io::ErrorKind;
         match e.kind() {
-            ErrorKind::NotFound => Self::not_found("File or folder not found"),
+            ErrorKind::NotFound => {
+                tracing::warn!(error = ?e, "file not found");
+                Self::not_found("A file Atlas needed isn't there anymore. Try again.")
+            }
             ErrorKind::PermissionDenied => {
                 Self::conflict("A file is in use. Close the launcher and try again.")
             }
             _ => {
                 tracing::error!(error = ?e, "io error");
-                Self::unknown("Couldn't read or write a file")
+                Self::unknown("Atlas couldn't read or write a file. Try again.")
             }
         }
     }
@@ -103,7 +106,14 @@ impl From<std::io::Error> for AppError {
 impl From<serde_json::Error> for AppError {
     fn from(e: serde_json::Error) -> Self {
         tracing::error!(error = ?e, "json error");
-        Self::unknown("Couldn't read saved data")
+        Self::unknown("Atlas couldn't read some of its data. Try again, or restart Atlas.")
+    }
+}
+
+impl From<tokio::task::JoinError> for AppError {
+    fn from(e: tokio::task::JoinError) -> Self {
+        tracing::error!(error = ?e, "background task failed");
+        Self::unknown("Something went wrong in Atlas. Try again.")
     }
 }
 

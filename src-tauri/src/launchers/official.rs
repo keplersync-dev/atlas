@@ -237,6 +237,17 @@ pub fn running() -> bool {
     any_running(&["minecraft.exe", "minecraftlauncher.exe"])
 }
 
+/// "NeoForge", for messages.
+fn loader_name(loader: Loader) -> &'static str {
+    match loader {
+        Loader::Vanilla => "Minecraft",
+        Loader::Fabric => "Fabric",
+        Loader::Quilt => "Quilt",
+        Loader::Forge => "Forge",
+        Loader::Neoforge => "NeoForge",
+    }
+}
+
 /// A loader's version file for the launcher: versions/<id>/<id>.json.
 pub struct VersionFile {
     pub id: String,
@@ -270,7 +281,13 @@ pub async fn fetch_version(
             )));
         }
     };
-    let failed = |e: reqwest::Error| ReadError::Format(format!("{url}: {e}"));
+    let name = loader_name(new.loader);
+    let failed = |e: reqwest::Error| {
+        tracing::warn!(%url, error = %e, "couldn't download the loader's version file");
+        ReadError::Shown(format!(
+            "Couldn't download {name} for Minecraft {mc}. Check your internet connection and try again."
+        ))
+    };
     let res = http
         .get(&url)
         .send()
@@ -302,19 +319,25 @@ pub async fn install_forge(
         return Err(ReadError::Format("Forge needs a version".into()));
     };
     let installer = forge_installer(new.loader, &new.minecraft, loader_version)?;
+    let name = loader_name(new.loader);
     let java = find_java(root).ok_or_else(|| {
-        ReadError::Format(
-            "no Java to run the installer with: play any version in the Minecraft Launcher \
-             once, so it downloads its own"
-                .into(),
-        )
+        ReadError::Shown(format!(
+            "There's no Java to run {name}'s installer with. Play any version in the Minecraft \
+             Launcher once so it downloads Java, then try again."
+        ))
     })?;
+    let didnt_work = || ReadError::Shown(format!("{name}'s installer didn't work. Try again."));
 
     let dir = std::env::temp_dir().join(format!("atlas-forge-{}", crate::util::ids::new_id()));
     std::fs::create_dir_all(&dir)?;
     let result = async {
         let jar = dir.join("installer.jar");
-        let failed = |e: reqwest::Error| ReadError::Format(format!("{}: {e}", installer.url));
+        let failed = |e: reqwest::Error| {
+            tracing::warn!(url = %installer.url, error = %e, "couldn't download the installer");
+            ReadError::Shown(format!(
+                "Couldn't download {name}'s installer. Check your internet connection and try again."
+            ))
+        };
         let bytes = http
             .get(&installer.url)
             .send()
@@ -347,14 +370,21 @@ pub async fn install_forge(
             }),
         )
         .await
-        .map_err(|_| ReadError::Format("the installer took too long".into()))?
-        .map_err(|e| ReadError::Format(e.to_string()))??;
+        .map_err(|_| ReadError::Shown(format!("{name}'s installer took too long. Try again.")))?
+        .map_err(|e| {
+            tracing::warn!(error = %e, "the installer's thread failed");
+            didnt_work()
+        })?
+        .map_err(|e| {
+            tracing::warn!(error = %e, "couldn't run the installer");
+            didnt_work()
+        })?;
         if !status.status.success() {
             tracing::warn!(
                 stdout = %String::from_utf8_lossy(&status.stdout),
                 "the Forge installer failed"
             );
-            return Err(ReadError::Format("the installer failed".into()));
+            return Err(didnt_work());
         }
         // Its usual name, or whatever new Forge version folder it made (older ones name
         // theirs differently).
@@ -370,7 +400,10 @@ pub async fn install_forge(
                     .into_iter()
                     .find(|d| !before.contains(d) && d.to_lowercase().contains("forge"))
             })
-            .ok_or_else(|| ReadError::Format("the installer didn't add a version".into()))?;
+            .ok_or_else(|| {
+                tracing::warn!("the installer didn't add a version");
+                didnt_work()
+            })?;
         Ok(VersionFile {
             id: made,
             json: None,

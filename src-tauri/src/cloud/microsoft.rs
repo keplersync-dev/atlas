@@ -178,7 +178,7 @@ async fn xbox_token(http: &Client, microsoft: &str) -> AppResult<(String, String
         .xui
         .into_iter()
         .next()
-        .ok_or_else(|| AppError::unknown("Xbox Live sent something unexpected"))?
+        .ok_or_else(|| AppError::unknown("Signing in to Minecraft didn't work. Try again."))?
         .uhs;
     Ok((token.token, hash))
 }

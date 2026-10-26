@@ -130,7 +130,7 @@ fn a_fresh_install_is_empty_and_signed_out() {
     let app = TestApp::new();
     assert_eq!(
         app.ok("get_session", json!({})),
-        json!({ "user": null, "online": false }),
+        json!({ "user": null, "online": false, "server": false }),
         "no server is set in tests, so it can't be reached"
     );
     assert_eq!(app.ok("list_instances", json!({})), json!([]));

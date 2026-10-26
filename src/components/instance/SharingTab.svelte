@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { showError } from "$lib/toasts.svelte";
   import { api } from "$lib/api";
   import { confirmAction } from "$lib/confirm.svelte";
   import { resource } from "$lib/resource.svelte";
@@ -15,7 +16,6 @@
 
   const isOwner = $derived(sync.role === "owner");
   const myId = $derived(social.session?.user?.id);
-  let error = $state<string | null>(null);
 
   function memberStatus(m: SharedMember) {
     if (m.status === "invited")
@@ -26,12 +26,11 @@
   }
 
   async function change(action: () => Promise<unknown>) {
-    error = null;
     try {
       await action();
       shared.reload();
     } catch (e) {
-      error = (e as Error).message;
+      showError((e as Error).message);
     }
   }
 
@@ -83,8 +82,6 @@
     Change anyone's role at any time.
   </p>
 {/if}
-
-{#if error}<p class="mb-2 text-xs text-(--danger)" role="alert">{error}</p>{/if}
 
 {#if shared.loading && !shared.data}
   <p class="py-6 text-(--text-muted)">Loading members…</p>

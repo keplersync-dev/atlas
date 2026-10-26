@@ -112,7 +112,7 @@ impl Source {
             Source::Dev(folder) => {
                 let file = folder.join("revisions").join(format!("{revision}.json"));
                 let bytes = std::fs::read(&file).map_err(|_| {
-                    AppError::not_found(format!("Revision {revision} isn't available"))
+                    AppError::not_found(format!("Version v{revision} isn't available anymore"))
                 })?;
                 manifest::parse(&bytes).map_err(|e| refused(revision, e))
             }

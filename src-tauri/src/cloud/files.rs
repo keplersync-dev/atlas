@@ -49,7 +49,7 @@ impl Cloud {
         }
         let (Some(id), Some(url)) = (ticket.upload_id, ticket.url) else {
             return Err(AppError::unknown(
-                "The Atlas server sent something unexpected",
+                "Atlas and its server don't match. Update Atlas, or try again later.",
             ));
         };
         let bytes = tokio::fs::read(file).await.map_err(|e| {

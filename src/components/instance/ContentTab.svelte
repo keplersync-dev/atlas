@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { showError } from "$lib/toasts.svelte";
   import { api } from "$lib/api";
   import { openDialog } from "$lib/dialogs.svelte";
   import type {
@@ -28,7 +29,6 @@
   // Local UI state: only this component cares about the filter and search text.
   let kind = $state<ContentKind | "all">("all");
   let query = $state("");
-  let error = $state<string | null>(null);
 
   const KIND_LABELS: Record<ContentKind, string> = {
     mod: "Mods",
@@ -147,14 +147,13 @@
     undo: () => void,
     call: () => Promise<unknown>,
   ) {
-    error = null;
     apply();
     try {
       await call();
       onchanged();
     } catch (e) {
       undo();
-      error = (e as Error).message;
+      showError((e as Error).message);
     }
   }
 
@@ -218,9 +217,6 @@
 {/if}
 {#if lockedReason}
   <p class="mb-1 text-xs text-(--text-faint)">{lockedReason}</p>
-{/if}
-{#if error}
-  <p class="mb-1 text-xs text-(--danger)" role="alert">{error}</p>
 {/if}
 
 <div>

@@ -142,7 +142,7 @@ pub async fn cancel_job(state: State<'_, AppState>, instance_id: Id) -> AppResul
     if state.jobs.cancel(&instance_id) {
         Ok(())
     } else {
-        Err(crate::error::AppError::conflict("Nothing is running on it"))
+        Err(crate::error::AppError::conflict("It already finished"))
     }
 }
 

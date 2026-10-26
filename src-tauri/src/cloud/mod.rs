@@ -100,13 +100,19 @@ impl Cloud {
     }
 
     /// The server from ATLAS_SERVER_URL: at run time (local development), else at build time.
-    /// Development builds fall back to the local server.
+    /// Without it, development builds use the local server and release builds the real one.
     pub fn server_url_from_env() -> Option<Url> {
         let value = std::env::var("ATLAS_SERVER_URL")
             .ok()
             .or_else(|| option_env!("ATLAS_SERVER_URL").map(str::to_owned))
             .filter(|v| !v.trim().is_empty())
-            .or_else(|| cfg!(debug_assertions).then(|| "http://localhost:8080".to_owned()))?;
+            .unwrap_or_else(|| {
+                if cfg!(debug_assertions) {
+                    "http://localhost:8080".to_owned()
+                } else {
+                    "https://keplersync.app".to_owned()
+                }
+            });
         Url::parse(&value)
             .inspect_err(|e| tracing::error!(%value, error = %e, "bad ATLAS_SERVER_URL"))
             .ok()
@@ -140,6 +146,7 @@ impl Cloud {
         Ok(Session {
             user,
             online: self.is_configured() && self.is_online(),
+            server: self.is_configured(),
         })
     }
 
@@ -284,7 +291,7 @@ impl Cloud {
             .base
             .as_ref()
             .and_then(|b| b.join("healthz").ok())
-            .ok_or_else(|| AppError::unknown("Bad server address"))?;
+            .ok_or_else(|| AppError::unknown("Atlas can't find its server. Reinstall Atlas."))?;
         let up = self
             .http
             .get(health)
@@ -443,7 +450,7 @@ impl Cloud {
         self.set_online(true);
         let bytes = res.bytes().await.map_err(|e| {
             tracing::warn!(error = %e, "couldn't read the server's answer");
-            AppError::unknown("The Atlas server's answer was cut off")
+            AppError::unknown("The connection dropped. Try again.")
         })?;
         if !status.is_success() {
             let error = server_error(status, &bytes);
@@ -457,30 +464,32 @@ impl Cloud {
         } else {
             serde_json::from_slice(&bytes).map_err(|e| {
                 tracing::error!(error = %e, "unexpected answer from the server");
-                AppError::unknown("The Atlas server sent something unexpected")
+                AppError::unknown(
+                    "Atlas and its server don't match. Update Atlas, or try again later.",
+                )
             })?
         };
         serde_json::from_value(json).map_err(|e| {
             tracing::error!(error = %e, "unexpected answer from the server");
-            AppError::unknown("The Atlas server sent something unexpected")
+            AppError::unknown("Atlas and its server don't match. Update Atlas, or try again later.")
         })
     }
 
     /// A page on the server's website (not the API): `/terms`, `/privacy`.
     pub fn page_url(&self, path: &str) -> AppResult<Url> {
         let base = self.base.as_ref().ok_or_else(|| {
-            AppError::unknown("This copy of Atlas isn't connected to an Atlas server")
+            AppError::unknown("Friends and sharing aren't available in this copy of Atlas")
         })?;
         base.join(path)
-            .map_err(|_| AppError::unknown("Bad server address"))
+            .map_err(|_| AppError::unknown("Atlas can't find its server. Reinstall Atlas."))
     }
 
     fn url(&self, path: &str) -> AppResult<Url> {
         let base = self.base.as_ref().ok_or_else(|| {
-            AppError::unknown("This copy of Atlas isn't connected to an Atlas server")
+            AppError::unknown("Friends and sharing aren't available in this copy of Atlas")
         })?;
         base.join(&format!("v1{path}"))
-            .map_err(|_| AppError::unknown("Bad server address"))
+            .map_err(|_| AppError::unknown("Atlas can't find its server. Reinstall Atlas."))
     }
 
     fn set_online(&self, online: bool) {

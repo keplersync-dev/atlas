@@ -8,6 +8,7 @@
 </script>
 
 <script lang="ts">
+  import { showError } from "$lib/toasts.svelte";
   import { confirmAction } from "$lib/confirm.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
   import { plural, timeAgo } from "$lib/format";
@@ -101,8 +102,6 @@
     return `Last seen ${timeAgo(p.updatedAt)}`;
   }
 
-  let error = $state<string | null>(null);
-
   async function remove(f: Friend, block: boolean) {
     const name = f.user.displayName;
     const ok = await confirmAction(
@@ -121,11 +120,10 @@
           },
     );
     if (!ok) return;
-    error = null;
     try {
       await social.removeFriend(f.user.id, block);
     } catch (e) {
-      error = (e as Error).message;
+      showError((e as Error).message);
     }
   }
 </script>
@@ -173,9 +171,6 @@
           {/each}
         </div>
       </div>
-      {#if error}<p class="mb-2 text-xs text-(--danger)" role="alert">
-          {error}
-        </p>{/if}
       {#each sections as section (section.title)}
         <h2
           class="mt-4.5 mb-1 text-xs font-semibold text-(--text-faint) first:mt-0"

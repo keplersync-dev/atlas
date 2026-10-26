@@ -28,7 +28,7 @@ use crate::state::AppState;
 const READ_PROGRESS_FROM: usize = 20;
 
 fn not_found() -> AppError {
-    AppError::not_found("Instance not found")
+    AppError::not_found("That instance isn't there anymore. It may have just been removed.")
 }
 
 async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
@@ -508,7 +508,9 @@ pub async fn rescan_all<R: Runtime>(state: &AppState, app: &AppHandle<R>, older_
 pub async fn open_in_launcher(state: &AppState, id: &str) -> AppResult<()> {
     let row = row(state, id).await?;
     if row.status() == InstanceStatus::Missing {
-        return Err(AppError::conflict("The folder is missing"));
+        return Err(AppError::conflict(
+            "The instance's folder is missing. If you moved it, track it again from its new place.",
+        ));
     }
     let kind = row.kind();
     if kind == LauncherKind::Folder {
@@ -541,7 +543,9 @@ pub async fn open_folder<R: Runtime>(
 ) -> AppResult<()> {
     let row = row(state, id).await?;
     if row.status() == InstanceStatus::Missing || !Path::new(&row.game_dir).is_dir() {
-        return Err(AppError::conflict("The folder is missing"));
+        return Err(AppError::conflict(
+            "The instance's folder is missing. If you moved it, track it again from its new place.",
+        ));
     }
     app.opener()
         .open_path(&row.game_dir, None::<&str>)
@@ -568,7 +572,7 @@ pub async fn set_content_enabled<R: Runtime>(
     }
     let item = db::content::get(&state.db, instance_id, content_id)
         .await?
-        .ok_or_else(|| AppError::not_found("Content not found"))?;
+        .ok_or_else(|| AppError::not_found("That item isn't in this instance anymore"))?;
     if !item.installed {
         return Err(AppError::invalid_input("That item isn't downloaded"));
     }
@@ -635,7 +639,7 @@ pub async fn set_share_mode<R: Runtime>(
     }
     db::content::get(&state.db, instance_id, content_id)
         .await?
-        .ok_or_else(|| AppError::not_found("Content not found"))?;
+        .ok_or_else(|| AppError::not_found("That item isn't in this instance anymore"))?;
     db::content::set_share_mode(&state.db, content_id, &to_wire(mode)).await?;
     emit(
         app,

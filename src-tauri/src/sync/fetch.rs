@@ -117,7 +117,7 @@ pub async fn content(
                 (p.clone(), target, entry.sha1.clone(), entry.sha256.clone());
             tokio::task::spawn_blocking(move || admit(&p, &t, Some(&sha1), &sha256))
                 .await
-                .map_err(|e| AppError::unknown(e.to_string()))??;
+                .map_err(AppError::from)??;
             on_bytes(entry.size_bytes);
             Ok(())
         }
@@ -132,9 +132,10 @@ pub async fn content(
             )
             .await
         }
-        Route::Blob => Err(AppError::unknown(
-            "Uploaded files need a download link first",
-        )),
+        Route::Blob => Err(AppError::unknown(format!(
+            "Atlas couldn't download {}. Try again.",
+            entry.name
+        ))),
         Route::Manual(m) => Err(AppError::conflict(format!(
             "{} has to be downloaded by hand",
             m.content_name
@@ -201,7 +202,7 @@ pub async fn download(
     );
     let result = tokio::task::spawn_blocking(move || admit(&tmp2, &t, sha1.as_deref(), &sha256))
         .await
-        .map_err(|e| AppError::unknown(e.to_string()))?;
+        .map_err(AppError::from)?;
     let _ = std::fs::remove_file(&tmp);
     result
 }
@@ -232,7 +233,7 @@ pub async fn config(paths: &AppPaths, source: &Source, o: &Override) -> AppResul
     let (t, sha256) = (target.clone(), o.sha256.clone());
     tokio::task::spawn_blocking(move || admit(&from, &t, None, &sha256))
         .await
-        .map_err(|e| AppError::unknown(e.to_string()))??;
+        .map_err(AppError::from)??;
     Ok(target)
 }
 

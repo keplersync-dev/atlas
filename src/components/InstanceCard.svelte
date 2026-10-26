@@ -313,8 +313,10 @@
             ]}"
           >
             {#if openError}
-              <span class="truncate text-(--danger)" title={openError}
-                >{openError}</span
+              <span
+                class="line-clamp-2 text-(--danger)"
+                role="alert"
+                title={openError}>{openError}</span
               >
             {:else}
               <i class="size-1.5 shrink-0 rounded-full {DOT[status.tone]}"></i>

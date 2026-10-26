@@ -50,6 +50,9 @@ pub enum ReadError {
     Db(#[from] sqlx::Error),
     #[error("{0}")]
     Format(String),
+    /// Something the player can act on, shown to them as it is.
+    #[error("{0}")]
+    Shown(String),
     /// The launcher was asked to make an instance and didn't (the user said no, or never
     /// answered).
     #[error("the launcher didn't create the instance")]
@@ -61,7 +64,10 @@ pub type ReadResult<T> = Result<T, ReadError>;
 impl From<ReadError> for AppError {
     fn from(e: ReadError) -> Self {
         tracing::warn!(error = %e, "couldn't read launcher files");
-        AppError::unknown("Couldn't read the launcher's files")
+        match e {
+            ReadError::Shown(m) => AppError::unknown(m),
+            _ => AppError::unknown("Couldn't read the launcher's files"),
+        }
     }
 }
 

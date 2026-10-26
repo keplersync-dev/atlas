@@ -71,7 +71,8 @@
   }
 
   // ── Everything else saves instantly ──
-  let error = $state<string | null>(null);
+  // Shown under the row that failed, so it's in view on a small screen.
+  let error = $state<{ key: string; text: string } | null>(null);
   let busy = $state<string | null>(null);
   let attempt = 0;
   let exported = $state<string | null>(null);
@@ -109,7 +110,7 @@
       await action();
     } catch (err) {
       // Linking again while the browser waits starts over and rejects the first try.
-      if (mine === attempt) error = (err as Error).message;
+      if (mine === attempt) error = { key, text: (err as Error).message };
     } finally {
       if (mine === attempt) busy = null;
     }
@@ -178,6 +179,12 @@
     });
   }
 </script>
+
+{#snippet failed(key: string)}
+  {#if error?.key === key}
+    <p class="mt-1.5 text-xs text-(--danger)" role="alert">{error.text}</p>
+  {/if}
+{/snippet}
 
 {#snippet section(title: string)}
   <h3 class="mt-5 mb-2 text-xs font-semibold text-(--text-muted) first:mt-1">
@@ -296,6 +303,7 @@
         </button>
       {/each}
     </div>
+    {@render failed("picture")}
 
     <!-- ── Privacy: saves the moment you flip it ── -->
     {@render section("Privacy")}
@@ -314,6 +322,7 @@
           act("offline", () => social.updateProfile({ appearOffline: next }))}
       />
     </div>
+    {@render failed("offline")}
     <div class="mt-3 flex items-center gap-3">
       <div class="flex-1">
         <b class="block font-medium">Your data</b>
@@ -332,6 +341,7 @@
           })}>{busy === "export" ? "Saving…" : "Download"}</Button
       >
     </div>
+    {@render failed("export")}
 
     <!-- ── This PC: saves the moment you flip it, like Privacy ── -->
     {#if pc}
@@ -353,6 +363,7 @@
               })}
           />
         </div>
+        {@render failed(s.key)}
       {/each}
     {/if}
 
@@ -395,6 +406,7 @@
           >
         {/if}
       </div>
+      {@render failed(p.id)}
     {/each}
 
     <!-- ── Friend code ── -->
@@ -422,6 +434,7 @@
     <small class="text-[11.5px] text-(--text-faint)"
       >Reset it if your code was posted somewhere public.</small
     >
+    {@render failed("code")}
 
     <!-- ── Storage ── -->
     {@render section("Storage")}
@@ -438,10 +451,6 @@
       {fileSize(me.storage.usedBytes)} of {fileSize(me.storage.quotaBytes)} used by
       files you've uploaded
     </small>
-
-    {#if error}<p class="mt-3 text-xs text-(--danger)" role="alert">
-        {error}
-      </p>{/if}
   {/if}
 
   <p class="mt-6 text-center text-[11.5px] text-(--text-faint)">
@@ -451,13 +460,21 @@
         type="button"
         class="hover:text-(--text-primary) hover:underline"
         onclick={() =>
-          api.openLegalPage(l.page).catch((e) => (error = e.message))}
+          api
+            .openLegalPage(l.page)
+            .catch((e) => (error = { key: "legal", text: e.message }))}
         >{l.label}</button
       >
     {/each}
   </p>
+  {@render failed("legal")}
 
   {#snippet footer()}
+    {#if error?.key === "signout" || error?.key === "delete"}
+      <span class="basis-full text-xs text-(--danger)" role="alert"
+        >{error.text}</span
+      >
+    {/if}
     {#if me}
       <Button
         variant="ghost"

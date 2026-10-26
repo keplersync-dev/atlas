@@ -23,9 +23,9 @@ use crate::sync::{adopt, apply, prism_versions, state as sync_state};
 use crate::util::ids::new_id;
 
 async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
-    db::instances::get(&state.db, id)
-        .await?
-        .ok_or_else(|| AppError::not_found("Instance not found"))
+    db::instances::get(&state.db, id).await?.ok_or_else(|| {
+        AppError::not_found("That instance isn't there anymore. It may have just been removed.")
+    })
 }
 
 /// The instance's source, or `conflict` if it isn't shared.
@@ -33,7 +33,7 @@ async fn linked(state: &AppState, row: &InstanceRow) -> AppResult<Source> {
     let shared = row
         .shared_instance_id
         .as_deref()
-        .ok_or_else(|| AppError::conflict("Instance is not shared"))?;
+        .ok_or_else(|| AppError::conflict("This instance isn't shared"))?;
     let synced = row.synced_revision.unwrap_or(0).max(0) as u32;
     source::for_shared(state, shared, synced).await
 }
@@ -164,7 +164,9 @@ pub async fn sync<R: Runtime>(
         return Err(AppError::conflict("This instance is frozen"));
     }
     if !Path::new(&row.game_dir).is_dir() {
-        return Err(AppError::conflict("The folder is missing"));
+        return Err(AppError::conflict(
+            "The instance's folder is missing. If you moved it, track it again from its new place.",
+        ));
     }
     let revision = src.latest_revision();
     let manifest = src.manifest(state, revision).await?;
@@ -232,7 +234,7 @@ pub async fn set_optional_installed<R: Runtime>(
     }
     let item = db::content::get(&state.db, id, content_id)
         .await?
-        .ok_or_else(|| AppError::not_found("Content not found"))?;
+        .ok_or_else(|| AppError::not_found("That item isn't in this instance anymore"))?;
     if !item.is_managed || item.share_mode != "optional" {
         return Err(AppError::invalid_input(
             "Only optional items can be added or removed this way",
@@ -266,7 +268,7 @@ pub async fn set_optional_installed<R: Runtime>(
     let revision = row.synced_revision.unwrap_or(0).max(0) as u32;
     let manifest = row
         .synced_manifest()
-        .ok_or_else(|| AppError::conflict("Instance is not shared"))?;
+        .ok_or_else(|| AppError::conflict("This instance isn't shared"))?;
     let key = manifest
         .content
         .iter()
@@ -296,11 +298,13 @@ pub async fn restore<R: Runtime>(
 ) -> AppResult<()> {
     let row = row(state, id).await?;
     if !Path::new(&row.game_dir).is_dir() {
-        return Err(AppError::conflict(format!("Instance is {}", "missing")));
+        return Err(AppError::conflict(
+            "The instance's folder is missing. If you moved it, track it again from its new place.",
+        ));
     }
     let b = db::backups::get(&state.db, id, backup_id)
         .await?
-        .ok_or_else(|| AppError::not_found("Backup not found"))?;
+        .ok_or_else(|| AppError::not_found("That backup isn't there anymore"))?;
     let records: Vec<FileRecord> = serde_json::from_str(&b.files)?;
     let from_dir = backup::dir(&state.paths, id, backup_id);
     let state2 = state.clone();
@@ -376,7 +380,7 @@ async fn restore_job<R: Runtime>(
         Ok(())
     })
     .await
-    .map_err(|e| AppError::unknown(e.to_string()))??;
+    .map_err(AppError::from)??;
 
     let _scanning = state.scan_lock(&id).await;
     backup::restore_snapshot(&state.db, &id, &snapshot).await?;

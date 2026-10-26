@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { showError } from "$lib/toasts.svelte";
   import { api } from "$lib/api";
   import { confirmAction } from "$lib/confirm.svelte";
   import { fileSize, plural, timeAgo } from "$lib/format";
@@ -23,7 +24,6 @@
   );
 
   let restoring = $state<string | null>(null);
-  let error = $state<string | null>(null);
 
   /** A version's changes as one list: what was added, updated, removed. */
   function chips(changes: RevisionChanges) {
@@ -68,12 +68,11 @@
     });
     if (!ok) return;
     restoring = b.id;
-    error = null;
     try {
       await api.restoreBackup(instance.id, b.id);
       onrestored();
     } catch (e) {
-      error = (e as Error).message;
+      showError((e as Error).message);
     } finally {
       restoring = null;
     }
@@ -148,7 +147,6 @@
 <p class="mb-2 text-xs text-(--text-faint)">
   Atlas copies files it's about to change. The last 3 are kept.
 </p>
-{#if error}<p class="mb-2 text-xs text-(--danger)" role="alert">{error}</p>{/if}
 {#each instance.backups as b (b.id)}
   <div
     class="flex items-center gap-3.5 rounded-md px-2 py-2 hover:bg-(--bg-hover)"

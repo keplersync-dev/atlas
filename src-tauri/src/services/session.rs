@@ -88,7 +88,9 @@ pub async fn report_file(
 ) -> AppResult<()> {
     let row = crate::db::instances::get(&state.db, instance_id)
         .await?
-        .ok_or_else(|| AppError::not_found("Instance not found"))?;
+        .ok_or_else(|| {
+            AppError::not_found("That instance isn't there anymore. It may have just been removed.")
+        })?;
     let shared = super::shared::server_id(&row)
         .ok_or_else(|| AppError::conflict("This instance isn't shared"))?
         .to_owned();

@@ -76,7 +76,7 @@ pub async fn make_plan(
     let (s, t) = (synced.clone(), target.clone());
     let configs = tokio::task::spawn_blocking(move || config_hashes(&game_dir, s.as_ref(), &t))
         .await
-        .map_err(|e| AppError::unknown(e.to_string()))?;
+        .map_err(AppError::from)?;
     let lookup = |p: &str| configs.get(&p.to_lowercase()).cloned();
     let plan = plan::plan(&plan::Input {
         synced: synced.as_ref(),
@@ -141,12 +141,14 @@ pub async fn run<R: Runtime>(
     // 1. Never write under a running game.
     progress.wait_for_game_exit(state).await?;
 
-    let row = db::instances::get(&state.db, &id)
-        .await?
-        .ok_or_else(|| AppError::not_found("Instance not found"))?;
+    let row = db::instances::get(&state.db, &id).await?.ok_or_else(|| {
+        AppError::not_found("That instance isn't there anymore. It may have just been removed.")
+    })?;
     let game_dir = PathBuf::from(&row.game_dir);
     if !game_dir.is_dir() {
-        return Err(AppError::conflict("The folder is missing"));
+        return Err(AppError::conflict(
+            "The instance's folder is missing. If you moved it, track it again from its new place.",
+        ));
     }
     let (plan, _, _) = make_plan(
         state,
@@ -198,7 +200,7 @@ pub async fn run<R: Runtime>(
         );
         tokio::task::spawn_blocking(move || apply_actions(&paths, &game, &actions, backup_dir2))
             .await
-            .map_err(|e| AppError::unknown(e.to_string()))??;
+            .map_err(AppError::from)??;
     }
 
     // 5. The launcher's own settings, where Atlas can edit them (Prism).
@@ -353,7 +355,7 @@ async fn wait_for_manual_downloads<R: Runtime>(
             fetch::pick_up_manual_downloads(&paths, &refs, since)
         })
         .await
-        .map_err(|e| AppError::unknown(e.to_string()))?;
+        .map_err(AppError::from)?;
         progress.sleep(Duration::from_secs(2)).await?;
     }
 }

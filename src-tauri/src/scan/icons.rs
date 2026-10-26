@@ -115,7 +115,7 @@ pub async fn fill(
             .collect()
     })
     .await
-    .map_err(|e| AppError::unknown(e.to_string()))?;
+    .map_err(AppError::from)?;
 
     let mut tx = db.begin().await?;
     let mut set = 0;

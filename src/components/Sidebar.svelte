@@ -161,6 +161,10 @@
       </span>
       <Icon name="more" class="size-4 text-(--text-faint)" />
     </button>
+  {:else if social.loaded && !social.hasServer}
+    <p class="px-5 pt-3 pb-4 text-center text-[11.5px] text-(--text-faint)">
+      Friends and sharing aren't available in this copy of Atlas.
+    </p>
   {:else if social.loaded}
     <div class="grid gap-1.5 px-5 pt-3 pb-4">
       {#each SIGN_IN as p (p.id)}

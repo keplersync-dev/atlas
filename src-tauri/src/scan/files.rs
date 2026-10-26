@@ -357,9 +357,7 @@ fn facts<'a>(f: &DiskFile, read: &'a Read, name: &'a str) -> FileFacts<'a> {
 }
 
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> AppResult<T> {
-    tokio::task::spawn_blocking(f)
-        .await
-        .map_err(|e| AppError::unknown(format!("Scan failed: {e}")))
+    tokio::task::spawn_blocking(f).await.map_err(AppError::from)
 }
 
 #[cfg(test)]

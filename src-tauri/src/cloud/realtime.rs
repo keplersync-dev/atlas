@@ -111,14 +111,14 @@ impl Cloud {
         let mut url = self.url("/ws")?;
         let scheme = if url.scheme() == "https" { "wss" } else { "ws" };
         url.set_scheme(scheme)
-            .map_err(|_| AppError::unknown("Bad server address"))?;
+            .map_err(|_| AppError::unknown("Atlas can't find its server. Reinstall Atlas."))?;
         // A refused handshake may mean the access token just expired: refresh next time.
         for force_refresh in [false, true] {
             let token = self.access_token(force_refresh).await?;
             let mut req = url
                 .as_str()
                 .into_client_request()
-                .map_err(|_| AppError::unknown("Bad server address"))?;
+                .map_err(|_| AppError::unknown("Atlas can't find its server. Reinstall Atlas."))?;
             let headers = req.headers_mut();
             headers.insert(AUTHORIZATION, bearer(&token)?);
             headers.insert(

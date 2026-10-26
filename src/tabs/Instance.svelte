@@ -67,7 +67,7 @@
     !summary
       ? null
       : summary.status === "missing"
-        ? "The folder is missing."
+        ? "The instance's folder is missing."
         : summary.status === "syncing"
           ? "Wait for the update to finish."
           : summary.isRunning

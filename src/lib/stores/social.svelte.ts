@@ -28,6 +28,8 @@ class SocialStore {
   #signInAttempt = 0;
 
   signedIn = $derived(!!this.session?.user);
+  /** False when this copy of Atlas has no server: sign-in is hidden. */
+  hasServer = $derived(this.session?.server !== false);
   invites = $derived(this.shared.filter((s) => s.myStatus === "invited"));
   incomingRequests = $derived(
     this.requests.filter((r) => r.direction === "incoming"),
@@ -42,7 +44,7 @@ class SocialStore {
     } catch (err) {
       // Show the sign-in buttons rather than nothing at all.
       console.error("couldn't load the account", err);
-      this.session ??= { user: null, online: false };
+      this.session ??= { user: null, online: false, server: true };
     } finally {
       this.loaded = true;
     }

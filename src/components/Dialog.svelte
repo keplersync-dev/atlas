@@ -45,7 +45,7 @@
   <div class="overflow-y-auto px-5.5 pt-3.5 pb-4.5">{@render children()}</div>
   {#if footer}
     <div
-      class="flex items-center justify-end gap-2 border-t border-(--line) px-5.5 py-3.5"
+      class="flex flex-wrap items-center justify-end gap-2 border-t border-(--line) px-5.5 py-3.5"
     >
       {@render footer()}
     </div>

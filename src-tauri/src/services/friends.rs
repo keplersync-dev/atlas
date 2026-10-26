@@ -119,6 +119,8 @@ fn segment(id: &str) -> AppResult<&str> {
     if !id.is_empty() && id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
         Ok(id)
     } else {
-        Err(AppError::invalid_input("Unknown person"))
+        Err(AppError::invalid_input(
+            "That person isn't on Atlas anymore",
+        ))
     }
 }

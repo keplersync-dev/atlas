@@ -62,9 +62,9 @@ pub async fn export<R: Runtime>(
     state: &AppState,
     id: &str,
 ) -> AppResult<Option<String>> {
-    let row = db::instances::get(&state.db, id)
-        .await?
-        .ok_or_else(|| AppError::not_found("Instance not found"))?;
+    let row = db::instances::get(&state.db, id).await?.ok_or_else(|| {
+        AppError::not_found("That instance isn't there anymore. It may have just been removed.")
+    })?;
     let (Some(minecraft), Some(loader)) = (row.minecraft_version.clone(), row.loader()) else {
         return Err(AppError::invalid_input(
             "Atlas couldn't tell which Minecraft version and loader this folder uses",
@@ -115,7 +115,7 @@ pub async fn export<R: Runtime>(
     let target = to.clone();
     tokio::task::spawn_blocking(move || write(&target, &pack))
         .await
-        .map_err(|e| AppError::unknown(e.to_string()))??;
+        .map_err(AppError::from)??;
     super::reveal(app, &to);
     Ok(Some(to.to_string_lossy().into_owned()))
 }
@@ -227,7 +227,7 @@ pub async fn import<R: Runtime>(
         .await?
         .into_iter()
         .find(|l| l.id == launcher_id)
-        .ok_or_else(|| AppError::not_found("Launcher not found"))?;
+        .ok_or_else(|| AppError::not_found("That launcher isn't in Atlas anymore"))?;
     let kind = launcher.kind();
     if !matches!(kind, Some(LauncherKind::Prism | LauncherKind::Modrinth)) {
         return Err(AppError::invalid_input(

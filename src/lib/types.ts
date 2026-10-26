@@ -141,6 +141,8 @@ export interface Session {
   user: Me | null;
   /** false = server unreachable; social data comes from the offline cache. */
   online: boolean;
+  /** false = this copy of Atlas has no server to sign in to. */
+  server: boolean;
 }
 
 export interface Presence {
