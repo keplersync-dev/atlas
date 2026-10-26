@@ -25,6 +25,7 @@ use super::manifest::Manifest;
 use super::plan::{self, Action, Plan};
 use super::source::Source;
 use super::{adopt, prism_versions};
+use crate::cloud::files::LinkBatches;
 use crate::db::{self, instances::InstanceRow};
 use crate::dto::{BackupReason, ConfigChoice, SyncStage};
 use crate::error::{AppError, AppResult};
@@ -234,6 +235,25 @@ async fn fetch_all<R: Runtime>(
         .map(|(e, _)| e.size_bytes)
         .sum();
     progress.stage(SyncStage::Download);
+    // Uploaded files and config files come from the server: their links in batches.
+    let links = source.server_id().map(|shared| {
+        let blobs = routes
+            .iter()
+            .filter(|(e, r)| {
+                *r == Route::Blob && !fetch::cache_file(&state.paths, &e.sha1).is_file()
+            })
+            .map(|(e, _)| e.sha256.clone());
+        let configs = plan.actions.iter().filter_map(|a| match a {
+            Action::WriteConfig { config, .. }
+                if !fetch::blob_file(&state.paths, &config.sha256).is_file() =>
+            {
+                Some(config.sha256.clone())
+            }
+            _ => None,
+        });
+        LinkBatches::new(&state.cloud, shared, blobs.chain(configs).collect())
+    });
+    let links = links.as_ref();
     // Several files at a time; the first failure stops the rest (nothing is placed until
     // every file is in the cache).
     let done = AtomicU64::new(0);
@@ -256,13 +276,12 @@ async fn fetch_all<R: Runtime>(
                     let now = done.fetch_add(n, Ordering::Relaxed) + n;
                     progress.bytes(now.min(total), total);
                 };
-                match (route, source.server_id()) {
-                    (Route::Blob, Some(shared))
+                match (route, links) {
+                    (Route::Blob, Some(links))
                         if !fetch::cache_file(&state.paths, &entry.sha1).is_file() =>
                     {
-                        let url = state
-                            .cloud
-                            .file_url(shared, &entry.sha256)
+                        let url = links
+                            .get(&entry.sha256)
                             .await
                             .map_err(|e| taken_down(e, &entry.name))?;
                         let target = fetch::cache_file(&state.paths, &entry.sha1);
@@ -290,11 +309,10 @@ async fn fetch_all<R: Runtime>(
         .await?;
     for a in &plan.actions {
         if let Action::WriteConfig { config, .. } = a {
-            match source.server_id() {
-                Some(shared) if !fetch::blob_file(&state.paths, &config.sha256).is_file() => {
-                    let url = state
-                        .cloud
-                        .file_url(shared, &config.sha256)
+            match links {
+                Some(links) if !fetch::blob_file(&state.paths, &config.sha256).is_file() => {
+                    let url = links
+                        .get(&config.sha256)
                         .await
                         .map_err(|e| taken_down(e, &config.path))?;
                     fetch::config_from(&state.paths, state.cloud.file_http(), config, &url).await?;

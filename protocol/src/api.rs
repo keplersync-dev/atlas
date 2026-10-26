@@ -1,6 +1,8 @@
 //! Request and response bodies for the server's REST API. JSON in camelCase.
 //! The user types are also what the app hands its UI (they mirror src/lib/types.ts).
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use crate::enums::{
@@ -463,6 +465,26 @@ pub struct BlobCheck {
 #[serde(rename_all = "camelCase")]
 pub struct BlobCheckResult {
     pub existing: Vec<String>,
+}
+
+/// The most files one `POST /shared-instances/{id}/file-links` asks about.
+pub const MAX_FILE_LINKS: usize = 200;
+
+/// `POST /shared-instances/{id}/file-links`: download links for many of its files at once.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileLinksRequest {
+    pub sha256: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileLinks {
+    /// sha256 → a link straight to the file. Files that aren't in the instance, or were
+    /// taken down, are left out.
+    pub links: BTreeMap<String, String>,
+    /// How long the links work.
+    pub expires_in_secs: u64,
 }
 
 /// `POST /uploads`: ask to upload one file.
