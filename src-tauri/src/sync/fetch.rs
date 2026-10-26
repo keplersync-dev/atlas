@@ -72,7 +72,7 @@ pub fn route(
                 .next()
                 .unwrap_or(&entry.path)
                 .to_string(),
-            page_url: page.clone(),
+            page_url: direct_download(page),
         }),
         (ContentSource::Upload, _) if source.server_id().is_some() => Route::Blob,
         (ContentSource::Upload, _) => Route::Unavailable(format!(
@@ -239,6 +239,18 @@ pub async fn config(paths: &AppPaths, source: &Source, o: &Override) -> AppResul
     Ok(target)
 }
 
+/// CurseForge's page that downloads this exact file after a few seconds, from its file
+/// page (`…/files/<id>`). The file page's big Download button gets the mod's newest file,
+/// which often isn't the one the pack needs.
+fn direct_download(page: &str) -> String {
+    match page.rsplit_once("/files/") {
+        Some((project, id)) if !id.is_empty() && id.bytes().all(|b| b.is_ascii_digit()) => {
+            format!("{project}/download/{id}")
+        }
+        _ => page.to_owned(),
+    }
+}
+
 /// Look in the Downloads folder for files the user downloaded by hand since `since`,
 /// and take any whose sha1 matches a wanted entry into the cache. Returns how many arrived.
 /// A file taken in leaves Downloads: it was only downloaded for Atlas, which has it now.
@@ -282,6 +294,18 @@ pub fn pick_up_manual_downloads(paths: &AppPaths, wanted: &[&Entry], since: Syst
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn curseforge_files_download_directly() {
+        assert_eq!(
+            direct_download(
+                "https://www.curseforge.com/minecraft/mc-mods/silent-fullbright/files/2702370"
+            ),
+            "https://www.curseforge.com/minecraft/mc-mods/silent-fullbright/download/2702370"
+        );
+        let other = "https://www.curseforge.com/minecraft/mc-mods/silent-fullbright";
+        assert_eq!(direct_download(other), other);
+    }
 
     #[test]
     fn manual_downloads_are_taken_out_of_downloads() {

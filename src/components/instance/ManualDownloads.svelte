@@ -4,7 +4,7 @@
   import Button from "../Button.svelte";
 
   // An update waiting on files only CurseForge's website hands out: two short steps, and
-  // each file's page in case the browser tab was closed.
+  // each file's download again in case the browser tab was closed.
   let { instance }: { instance: InstanceSummary } = $props();
 
   const files = $derived(instance.progress?.manualDownloads ?? []);
@@ -31,9 +31,7 @@
     <li class="flex items-center gap-2.5">
       {@render step(1)}
       <span
-        >Click <b class="font-semibold">Download</b> on {one
-          ? "the page"
-          : "each page"} that opened</span
+        >Your browser downloads {one ? "it" : "them"} in a few seconds</span
       >
     </li>
     <li class="flex items-center gap-2.5">
@@ -50,7 +48,7 @@
             >{f.fileName}</small
           >
         </span>
-        <Button size="sm" onclick={() => open(f.pageUrl)}>Open page</Button>
+        <Button size="sm" onclick={() => open(f.pageUrl)}>Download</Button>
       </li>
     {/each}
   </ul>
