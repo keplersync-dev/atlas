@@ -51,6 +51,8 @@ export const tauriApi: AtlasApi = {
   restoreBackup: (instanceId, backupId) =>
     call("restore_backup", { instanceId, backupId }),
   cancelJob: (instanceId) => call("cancel_job", { instanceId }),
+  exportMrpack: (instanceId) => call("export_mrpack", { instanceId }),
+  importMrpack: (launcherId) => call("import_mrpack", { launcherId }),
   setShareMode: (instanceId, contentId, mode) =>
     call("set_share_mode", { instanceId, contentId, mode }),
   setOptionalInstalled: (instanceId, contentId, installed) =>

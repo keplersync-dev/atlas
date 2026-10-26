@@ -208,17 +208,21 @@ pub async fn create(root: &Path, new: &NewInstance) -> ReadResult<String> {
     result
 }
 
-/// A Modrinth pack with no files: modrinth.index.json naming the versions.
-fn write_pack(file: &Path, new: &NewInstance, loader_version: Option<&str>) -> ReadResult<()> {
-    let mut dependencies = serde_json::json!({ "minecraft": new.minecraft });
-    let key = match new.loader {
+/// A loader's key in a pack's `dependencies` ("fabric-loader"). None for vanilla.
+pub fn dependency_key(loader: Loader) -> Option<&'static str> {
+    match loader {
         Loader::Vanilla => None,
         Loader::Fabric => Some("fabric-loader"),
         Loader::Quilt => Some("quilt-loader"),
         Loader::Forge => Some("forge"),
         Loader::Neoforge => Some("neoforge"),
-    };
-    if let (Some(key), Some(version)) = (key, loader_version) {
+    }
+}
+
+/// A Modrinth pack with no files: modrinth.index.json naming the versions.
+fn write_pack(file: &Path, new: &NewInstance, loader_version: Option<&str>) -> ReadResult<()> {
+    let mut dependencies = serde_json::json!({ "minecraft": new.minecraft });
+    if let (Some(key), Some(version)) = (dependency_key(new.loader), loader_version) {
         dependencies[key] = version.into();
     }
     let index = serde_json::json!({
@@ -244,7 +248,7 @@ fn write_pack(file: &Path, new: &NewInstance, loader_version: Option<&str>) -> R
 
 /// Give the pack to the app: its program takes it as an argument (and passes it on to a
 /// running copy). Without the program, Explorer opens it with whatever owns .mrpack.
-fn open_pack(pack: &Path) -> ReadResult<()> {
+pub fn open_pack(pack: &Path) -> ReadResult<()> {
     let program = program().unwrap_or_else(|| PathBuf::from("explorer.exe"));
     std::process::Command::new(program).arg(pack).spawn()?;
     Ok(())

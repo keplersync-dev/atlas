@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { api } from "$lib/api";
+  import { api, type ApiError } from "$lib/api";
   import { plural, versionLabel } from "$lib/format";
   import { go } from "$lib/nav.svelte";
   import { resource } from "$lib/resource.svelte";
@@ -84,6 +84,61 @@
   function trackFolder() {
     // In the real app this path comes from a native folder picker (Tauri's dialog plugin).
     finish(async () => [await api.trackFolder(folder.trim())]);
+  }
+
+  // A launcher Atlas didn't find on its own, like a portable Prism: its instances then
+  // show up above, with everything Atlas can do in that launcher.
+  let launcherFolder = $state("");
+  let addingLauncher = $state(false);
+  const ADDABLE = [
+    "prism",
+    "multimc",
+    "modrinth",
+    "curseforge",
+    "official",
+  ] as const;
+
+  // A Modrinth pack, installed by a launcher that takes them; its new instance then shows
+  // up above (after "Look again").
+  const importers = $derived(
+    launchers.data?.filter(
+      (l) => l.kind === "prism" || l.kind === "modrinth",
+    ) ?? [],
+  );
+  let imported = $state<string | null>(null);
+
+  async function importPack(launcher: { id: string; name: string }) {
+    error = null;
+    try {
+      if (await api.importMrpack(launcher.id)) imported = launcher.name;
+    } catch (err) {
+      error = (err as Error).message;
+    }
+  }
+
+  async function addLauncher() {
+    addingLauncher = true;
+    error = null;
+    try {
+      for (const kind of ADDABLE) {
+        try {
+          await api.addLauncher(kind, launcherFolder.trim());
+          launcherFolder = "";
+          launchers.reload();
+          detected.reload();
+          return;
+        } catch (err) {
+          // Not this kind of launcher: try the next. Anything else (already added) stops.
+          if ((err as ApiError).code !== "invalid_input") throw err;
+        }
+      }
+      error =
+        "That folder isn't a Prism, MultiMC, Modrinth App, CurseForge or Minecraft Launcher install.";
+    } catch (err) {
+      error = (err as Error).message;
+    } finally {
+      addingLauncher = false;
+    }
   }
 </script>
 
@@ -171,7 +226,7 @@
         class="text-xs text-(--accent) hover:underline"
         onclick={() => (showFolder = true)}
       >
-        Not listed? Choose a folder
+        Not listed? Choose a folder, a pack or a launcher
       </button>
     {:else}
       <h3 class="mb-1.5 text-xs font-semibold text-(--text-muted)">
@@ -188,6 +243,47 @@
         />
         <Button disabled={!folder.trim() || submitting} onclick={trackFolder}
           >Track folder</Button
+        >
+      </div>
+
+      {#if importers.length}
+        <h3 class="mt-4 mb-1.5 text-xs font-semibold text-(--text-muted)">
+          Modrinth pack (.mrpack)
+        </h3>
+        <p class="mb-2 text-xs text-(--text-faint)">
+          {imported
+            ? `Finish adding it in ${imported}, then look again here to track it.`
+            : "A launcher installs it as a new instance, which you can then track."}
+        </p>
+        <div class="flex flex-wrap gap-2">
+          {#each importers as l (l.id)}
+            <Button onclick={() => importPack(l)}>Add to {l.name}</Button>
+          {/each}
+          {#if imported}
+            <Button variant="ghost" onclick={() => detected.reload()}
+              >Look again</Button
+            >
+          {/if}
+        </div>
+      {/if}
+
+      <h3 class="mt-4 mb-1.5 text-xs font-semibold text-(--text-muted)">
+        Launcher folder
+      </h3>
+      <p class="mb-2 text-xs text-(--text-faint)">
+        For a launcher Atlas didn't find, like a portable Prism: the folder it
+        runs from. Its instances then appear above.
+      </p>
+      <div class="flex gap-2">
+        <input
+          bind:value={launcherFolder}
+          placeholder="D:\PrismLauncher"
+          class="h-8.5 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 font-mono text-xs outline-none focus:border-(--accent)"
+        />
+        <Button
+          disabled={!launcherFolder.trim() || addingLauncher}
+          onclick={addLauncher}
+          >{addingLauncher ? "Adding…" : "Add launcher"}</Button
         >
       </div>
     {/if}

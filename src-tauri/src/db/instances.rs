@@ -214,6 +214,27 @@ pub async fn content_counts(db: &SqlitePool) -> sqlx::Result<HashMap<String, u32
     Ok(rows.into_iter().map(|(id, n)| (id, n as u32)).collect())
 }
 
+/// A folder tracked on its own turns out to belong to a launcher added since.
+pub async fn move_to_launcher(
+    db: &SqlitePool,
+    id: &str,
+    launcher_id: &str,
+    kind: LauncherKind,
+    launcher_instance_id: &str,
+) -> sqlx::Result<()> {
+    sqlx::query(
+        "UPDATE instance SET launcher_id = ?, launcher_kind = ?, launcher_instance_id = ?
+         WHERE id = ?",
+    )
+    .bind(launcher_id)
+    .bind(to_wire(kind))
+    .bind(launcher_instance_id)
+    .bind(id)
+    .execute(db)
+    .await?;
+    Ok(())
+}
+
 /// Keep up with role changes: each linked copy takes its role from the server's list of
 /// shared instances (the owner can change a member's role at any time).
 pub async fn sync_roles(

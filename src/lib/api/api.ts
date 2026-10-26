@@ -107,6 +107,10 @@ export interface AtlasApi {
   /** Stops the instance's update, install or restore while it waits or downloads. Once
    * files are being changed it finishes. */
   cancelJob(instanceId: Id): Promise<void>;
+  /** Saves the instance as a Modrinth pack where the user picks (shown in Explorer). null if they cancelled. */
+  exportMrpack(instanceId: Id): Promise<string | null>;
+  /** Picks a Modrinth pack and gives it to this launcher (Prism or the Modrinth App) to install. false if they cancelled. */
+  importMrpack(launcherId: Id): Promise<boolean>;
   /**
    * Owners/editors: how a file is shared (required / optional / only me).
    * Saved locally; it reaches friends with the next publish.

@@ -178,6 +178,11 @@
               icon: "refresh",
               onselect: () => run(() => api.rescanInstance(id)),
             },
+            {
+              label: "Export as .mrpack…",
+              icon: "download",
+              onselect: () => run(() => api.exportMrpack(id)),
+            },
           ]),
       "divider",
       ...(s && s.role !== "owner"

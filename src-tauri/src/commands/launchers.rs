@@ -43,3 +43,14 @@ pub async fn list_detected_instances(
 ) -> AppResult<Vec<DetectedInstance>> {
     launchers::detected_instances(&state).await
 }
+
+/// Pick a Modrinth pack and give it to this launcher (Prism or the Modrinth App) to
+/// install. False if the user cancelled.
+#[tauri::command]
+pub async fn import_mrpack<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    launcher_id: Id,
+) -> AppResult<bool> {
+    crate::services::mrpack::import(&app, &state, &launcher_id).await
+}

@@ -10,6 +10,7 @@
 //! New instances are a "custom" profile with its own game dir in <root>/instances/.
 //! Fabric and Quilt profiles also need versions/<id>/<id>.json, which their installers
 //! fetch from the loader's meta server; the launcher downloads the rest on first play.
+//! Forge and NeoForge need their own installer run (`install_forge`).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -239,7 +240,8 @@ pub fn running() -> bool {
 /// A loader's version file for the launcher: versions/<id>/<id>.json.
 pub struct VersionFile {
     pub id: String,
-    pub json: Vec<u8>,
+    /// None when an installer already put it in place (Forge, NeoForge).
+    pub json: Option<Vec<u8>>,
 }
 
 /// The version file a Fabric or Quilt profile needs, from the loader's meta server (what
@@ -281,7 +283,174 @@ pub async fn fetch_version(
     if !safe_id(&id) || parsed["inheritsFrom"].as_str() != Some(mc) {
         return Err(ReadError::Format(format!("{url} sent an odd version file")));
     }
-    Ok(Some(VersionFile { id, json }))
+    Ok(Some(VersionFile {
+        id,
+        json: Some(json),
+    }))
+}
+
+/// Forge and NeoForge come with an installer that sets up their version and libraries.
+/// Atlas runs it the way its own "Install client" does, with a Java the Minecraft Launcher
+/// has downloaded (else JAVA_HOME's). Returns the version it made; its file is in place
+/// already. The launcher must be closed: the installer edits launcher_profiles.json too.
+pub async fn install_forge(
+    http: &reqwest::Client,
+    root: &Path,
+    new: &NewInstance,
+) -> ReadResult<VersionFile> {
+    let Some(loader_version) = new.loader_version()? else {
+        return Err(ReadError::Format("Forge needs a version".into()));
+    };
+    let installer = forge_installer(new.loader, &new.minecraft, loader_version)?;
+    let java = find_java(root).ok_or_else(|| {
+        ReadError::Format(
+            "no Java to run the installer with: play any version in the Minecraft Launcher \
+             once, so it downloads its own"
+                .into(),
+        )
+    })?;
+
+    let dir = std::env::temp_dir().join(format!("atlas-forge-{}", crate::util::ids::new_id()));
+    std::fs::create_dir_all(&dir)?;
+    let result = async {
+        let jar = dir.join("installer.jar");
+        let failed = |e: reqwest::Error| ReadError::Format(format!("{}: {e}", installer.url));
+        let bytes = http
+            .get(&installer.url)
+            .send()
+            .await
+            .and_then(|r| r.error_for_status())
+            .map_err(failed)?
+            .bytes()
+            .await
+            .map_err(failed)?;
+        std::fs::write(&jar, &bytes)?;
+
+        let before = version_dirs(root);
+        let (root2, dir2, flag) = (root.to_path_buf(), dir.clone(), installer.flag);
+        let status = tokio::time::timeout(
+            INSTALLER_TIMEOUT,
+            tokio::task::spawn_blocking(move || {
+                let mut run = std::process::Command::new(&java);
+                run.arg("-jar")
+                    .arg(&jar)
+                    .arg(flag)
+                    .arg(&root2)
+                    .current_dir(&dir2);
+                #[cfg(windows)]
+                {
+                    use std::os::windows::process::CommandExt;
+                    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+                    run.creation_flags(CREATE_NO_WINDOW);
+                }
+                run.output()
+            }),
+        )
+        .await
+        .map_err(|_| ReadError::Format("the installer took too long".into()))?
+        .map_err(|e| ReadError::Format(e.to_string()))??;
+        if !status.status.success() {
+            tracing::warn!(
+                stdout = %String::from_utf8_lossy(&status.stdout),
+                "the Forge installer failed"
+            );
+            return Err(ReadError::Format("the installer failed".into()));
+        }
+        // Its usual name, or whatever new Forge version folder it made (older ones name
+        // theirs differently).
+        let made = Some(installer.id.clone())
+            .filter(|id| {
+                root.join("versions")
+                    .join(id)
+                    .join(format!("{id}.json"))
+                    .is_file()
+            })
+            .or_else(|| {
+                version_dirs(root)
+                    .into_iter()
+                    .find(|d| !before.contains(d) && d.to_lowercase().contains("forge"))
+            })
+            .ok_or_else(|| ReadError::Format("the installer didn't add a version".into()))?;
+        Ok(VersionFile {
+            id: made,
+            json: None,
+        })
+    }
+    .await;
+    let _ = std::fs::remove_dir_all(&dir);
+    result
+}
+
+/// Installers can download a few hundred MB of libraries.
+const INSTALLER_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(15 * 60);
+
+struct Installer {
+    url: String,
+    /// The version it makes, usually.
+    id: String,
+    /// Its "install the client into this folder" option.
+    flag: &'static str,
+}
+
+fn forge_installer(loader: Loader, mc: &str, v: &str) -> ReadResult<Installer> {
+    if !safe_id(mc) || !safe_id(v) {
+        return Err(ReadError::Format(format!("odd version: {mc} {v}")));
+    }
+    match loader {
+        Loader::Neoforge => Ok(Installer {
+            url: format!(
+                "https://maven.neoforged.net/releases/net/neoforged/neoforge/{v}/neoforge-{v}-installer.jar"
+            ),
+            id: format!("neoforge-{v}"),
+            flag: "--install-client",
+        }),
+        Loader::Forge => Ok(Installer {
+            url: format!(
+                "https://maven.minecraftforge.net/net/minecraftforge/forge/{mc}-{v}/forge-{mc}-{v}-installer.jar"
+            ),
+            id: format!("{mc}-forge-{v}"),
+            flag: "--installClient",
+        }),
+        other => Err(ReadError::Format(format!("{other:?} has no installer"))),
+    }
+}
+
+fn version_dirs(root: &Path) -> Vec<String> {
+    std::fs::read_dir(root.join("versions"))
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|e| e.path().is_dir())
+                .map(|e| e.file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A Java to run an installer with: one the Minecraft Launcher downloaded for the game
+/// (newest first; the Microsoft Store launcher keeps them elsewhere), else JAVA_HOME's.
+fn find_java(root: &Path) -> Option<PathBuf> {
+    const RUNTIMES: [&str; 4] = [
+        "java-runtime-delta",
+        "java-runtime-gamma",
+        "java-runtime-beta",
+        "java-runtime-alpha",
+    ];
+    let store = env_dir("LOCALAPPDATA").map(|d| {
+        d.join(r"Packages\Microsoft.4297127D64EC6_8wekyb3d8bbwe\LocalCache\Local\runtime")
+    });
+    let runtimes = [Some(root.join("runtime")), store];
+    let launcher_java = RUNTIMES.iter().flat_map(|name| {
+        runtimes.iter().flatten().map(move |dir| {
+            dir.join(name)
+                .join("windows-x64")
+                .join(name)
+                .join("bin")
+                .join("javaw.exe")
+        })
+    });
+    let java_home = env_dir("JAVA_HOME").map(|d| d.join("bin").join("javaw.exe"));
+    first_existing(launcher_java.chain(java_home))
 }
 
 /// Version ids end up in URLs and folder names: letters, digits and `.-_+` only.
@@ -316,13 +485,16 @@ pub fn create(root: &Path, new: &NewInstance, version: Option<VersionFile>) -> R
 
     let version_id = match version {
         Some(v) => {
-            let dir = root.join("versions").join(&v.id);
-            std::fs::create_dir_all(&dir)?;
-            std::fs::write(dir.join(format!("{}.json", v.id)), &v.json)?;
-            // The installers leave an empty jar; the launcher fills it from the parent version.
-            let jar = dir.join(format!("{}.jar", v.id));
-            if !jar.exists() {
-                std::fs::write(jar, b"")?;
+            if let Some(json) = &v.json {
+                let dir = root.join("versions").join(&v.id);
+                std::fs::create_dir_all(&dir)?;
+                std::fs::write(dir.join(format!("{}.json", v.id)), json)?;
+                // The installers leave an empty jar; the launcher fills it from the parent
+                // version.
+                let jar = dir.join(format!("{}.jar", v.id));
+                if !jar.exists() {
+                    std::fs::write(jar, b"")?;
+                }
             }
             v.id
         }
@@ -498,7 +670,7 @@ mod tests {
         };
         let version = VersionFile {
             id: "fabric-loader-0.16.5-1.21.1".into(),
-            json: br#"{"id":"fabric-loader-0.16.5-1.21.1","inheritsFrom":"1.21.1"}"#.to_vec(),
+            json: Some(br#"{"id":"fabric-loader-0.16.5-1.21.1","inheritsFrom":"1.21.1"}"#.to_vec()),
         };
         let a = create(&root, &fabric, Some(version)).unwrap();
         let b = create(
@@ -586,6 +758,47 @@ mod tests {
             let file = fetch_version(&http, &new).await.unwrap().unwrap();
             assert_eq!(file.id, id);
         }
+    }
+
+    #[test]
+    fn forge_and_neoforge_installers() {
+        let neo = forge_installer(Loader::Neoforge, "1.21.1", "21.1.77").unwrap();
+        assert_eq!(
+            neo.url,
+            "https://maven.neoforged.net/releases/net/neoforged/neoforge/21.1.77/neoforge-21.1.77-installer.jar"
+        );
+        assert_eq!(neo.id, "neoforge-21.1.77");
+        let forge = forge_installer(Loader::Forge, "1.20.1", "47.3.0").unwrap();
+        assert_eq!(forge.id, "1.20.1-forge-47.3.0");
+        assert_eq!(
+            parse_version_id(&forge.id),
+            (
+                Some("1.20.1".into()),
+                Some((Loader::Forge, Some("47.3.0".into())))
+            ),
+            "Atlas reads back what it made"
+        );
+        assert!(forge_installer(Loader::Forge, "1.20.1", "../x").is_err());
+        assert!(forge_installer(Loader::Fabric, "1.20.1", "0.16.5").is_err());
+    }
+
+    #[test]
+    fn java_from_the_launchers_runtimes_newest_first() {
+        let root = std::env::temp_dir().join(format!("atlas-java-{}", crate::util::ids::new_id()));
+        let java = |name: &str| {
+            root.join("runtime")
+                .join(name)
+                .join("windows-x64")
+                .join(name)
+                .join("bin")
+                .join("javaw.exe")
+        };
+        for name in ["java-runtime-gamma", "java-runtime-delta"] {
+            std::fs::create_dir_all(java(name).parent().unwrap()).unwrap();
+            std::fs::write(java(name), b"").unwrap();
+        }
+        assert_eq!(find_java(&root), Some(java("java-runtime-delta")));
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[test]

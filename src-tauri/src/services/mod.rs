@@ -6,6 +6,7 @@ pub mod friends;
 pub mod groups;
 pub mod instances;
 pub mod launchers;
+pub mod mrpack;
 pub mod presence;
 pub mod publish;
 pub mod session;

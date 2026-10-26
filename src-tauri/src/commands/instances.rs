@@ -125,6 +125,16 @@ pub async fn restore_backup<R: Runtime>(
     instances::summary_by_id(&state, &instance_id).await
 }
 
+/// Save the instance as a Modrinth pack where the user picks. None if they cancelled.
+#[tauri::command]
+pub async fn export_mrpack<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    instance_id: Id,
+) -> AppResult<Option<String>> {
+    crate::services::mrpack::export(&app, &state, &instance_id).await
+}
+
 /// Stop the instance's update, install or restore, if it hasn't started changing files.
 /// The job then ends as usual (`instance.progress` with status "ready").
 #[tauri::command]

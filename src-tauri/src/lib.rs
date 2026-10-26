@@ -71,6 +71,8 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::instances::set_content_enabled,
         commands::instances::restore_backup,
         commands::instances::cancel_job,
+        commands::instances::export_mrpack,
+        commands::launchers::import_mrpack,
         commands::instances::set_share_mode,
         commands::instances::set_optional_installed,
         commands::instances::dev_link_manifest,
@@ -327,6 +329,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,

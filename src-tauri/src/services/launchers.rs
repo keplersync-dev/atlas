@@ -125,6 +125,34 @@ pub async fn add<R: Runtime>(
         )));
     }
     let row = db::launchers::insert(&state.db, kind, &root, true).await?;
+    // Its instances that were tracked as plain folders become this launcher's, so Atlas
+    // can open them there and edit their versions.
+    let found = instances_in(&row).await;
+    for tracked in db::instances::list(&state.db).await? {
+        if tracked.launcher_kind != "folder" {
+            continue;
+        }
+        if let Some(f) = found.iter().find(|f| {
+            f.game_dir
+                .to_string_lossy()
+                .eq_ignore_ascii_case(&tracked.game_dir)
+        }) {
+            db::instances::move_to_launcher(
+                &state.db,
+                &tracked.id,
+                &row.id,
+                kind,
+                &f.launcher_instance_id,
+            )
+            .await?;
+            emit(
+                app,
+                AtlasEvent::InstanceChanged {
+                    instance_id: tracked.id.clone(),
+                },
+            );
+        }
+    }
     emit(app, AtlasEvent::LaunchersChanged {});
     to_dto(&row)
         .await

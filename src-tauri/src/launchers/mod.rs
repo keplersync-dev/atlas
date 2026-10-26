@@ -15,6 +15,8 @@ mod util;
 
 use std::path::{Path, PathBuf};
 
+pub use util::file_stem;
+
 use crate::dto::{LauncherKind, Loader};
 use crate::error::AppError;
 
@@ -110,7 +112,8 @@ pub fn creatable_loaders(kind: LauncherKind) -> &'static [Loader] {
         | LauncherKind::Multimc
         | LauncherKind::Modrinth
         | LauncherKind::Curseforge => ALL,
-        LauncherKind::Official => &[Loader::Vanilla, Loader::Fabric, Loader::Quilt],
+        // Forge and NeoForge through their installers, which need a Java (official.rs).
+        LauncherKind::Official => ALL,
         LauncherKind::Folder => &[],
     }
 }
@@ -223,7 +226,12 @@ pub async fn create_instance(
             unblock(move || prism::create(flavor, &root, &new)).await
         }
         LauncherKind::Official => {
-            let version = official::fetch_version(http, &new).await?;
+            let version = match new.loader {
+                Loader::Forge | Loader::Neoforge => {
+                    Some(official::install_forge(http, &root, &new).await?)
+                }
+                _ => official::fetch_version(http, &new).await?,
+            };
             unblock(move || official::create(&root, &new, version)).await
         }
         LauncherKind::Modrinth => modrinth::create(&root, &new).await,
@@ -295,6 +303,22 @@ async fn blocking(
 }
 
 /// Open the launcher, launching the instance directly where the launcher allows it.
+/// A loader's key in a Modrinth pack's `dependencies`.
+pub fn pack_dependency_key(loader: Loader) -> Option<&'static str> {
+    modrinth::dependency_key(loader)
+}
+
+/// Have a launcher install a Modrinth pack as a new instance: Prism or the Modrinth App.
+pub fn import_pack(kind: LauncherKind, root: &Path, pack: &Path) -> Result<(), ReadError> {
+    match kind {
+        LauncherKind::Prism => Ok(prism::import(root, pack)?),
+        LauncherKind::Modrinth => modrinth::open_pack(pack),
+        _ => Err(ReadError::Format(
+            "this launcher can't install Modrinth packs".into(),
+        )),
+    }
+}
+
 /// Falls back to opening the install folder when the program can't be found.
 pub fn open(kind: LauncherKind, root: &Path, launcher_instance_id: &str) -> Result<(), OpenError> {
     let program = match kind {

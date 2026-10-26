@@ -65,6 +65,18 @@ pub fn program(flavor: Flavor, root: &Path) -> Option<PathBuf> {
     )
 }
 
+/// Have Prism install a Modrinth pack as a new instance (its `--import`).
+pub fn import(root: &Path, pack: &Path) -> std::io::Result<()> {
+    let program = program(Flavor::Prism, root).ok_or_else(|| {
+        std::io::Error::new(std::io::ErrorKind::NotFound, "prismlauncher.exe not found")
+    })?;
+    std::process::Command::new(program)
+        .arg("--import")
+        .arg(pack)
+        .spawn()?;
+    Ok(())
+}
+
 fn instances_dir(flavor: Flavor, root: &Path) -> PathBuf {
     let cfg = std::fs::read_to_string(root.join(flavor.config_file())).unwrap_or_default();
     let dir = parse_ini(&cfg)
