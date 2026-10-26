@@ -10,6 +10,7 @@
   import Head from "../components/Head.svelte";
   import Icon from "../components/Icon.svelte";
   import OptionalPicker from "../components/OptionalPicker.svelte";
+  import ManualDownloads from "../components/instance/ManualDownloads.svelte";
 
   let { id }: { id: Id } = $props();
 
@@ -93,10 +94,9 @@
 
   const STAGES: Record<SyncProgress["stage"], string> = {
     waiting_for_game_exit: "Waiting for you to close Minecraft…",
-    waiting_for_launcher_exit: "Waiting for the launcher to close…",
     backup: "Backing up files…",
     download: "Downloading…",
-    waiting_for_manual_downloads: "Waiting for manual downloads…",
+    waiting_for_manual_downloads: "Waiting for you to download files",
     apply: "Applying changes…",
   };
 
@@ -349,19 +349,29 @@
 
     <!-- ── Sticky action bar: stays at the bottom of the scroll area ── -->
     <div
-      class="sticky bottom-0 -mx-9 mt-4 flex items-center justify-between gap-3.5 bg-linear-to-t from-(--bg) from-70% to-transparent px-9 py-3.5"
+      class="sticky bottom-0 -mx-9 mt-4 flex flex-wrap items-center justify-between gap-3.5 bg-linear-to-t from-(--bg) from-70% to-transparent px-9 py-3.5"
     >
       {#if syncing && progress}
+        {@const manual = progress.stage === "waiting_for_manual_downloads"}
+        {#if manual && summary}
+          <div
+            class="basis-full rounded-lg border border-(--line-2) bg-(--bg-raise) px-4 py-3"
+          >
+            <ManualDownloads instance={summary} />
+          </div>
+        {/if}
         <span class="text-[12.5px] text-(--text-muted)"
           >{STAGES[progress.stage]}</span
         >
         <div class="flex items-center gap-3">
-          <div class="h-1 w-56 overflow-hidden rounded-full bg-(--line-2)">
-            <div
-              class="h-full bg-(--accent) transition-[width] duration-300"
-              style="width: {progress.percent}%"
-            ></div>
-          </div>
+          {#if !manual && progress.stage !== "waiting_for_game_exit"}
+            <div class="h-1 w-56 overflow-hidden rounded-full bg-(--line-2)">
+              <div
+                class="h-full bg-(--accent) transition-[width] duration-300"
+                style="width: {progress.percent}%"
+              ></div>
+            </div>
+          {/if}
           {#if progress.stage !== "apply"}
             <Button
               size="sm"

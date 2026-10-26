@@ -38,8 +38,6 @@ wire_enum!(
 
 wire_enum!(SyncStage {
     WaitingForGameExit,
-    // A new Modrinth App instance: its picture can only go in while the app is closed.
-    WaitingForLauncherExit,
     Backup,
     Download,
     WaitingForManualDownloads,

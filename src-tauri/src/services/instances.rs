@@ -293,16 +293,49 @@ pub async fn update(
     summary_of(state, &row(state, id).await?).await
 }
 
-/// Close the instance's launcher, the way its own close button does.
-pub async fn close_launcher(state: &AppState, id: &str) -> AppResult<()> {
-    let kind = row(state, id).await?.kind();
-    if launchers::close(kind).await {
-        return Ok(());
+/// A new instance in a launcher that only takes a picture while it's closed (the Modrinth
+/// App, still open from making it): give it now if the launcher is closed, else the next
+/// time it is (see `give_pending_pictures`).
+pub async fn picture_when_closed(state: &AppState, id: &str) {
+    let Ok(row) = row(state, id).await else {
+        return;
+    };
+    if !launchers::sets_icon_later(row.kind()) || row.icon.is_some() {
+        return;
     }
-    Err(AppError::conflict(format!(
-        "{} didn't close. Close it yourself, or download without the picture.",
-        launchers::display_name(kind)
-    )))
+    if !give_launcher_picture(state, &row).await {
+        state.pending_pictures.lock().unwrap().insert(id.to_owned());
+    }
+}
+
+/// Called every few seconds: once the Modrinth App is closed, give the instances waiting
+/// for a picture theirs.
+pub async fn give_pending_pictures<R: Runtime>(state: &AppState, app: &AppHandle<R>) {
+    let pending: Vec<String> = state
+        .pending_pictures
+        .lock()
+        .unwrap()
+        .iter()
+        .cloned()
+        .collect();
+    if pending.is_empty()
+        || tokio::task::spawn_blocking(|| launchers::is_running(LauncherKind::Modrinth))
+            .await
+            .unwrap_or(true)
+    {
+        return;
+    }
+    for id in pending {
+        let gave = match row(state, &id).await {
+            Ok(row) => give_launcher_picture(state, &row).await,
+            Err(_) => false,
+        };
+        // Given, or not possible now (removed, has a picture of its own): either way done.
+        state.pending_pictures.lock().unwrap().remove(&id);
+        if gave && let Err(e) = rescan(state, app, &id).await {
+            tracing::debug!(instance = %id, error = %e, "couldn't rescan after the picture");
+        }
+    }
 }
 
 /// Some launchers can't take a picture with a new instance (the Modrinth App), so a

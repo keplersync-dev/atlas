@@ -157,6 +157,7 @@ impl<R: Runtime> Progress<R> {
             return self.check();
         }
         self.stage(SyncStage::WaitingForGameExit);
+        crate::desktop::notify_waiting(&self.app, &self.instance_id, SyncStage::WaitingForGameExit);
         while state.is_running(&self.instance_id) {
             self.sleep(Duration::from_secs(2)).await?;
         }
@@ -188,6 +189,10 @@ impl<R: Runtime> Progress<R> {
 
     /// Files the user has to download by hand (stage waiting_for_manual_downloads).
     pub fn manual(&self, list: Vec<ManualDownload>) {
+        let stage = SyncStage::WaitingForManualDownloads;
+        if self.current.lock().unwrap().0.stage != stage {
+            crate::desktop::notify_waiting(&self.app, &self.instance_id, stage);
+        }
         self.update(true, |p| {
             p.stage = SyncStage::WaitingForManualDownloads;
             p.manual_downloads = list;

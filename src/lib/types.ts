@@ -266,8 +266,6 @@ export interface InstanceWork {
 export interface SyncProgress {
   stage:
     | "waiting_for_game_exit"
-    /** A new Modrinth App instance: its picture can only go in while the app is closed. */
-    | "waiting_for_launcher_exit"
     | "backup"
     | "download"
     | "waiting_for_manual_downloads"

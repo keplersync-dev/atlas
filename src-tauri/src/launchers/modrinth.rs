@@ -191,9 +191,15 @@ pub async fn create(root: &Path, new: &NewInstance) -> ReadResult<String> {
         let deadline = Instant::now() + CONFIRM_WAIT;
         loop {
             tokio::time::sleep(Duration::from_secs(2)).await;
-            match find_new(root, &before, &new.name).await {
-                Ok(Some(path)) => return Ok(path),
-                Ok(None) => {}
+            match made(root, &before, &new.name, &pack).await {
+                Ok(Made::Done(path)) => return Ok(path),
+                Ok(Made::Waiting) => {}
+                Ok(Made::Failed) => {
+                    return Err(ReadError::Shown(
+                        "The Modrinth App couldn't set up the instance. Try again.".into(),
+                    ));
+                }
+                Ok(Made::Cancelled) => return Err(ReadError::NotCreated),
                 Err(e) => {
                     tracing::debug!(error = %e, "couldn't look for the new Modrinth instance")
                 }
@@ -256,32 +262,6 @@ pub fn open_pack(pack: &Path) -> ReadResult<()> {
 
 pub fn running() -> bool {
     any_running(&["modrinth app.exe"])
-}
-
-/// Ask the app to close, the way its own close button does (not a forced kill). True once
-/// it has; false if it's still open after 15 s (a dialog of its own may be in the way).
-pub async fn close() -> bool {
-    let ask = tokio::task::spawn_blocking(|| {
-        let mut taskkill = std::process::Command::new("taskkill");
-        taskkill.args(["/IM", "Modrinth App.exe"]);
-        #[cfg(windows)]
-        {
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-            taskkill.creation_flags(CREATE_NO_WINDOW);
-        }
-        taskkill.output()
-    });
-    if let Ok(Err(e)) = ask.await {
-        tracing::warn!(error = %e, "couldn't ask the Modrinth App to close");
-    }
-    for _ in 0..30 {
-        if !running() {
-            return true;
-        }
-        tokio::time::sleep(Duration::from_millis(500)).await;
-    }
-    false
 }
 
 /// Give an instance a picture when it has none. Packs can't carry one, so instances Atlas
@@ -352,6 +332,65 @@ struct Stage {
 
 const STAGES: &str = "SELECT path, name, install_stage FROM instances";
 const LEGACY_STAGES: &str = "SELECT path, name, install_stage FROM profiles";
+
+/// What became of a pack Atlas handed the app.
+#[derive(Debug, PartialEq)]
+enum Made {
+    /// Not confirmed yet, or still installing.
+    Waiting,
+    /// The new instance's path under profiles/.
+    Done(String),
+    /// The app's install failed (and it removed the instance again).
+    Failed,
+    /// The user cancelled it in the app.
+    Cancelled,
+}
+
+#[derive(FromRow)]
+struct Job {
+    status: String,
+    /// The .mrpack it installs from.
+    pack: Option<String>,
+    /// The instance it made, once it has.
+    path: Option<String>,
+}
+
+const HAS_JOBS: &str =
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'install_jobs'";
+const PACK_JOBS: &str = "
+    SELECT j.status, json_extract(j.state, '$.request.location.path') AS pack, i.path
+    FROM install_jobs j
+    LEFT JOIN instances i ON i.id = j.instance_id
+    WHERE j.kind = 'create_modpack_instance'";
+
+/// Newer apps install a pack in a job that reads the file in the background, and list
+/// the instance before they've read it: wait for the job, so the pack isn't deleted under
+/// it. Older apps have no jobs: wait for the instance's install stage instead.
+async fn made(root: &Path, before: &HashSet<String>, name: &str, pack: &Path) -> ReadResult<Made> {
+    let has_jobs: Vec<(String,)> = rows(root, HAS_JOBS, HAS_JOBS).await?;
+    if has_jobs.is_empty() {
+        let found = find_new(root, before, name).await?;
+        return Ok(found.map_or(Made::Waiting, Made::Done));
+    }
+    let pack = pack.to_string_lossy();
+    let jobs: Vec<Job> = rows(root, PACK_JOBS, PACK_JOBS).await?;
+    let Some(job) = jobs.into_iter().find(|j| {
+        j.pack
+            .as_deref()
+            .is_some_and(|p| p.eq_ignore_ascii_case(&pack))
+    }) else {
+        return Ok(Made::Waiting);
+    };
+    Ok(match job.status.as_str() {
+        "succeeded" => match job.path {
+            Some(path) if root.join("profiles").join(&path).is_dir() => Made::Done(path),
+            _ => Made::Waiting,
+        },
+        "failed" => Made::Failed,
+        "cancelled" | "canceled" => Made::Cancelled,
+        _ => Made::Waiting,
+    })
+}
 
 /// The instance the app made from the pack, once it's past installing the pack itself and
 /// its folder exists (the app can report the stage before making the folder, while it
@@ -506,6 +545,66 @@ mod tests {
             index["dependencies"],
             serde_json::json!({ "minecraft": "1.21.1", "neoforge": "21.1.77" })
         );
+    }
+
+    #[tokio::test]
+    async fn waits_for_the_apps_install_job() {
+        let root = fixture().await;
+        let pack = root.join("Friday SMP.mrpack");
+        let before = HashSet::new();
+        let options = SqliteConnectOptions::new().filename(root.join("app.db"));
+        let mut c = SqliteConnection::connect_with(&options).await.unwrap();
+        let state = serde_json::json!({
+            "request": { "location": { "type": "fromFile", "path": pack.to_string_lossy() } }
+        })
+        .to_string();
+        for sql in [
+            "CREATE TABLE install_jobs (id TEXT NOT NULL PRIMARY KEY, instance_id TEXT NULL, kind TEXT NOT NULL,
+                status TEXT NOT NULL, state JSONB NOT NULL, created INTEGER NOT NULL, modified INTEGER NOT NULL,
+                finished INTEGER NULL, dismissed INTEGER NOT NULL DEFAULT 0)",
+            // the app lists the instance while the job is still reading the pack
+            "INSERT INTO instances (id, path, install_stage, launcher_feature_version, name, created, modified)
+             VALUES ('local:x', 'Friday SMP', 'installed', 'x', 'Friday SMP', 1, 1)",
+        ] {
+            sqlx::query(sql).execute(&mut c).await.unwrap();
+        }
+        std::fs::create_dir_all(root.join("profiles/Friday SMP")).unwrap();
+        assert_eq!(
+            made(&root, &before, "Friday SMP", &pack).await.unwrap(),
+            Made::Waiting,
+            "no job for this pack yet"
+        );
+        sqlx::query(
+            "INSERT INTO install_jobs (id, kind, status, state, created, modified)
+             VALUES ('j', 'create_modpack_instance', 'running', ?, 1, 1)",
+        )
+        .bind(&state)
+        .execute(&mut c)
+        .await
+        .unwrap();
+        assert_eq!(
+            made(&root, &before, "Friday SMP", &pack).await.unwrap(),
+            Made::Waiting,
+            "the instance is listed, but the job is still reading the pack"
+        );
+        sqlx::query("UPDATE install_jobs SET status = 'succeeded', instance_id = 'local:x'")
+            .execute(&mut c)
+            .await
+            .unwrap();
+        assert_eq!(
+            made(&root, &before, "Friday SMP", &pack).await.unwrap(),
+            Made::Done("Friday SMP".into())
+        );
+        sqlx::query("UPDATE install_jobs SET status = 'failed', instance_id = NULL")
+            .execute(&mut c)
+            .await
+            .unwrap();
+        c.close().await.unwrap();
+        assert_eq!(
+            made(&root, &before, "Friday SMP", &pack).await.unwrap(),
+            Made::Failed
+        );
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[tokio::test]

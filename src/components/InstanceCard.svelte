@@ -29,7 +29,6 @@
   import { instances, social } from "$lib/stores";
   import Button from "./Button.svelte";
   import Head from "./Head.svelte";
-  import CloseLauncherPrompt from "./instance/CloseLauncherPrompt.svelte";
   import Icon from "./Icon.svelte";
 
   let { instance }: { instance: InstanceSummary } = $props();
@@ -273,8 +272,16 @@
     </div>
 
     <div class="mt-auto border-t border-(--line) pt-2.5">
-      {#if instance.progress?.stage === "waiting_for_launcher_exit"}
-        <CloseLauncherPrompt {instance} compact />
+      {#if instance.progress?.stage === "waiting_for_manual_downloads"}
+        <p class="flex min-h-7 items-center text-xs text-(--warn)">
+          {instance.progress.manualDownloads.length === 1
+            ? "Download 1 file to finish: open it to see how"
+            : `Download ${instance.progress.manualDownloads.length} files to finish: open it to see how`}
+        </p>
+      {:else if instance.progress?.stage === "waiting_for_game_exit"}
+        <p class="flex min-h-7 items-center text-xs text-(--warn)">
+          Close Minecraft to finish updating
+        </p>
       {:else if instance.status === "syncing" && instance.progress}
         <div
           class="flex items-center justify-between text-xs text-(--text-muted)"

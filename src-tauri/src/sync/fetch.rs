@@ -239,6 +239,7 @@ pub async fn config(paths: &AppPaths, source: &Source, o: &Override) -> AppResul
 
 /// Look in the Downloads folder for files the user downloaded by hand since `since`,
 /// and take any whose sha1 matches a wanted entry into the cache. Returns how many arrived.
+/// A file taken in leaves Downloads: it was only downloaded for Atlas, which has it now.
 pub fn pick_up_manual_downloads(paths: &AppPaths, wanted: &[&Entry], since: SystemTime) -> usize {
     let Ok(dir) = std::fs::read_dir(&paths.downloads) else {
         return 0;
@@ -268,7 +269,43 @@ pub fn pick_up_manual_downloads(paths: &AppPaths, wanted: &[&Entry], since: Syst
         .is_ok()
         {
             arrived += 1;
+            if let Err(e) = std::fs::remove_file(file.path()) {
+                tracing::debug!(error = %e, "couldn't remove a manual download from Downloads");
+            }
         }
     }
     arrived
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manual_downloads_are_taken_out_of_downloads() {
+        let root =
+            std::env::temp_dir().join(format!("atlas-fetch-test-{}", crate::util::ids::new_id()));
+        let mut paths = AppPaths::new(&root);
+        paths.downloads = root.join("Downloads");
+        std::fs::create_dir_all(&paths.downloads).unwrap();
+        let wanted_file = paths.downloads.join("essentialtweaks-1.1.0.jar");
+        std::fs::write(&wanted_file, b"the mod").unwrap();
+        let other = paths.downloads.join("holiday.png");
+        std::fs::write(&other, b"not a mod").unwrap();
+
+        let h = hash_file(&wanted_file).unwrap();
+        let entry: Entry = serde_json::from_value(serde_json::json!({
+            "kind": "mod", "source": "curseforge", "name": "Essential Tweaks",
+            "path": "mods/essentialtweaks-1.1.0.jar", "sha1": h.sha1, "sha256": h.sha256,
+            "sizeBytes": 7, "required": true
+        }))
+        .unwrap();
+        let since = SystemTime::now() - Duration::from_secs(60);
+
+        assert_eq!(pick_up_manual_downloads(&paths, &[&entry], since), 1);
+        assert!(cache_file(&paths, &entry.sha1).is_file(), "Atlas has it");
+        assert!(!wanted_file.exists(), "and it left Downloads");
+        assert!(other.exists(), "other files stay");
+        std::fs::remove_dir_all(&root).ok();
+    }
 }

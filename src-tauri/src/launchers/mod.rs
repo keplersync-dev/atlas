@@ -167,14 +167,6 @@ pub fn is_running(kind: LauncherKind) -> bool {
     }
 }
 
-/// Ask the launcher to close, as its own close button would. True once it has.
-pub async fn close(kind: LauncherKind) -> bool {
-    match kind {
-        LauncherKind::Modrinth => modrinth::close().await,
-        _ => !is_running(kind),
-    }
-}
-
 /// Give an instance the launcher has no picture for this one. Only for `sets_icon_later`
 /// launchers, only while they're closed. Ok(true) when it did.
 pub async fn set_missing_icon(

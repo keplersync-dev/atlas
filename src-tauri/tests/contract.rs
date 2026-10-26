@@ -74,6 +74,7 @@ fn sample(command: &str, key: &str) -> Value {
         (_, "ids") => json!("all"),
         (_, "rootPath" | "gameDir") => json!("C:\\Games\\Minecraft"),
         (_, "code") => json!("7KQ29XMB"),
+        (_, "pageUrl") => json!("https://www.curseforge.com/minecraft/mc-mods/jei/files/5001"),
         (_, k) if k == "id" || k.ends_with("Id") => json!("0192a7e2-0000-7000-8000-000000000000"),
         _ => panic!("no sample value for `{key}` in `{command}`: add one to sample()"),
     }

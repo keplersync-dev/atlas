@@ -51,6 +51,7 @@ pub fn spawn<R: Runtime>(state: AppState, app: AppHandle<R>) {
             let Ok((sys, dirs)) = dirs else { return };
             system = sys;
             update(&state, &app, &dirs).await;
+            crate::services::instances::give_pending_pictures(&state, &app).await;
             tokio::time::sleep(POLL).await;
         }
     });

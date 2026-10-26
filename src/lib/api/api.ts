@@ -94,10 +94,6 @@ export interface AtlasApi {
   rescanInstance(id: Id): Promise<InstanceSummary>;
   /** Opens the launcher: Prism opens on the instance itself; the others just open. */
   openInLauncher(id: Id): Promise<void>;
-  /** Closes the instance's launcher as its close button would. A new Modrinth App instance waits for this to get its picture. */
-  closeLauncher(id: Id): Promise<void>;
-  /** A new instance downloads without waiting to give its launcher the picture. */
-  skipLauncherPicture(id: Id): Promise<void>;
   openInstanceFolder(id: Id): Promise<void>;
   /** Renames the file to/from ".disabled". Fails with "conflict" while the game is running. */
   setContentEnabled(
@@ -109,6 +105,8 @@ export interface AtlasApi {
   /** Stops the instance's update, install or restore while it waits or downloads. Once
    * files are being changed it finishes. */
   cancelJob(instanceId: Id): Promise<void>;
+  /** Opens the page of a file the update is waiting for the user to download. */
+  openManualDownload(instanceId: Id, pageUrl: string): Promise<void>;
   /** Saves the instance as a Modrinth pack where the user picks (shown in Explorer). null if they cancelled. */
   exportMrpack(instanceId: Id): Promise<string | null>;
   /** Picks a Modrinth pack and gives it to this launcher (Prism or the Modrinth App) to install. false if they cancelled. */

@@ -52,14 +52,14 @@ export const tauriApi: AtlasApi = {
   updateInstance: (id, patch) => call("update_instance", { id, patch }),
   rescanInstance: (id) => call("rescan_instance", { id }),
   openInLauncher: (id) => call("open_in_launcher", { id }),
-  closeLauncher: (id) => call("close_launcher", { id }),
-  skipLauncherPicture: (id) => call("skip_launcher_picture", { id }),
   openInstanceFolder: (id) => call("open_instance_folder", { id }),
   setContentEnabled: (instanceId, contentId, enabled) =>
     call("set_content_enabled", { instanceId, contentId, enabled }),
   restoreBackup: (instanceId, backupId) =>
     call("restore_backup", { instanceId, backupId }),
   cancelJob: (instanceId) => call("cancel_job", { instanceId }),
+  openManualDownload: (instanceId, pageUrl) =>
+    call("open_manual_download", { instanceId, pageUrl }),
   exportMrpack: (instanceId) => call("export_mrpack", { instanceId }),
   importMrpack: (launcherId) => call("import_mrpack", { launcherId }),
   setShareMode: (instanceId, contentId, mode) =>

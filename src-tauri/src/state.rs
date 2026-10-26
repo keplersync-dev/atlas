@@ -42,9 +42,9 @@ pub struct AppState {
     pub modrinth_api: Option<String>,
     /// Instances with a lookup in flight, so a burst of scans doesn't ask twice.
     pub resolving: Arc<Mutex<HashSet<String>>>,
-    /// New instances whose download shouldn't wait for the launcher to close to get their
-    /// picture: the player chose to skip it (see accept.rs).
-    pub skip_picture: Arc<Mutex<HashSet<String>>>,
+    /// New instances whose launcher still needs their picture, given the next time it's
+    /// closed (see `services::instances::picture_when_closed`).
+    pub pending_pictures: Arc<Mutex<HashSet<String>>>,
     /// The tray and notification settings, kept here for the close button and incoming
     /// activity, which can't wait on the database (see desktop.rs).
     pub prefs: Arc<crate::desktop::Prefs>,
@@ -76,7 +76,7 @@ impl AppState {
                 .expect("http client"),
             modrinth_api: Some(crate::resolve::modrinth::API.to_string()),
             resolving: Arc::default(),
-            skip_picture: Arc::default(),
+            pending_pictures: Arc::default(),
             prefs: Arc::default(),
             cloud: Arc::new(Cloud::new(
                 db.clone(),

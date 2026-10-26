@@ -5,7 +5,7 @@
   import type { InstanceSummary, SyncProgress } from "$lib/types";
   import Button from "../Button.svelte";
   import Icon from "../Icon.svelte";
-  import CloseLauncherPrompt from "./CloseLauncherPrompt.svelte";
+  import ManualDownloads from "./ManualDownloads.svelte";
 
   // The one-line status strip under the instance header. Shows the single most
   // important thing about this folder right now, or nothing when all is well.
@@ -25,10 +25,9 @@
 
   const STAGES: Record<SyncProgress["stage"], string> = {
     waiting_for_game_exit: "Waiting for you to close Minecraft…",
-    waiting_for_launcher_exit: "Waiting for the launcher to close…",
     backup: "Backing up files…",
     download: "Downloading…",
-    waiting_for_manual_downloads: "Waiting for manual downloads…",
+    waiting_for_manual_downloads: "Waiting for you to download files",
     apply: "Applying changes…",
   };
 
@@ -49,6 +48,11 @@
       cancelling = false;
     }
   }
+  // Waiting on the player: a progress bar would sit at 0%.
+  const waiting = $derived(
+    instance.progress?.stage === "waiting_for_game_exit" ||
+      instance.progress?.stage === "waiting_for_manual_downloads",
+  );
   // Reading files after tracking, or uploading while sharing.
   const work = $derived(instances.work[instance.id]);
 </script>
@@ -95,23 +99,28 @@
   <div class="mt-5 rounded-lg bg-(--bg-raise) px-4 py-3">
     <div class="flex items-center justify-between gap-3 text-[12.5px]">
       <span class="flex-1">{STAGES[instance.progress.stage]}</span>
-      <span class="text-(--text-muted) tabular-nums"
-        >{instance.progress.percent}%</span
-      >
+      {#if !waiting}
+        <span class="text-(--text-muted) tabular-nums"
+          >{instance.progress.percent}%</span
+        >
+      {/if}
       {#if cancellable}
         <Button size="sm" variant="ghost" disabled={cancelling} onclick={cancel}
           >Cancel</Button
         >
       {/if}
     </div>
-    <div class="mt-2 h-1 overflow-hidden rounded-full bg-(--line-2)">
-      <div
-        class="h-full bg-(--accent) transition-[width] duration-300"
-        style="width: {instance.progress.percent}%"
-      ></div>
-    </div>
-    {#if instance.progress.stage === "waiting_for_launcher_exit"}
-      <div class="mt-3"><CloseLauncherPrompt {instance} /></div>
+    {#if instance.progress.stage === "waiting_for_manual_downloads"}
+      <div class="mt-3 border-t border-(--line) pt-3">
+        <ManualDownloads {instance} />
+      </div>
+    {:else if !waiting}
+      <div class="mt-2 h-1 overflow-hidden rounded-full bg-(--line-2)">
+        <div
+          class="h-full bg-(--accent) transition-[width] duration-300"
+          style="width: {instance.progress.percent}%"
+        ></div>
+      </div>
     {/if}
   </div>
 {:else if work}

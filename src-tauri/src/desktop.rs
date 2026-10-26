@@ -1,17 +1,18 @@
 //! Atlas around its window on Windows: the tray icon, closing to it, notifications for
-//! new activity, and starting with Windows (in the tray, window closed).
+//! new activity and for updates waiting on the player, and starting with Windows (in the
+//! tray, window closed).
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use sqlx::SqlitePool;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, Runtime};
+use tauri::{AppHandle, Manager, Runtime, UserAttentionType};
 use tauri_plugin_autostart::AutoLaunchManager;
 use tauri_plugin_notification::NotificationExt as _;
 
 use crate::db;
-use crate::dto::{ActivityItem, ActivityType, AppSettings, AppSettingsPatch};
+use crate::dto::{ActivityItem, ActivityType, AppSettings, AppSettingsPatch, SyncStage};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
@@ -144,6 +145,45 @@ pub fn notify_activity<R: Runtime>(app: &AppHandle<R>, item: &ActivityItem) {
             notify(&app, &title, &body);
         });
     }
+}
+
+/// An update or install is waiting for the player (to close the game, or to download
+/// files by hand) while Atlas is in the background: a notification, and the taskbar
+/// button flashes, so they don't think it's done.
+pub fn notify_waiting<R: Runtime>(app: &AppHandle<R>, instance_id: &str, stage: SyncStage) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    if window.is_visible().unwrap_or(false) && window.is_focused().unwrap_or(false) {
+        return;
+    }
+    if let Err(e) = window.request_user_attention(Some(UserAttentionType::Informational)) {
+        tracing::debug!(error = %e, "couldn't flash the taskbar button");
+    }
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    if !state.prefs.notifications.load(Ordering::Relaxed) {
+        return;
+    }
+    let (app, db, id) = (app.clone(), state.db.clone(), instance_id.to_owned());
+    tauri::async_runtime::spawn(async move {
+        let name = match db::instances::get(&db, &id).await {
+            Ok(Some(row)) => row.name,
+            _ => "An instance".to_owned(),
+        };
+        let (title, body) = match stage {
+            SyncStage::WaitingForGameExit => (
+                "Close Minecraft to finish",
+                format!("{name} updates once the game is closed."),
+            ),
+            _ => (
+                "Some files need you",
+                format!("{name} has files to download yourself. Open Atlas to get them."),
+            ),
+        };
+        notify(&app, title, &body);
+    });
 }
 
 fn notify<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {

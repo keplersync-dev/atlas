@@ -90,20 +90,6 @@ pub async fn open_in_launcher(state: State<'_, AppState>, id: Id) -> AppResult<(
     instances::open_in_launcher(&state, &id).await
 }
 
-/// Close the instance's launcher, as its own close button would: a new Modrinth App
-/// instance waits for that to get its picture.
-#[tauri::command]
-pub async fn close_launcher(state: State<'_, AppState>, id: Id) -> AppResult<()> {
-    instances::close_launcher(&state, &id).await
-}
-
-/// Download a new instance's files without waiting to give the launcher its picture.
-#[tauri::command]
-pub async fn skip_launcher_picture(state: State<'_, AppState>, id: Id) -> AppResult<()> {
-    state.skip_picture.lock().unwrap().insert(id);
-    Ok(())
-}
-
 #[tauri::command]
 pub async fn open_instance_folder<R: Runtime>(
     app: AppHandle<R>,
@@ -133,6 +119,33 @@ pub async fn export_mrpack<R: Runtime>(
     instance_id: Id,
 ) -> AppResult<Option<String>> {
     crate::services::mrpack::export(&app, &state, &instance_id).await
+}
+
+/// Open the page of a file the instance's update is waiting for the user to download (a
+/// CurseForge file its author only hands out on the website). Only pages the update is
+/// waiting on, so this can't be used to open any address.
+#[tauri::command]
+pub async fn open_manual_download<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    instance_id: Id,
+    page_url: String,
+) -> AppResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let waiting = state
+        .jobs
+        .status(&instance_id)
+        .flatten()
+        .is_some_and(|p| p.manual_downloads.iter().any(|m| m.page_url == page_url));
+    if !waiting {
+        return Err(crate::error::AppError::not_found(
+            "That file isn't needed anymore",
+        ));
+    }
+    app.opener().open_url(&page_url, None::<&str>).map_err(|e| {
+        tracing::warn!(error = %e, "couldn't open a download page");
+        crate::error::AppError::unknown("Couldn't open your browser")
+    })
 }
 
 /// Stop the instance's update, install or restore, if it hasn't started changing files.
