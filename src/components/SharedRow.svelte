@@ -124,6 +124,7 @@
 </script>
 
 <script lang="ts">
+  import { confirmAction } from "$lib/confirm.svelte";
   import { fileSize, versionLabel } from "$lib/format";
   import { social } from "$lib/stores";
   import Button from "./Button.svelte";
@@ -142,14 +143,27 @@
   const st = $derived(rowState(s));
   const local = $derived(localFor(s));
   const invited = $derived(s.myStatus === "invited");
+  // Added before, but not on this PC: it can be left from here, like an invite declined.
+  const leavable = $derived(
+    !invited && s.myRole !== "owner" && s.myStatus === "active" && !local,
+  );
 
   let busy = $state(false);
   let error = $state<string | null>(null);
   async function decline() {
+    if (leavable) {
+      const ok = await confirmAction({
+        title: `Leave ${s.name}?`,
+        message: `You won't get its updates anymore. ${s.owner?.displayName ?? "The owner"} can share it with you again.`,
+        confirmLabel: "Leave",
+        danger: true,
+      });
+      if (!ok) return;
+    }
     busy = true;
     error = null;
     try {
-      await social.declineInvite(s.id);
+      await (leavable ? social.leaveShared(s.id) : social.declineInvite(s.id));
     } catch (e) {
       error = (e as Error).message;
     } finally {
@@ -221,12 +235,12 @@
         >{st.action.label}</Button
       >
     {/if}
-    {#if invited}
+    {#if invited || leavable}
       <button
         onclick={decline}
         disabled={busy}
-        title="Decline"
-        aria-label="Decline {s.name}"
+        title={invited ? "Decline" : "Leave"}
+        aria-label="{invited ? 'Decline' : 'Leave'} {s.name}"
         class="grid size-7 place-items-center rounded-md text-(--text-faint) hover:bg-(--bg-hover) hover:text-(--text-primary) disabled:opacity-40"
       >
         <Icon name="close" class="size-3.5" />

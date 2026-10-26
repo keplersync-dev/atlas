@@ -32,6 +32,9 @@ pub struct InstanceRow {
     pub sync_report_due: bool,
     pub tracked_at: String,
     pub last_scanned_at: Option<String>,
+    /// The server and account whose list last had the link (`Cloud::link_scope`). Only
+    /// that list may say the shared instance is gone.
+    pub shared_scope: Option<String>,
 }
 
 impl InstanceRow {
@@ -254,6 +257,21 @@ pub async fn sync_roles(
     Ok(())
 }
 
+/// Note that `scope`'s list has these shared instances (see `InstanceRow::shared_scope`).
+pub async fn set_scope(db: &SqlitePool, shared_ids: &[&str], scope: &str) -> sqlx::Result<()> {
+    for id in shared_ids {
+        sqlx::query(
+            "UPDATE instance SET shared_scope = ? WHERE shared_instance_id = ? AND shared_scope IS NOT ?",
+        )
+        .bind(scope)
+        .bind(id)
+        .bind(scope)
+        .execute(db)
+        .await?;
+    }
+    Ok(())
+}
+
 /// Link to a shared instance (or unlink with `None`): role and sync columns.
 pub async fn set_link(
     db: &SqlitePool,
@@ -275,7 +293,8 @@ pub async fn set_link(
         None => {
             sqlx::query(
                 "UPDATE instance SET shared_instance_id = NULL, shared_role = NULL, synced_revision = NULL,
-                    synced_manifest = NULL, synced_manifest_hash = NULL, sync_report_due = 0 WHERE id = ?",
+                    synced_manifest = NULL, synced_manifest_hash = NULL, sync_report_due = 0,
+                    shared_scope = NULL WHERE id = ?",
             )
             .bind(id)
             .execute(db)

@@ -150,6 +150,20 @@ impl Cloud {
         })
     }
 
+    /// Which server and account lists of shared instances come from: "<server> <user id>".
+    /// None when signed out or there's no server.
+    pub async fn link_scope(&self) -> Option<String> {
+        let base = self.base.as_ref()?;
+        let me = db::settings::get::<Me>(&self.db, USER_SETTING)
+            .await
+            .ok()??;
+        Some(format!(
+            "{} {}",
+            base.origin().ascii_serialization(),
+            me.user.id
+        ))
+    }
+
     /// At startup: refresh the signed-in user. Offline is fine; the cached user shows.
     pub async fn restore(&self) {
         if !self.is_signed_in() {

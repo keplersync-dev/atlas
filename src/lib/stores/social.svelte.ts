@@ -195,6 +195,15 @@ class SocialStore {
     );
   }
 
+  /** Stop being a member of a shared instance (no copy here to keep). */
+  leaveShared(sharedInstanceId: Id) {
+    return this.optimistic(
+      () =>
+        (this.shared = this.shared.filter((s) => s.id !== sharedInstanceId)),
+      () => api.leaveSharedInstance(sharedInstanceId),
+    );
+  }
+
   // ── Groups ──
 
   async createGroup(name: string) {

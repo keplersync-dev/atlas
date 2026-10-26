@@ -31,7 +31,9 @@ pub async fn cached(state: &AppState, id: &str) -> AppResult<Option<SharedInstan
 
 /// Shared instances on the server, linked to their local copies. When the list is fresh,
 /// local copies of instances that are gone (archived, or access lost) become local-only,
-/// and owed sync reports are sent.
+/// and owed sync reports are sent. Only a list from the server and account a link was
+/// last seen with says it's gone: another server (a test one) or another account's list
+/// leaves it alone.
 pub async fn list<R: Runtime>(
     state: &AppState,
     app: &AppHandle<R>,
@@ -42,21 +44,29 @@ pub async fn list<R: Runtime>(
         .await?;
     db::instances::sync_roles(&state.db, &list).await?;
     let rows = db::instances::list(&state.db).await?;
-    if state.cloud.is_online() {
+    let scope = state.cloud.link_scope().await;
+    if let Some(scope) = scope.filter(|_| state.cloud.is_online()) {
+        let active: Vec<&str> = list
+            .iter()
+            .filter(|s| s.my_status == MemberStatus::Active)
+            .map(|s| s.id.as_str())
+            .collect();
         for row in &rows {
             let Some(shared) = server_id(row) else {
                 continue;
             };
-            if !list
-                .iter()
-                .any(|s| s.id == shared && s.my_status == MemberStatus::Active)
-            {
+            if active.contains(&shared) {
+                if row.sync_report_due {
+                    report_synced(state, row).await;
+                }
+            } else if row.shared_scope.as_deref() == Some(scope.as_str()) {
                 tracing::info!(instance = %row.id, "shared instance gone; now local-only");
                 unlink(state, app, &row.id).await?;
-            } else if row.sync_report_due {
-                report_synced(state, row).await;
+            } else {
+                tracing::debug!(instance = %row.id, "linked under another server or account; left alone");
             }
         }
+        db::instances::set_scope(&state.db, &active, &scope).await?;
     }
     let rows = db::instances::list(&state.db).await?;
     list.retain(|s| s.my_status != MemberStatus::Declined);
