@@ -1,6 +1,6 @@
 [package]
 name = "atlas"
-version = "0.1.0"
+version = "0.2.0"
 description = "Keep Minecraft modpacks in sync with friends, alongside the launcher you already use"
 authors = ["keplerHaloxx"]
 license = "GPL-3.0-only"
