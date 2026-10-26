@@ -8,12 +8,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-use futures_util::TryStreamExt;
 use reqwest::Method;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Runtime};
 
 use super::work::Reporter;
+use crate::cloud::files::UploadFile;
 use crate::db::{self, content::ContentRow, instances::InstanceRow};
 use crate::dto::{
     ConfigGroup, ContentKind, ContentSource, CreateRevision, CreateSharedInstance, InstanceSummary,
@@ -467,9 +467,6 @@ fn walk(dir: &Path, rel: &str, out: &mut Vec<(String, PathBuf)>) {
     }
 }
 
-/// How many files upload at the same time.
-const PARALLEL_UPLOADS: usize = 8;
-
 /// Upload what the version needs that the server doesn't have yet: files on no mod site
 /// that are shared, and the config files that aren't the modpack's own. Returns the
 /// configs as overrides, and the modpack they're based on.
@@ -566,25 +563,24 @@ async fn send_files<R: Runtime>(
             "{name} changed since you opened this. Close it and publish again."
         )));
     }
-    // Several at a time: a first share can send hundreds of small config files, and one
-    // after another each waits on three round trips.
     // Progress in bytes, so it moves within a big file too.
     let total = new_bytes;
     let sent = Arc::new(AtomicU64::new(0));
     work.report(WorkStage::Uploading, 0, total);
-    let uploads = futures_util::stream::iter(wanted.iter().map(Ok::<_, AppError>))
-        .try_for_each_concurrent(PARALLEL_UPLOADS, |(file, sha256, size, name, rights)| {
-            let sent = Arc::clone(&sent);
-            async move {
-                let on_bytes = move |n| {
-                    sent.fetch_add(n, Ordering::Relaxed);
-                };
-                state
-                    .cloud
-                    .upload(file, sha256, *size, name, *rights, on_bytes)
-                    .await
-            }
-        });
+    let files: Vec<UploadFile> = wanted
+        .iter()
+        .map(|(path, sha256, size, name, rights)| UploadFile {
+            path: path.clone(),
+            sha256: sha256.clone(),
+            size: *size,
+            name: name.clone(),
+            rights_confirmed: *rights,
+        })
+        .collect();
+    let counter = Arc::clone(&sent);
+    let uploads = state.cloud.upload_all(&files, move |n| {
+        counter.fetch_add(n, Ordering::Relaxed);
+    });
     tokio::pin!(uploads);
     let mut tick = tokio::time::interval(std::time::Duration::from_millis(200));
     loop {
@@ -628,14 +624,13 @@ async fn send_icon(state: &AppState, row: &InstanceRow) -> Option<String> {
     }
     match state
         .cloud
-        .upload(
-            &file,
-            &sha256,
-            bytes.len() as u64,
-            "The instance picture",
-            false,
-            |_| {},
-        )
+        .upload(UploadFile {
+            path: file,
+            sha256: sha256.clone(),
+            size: bytes.len() as u64,
+            name: "The instance picture".into(),
+            rights_confirmed: false,
+        })
         .await
     {
         Ok(()) => Some(format!("sha256:{sha256}")),

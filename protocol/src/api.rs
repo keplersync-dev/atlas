@@ -522,6 +522,38 @@ pub struct UploadDone {
     pub sha256: String,
 }
 
+/// Most files in one `POST /uploads/batch` or `POST /uploads/complete`.
+pub const MAX_UPLOAD_BATCH: usize = 200;
+
+/// `POST /uploads/batch`: ask to upload many files at once. A first share can send
+/// thousands of small config files.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadBatch {
+    pub files: Vec<NewUpload>,
+}
+
+/// A ticket for each file, in the same order.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadTickets {
+    pub tickets: Vec<UploadTicket>,
+}
+
+/// `POST /uploads/complete`: the app finished the PUTs for these tickets.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CompleteUploads {
+    pub upload_ids: Vec<Id>,
+}
+
+/// The server checked the stored bytes of every one.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadsDone {
+    pub sha256: Vec<String>,
+}
+
 // ── CurseForge ─────────────────────────────────────────────────────────
 
 /// `POST /curseforge/fingerprints`: look files up by CurseForge fingerprint (murmur2).
