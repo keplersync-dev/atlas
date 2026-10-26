@@ -30,6 +30,7 @@ async function call<T>(
 export const tauriApi: AtlasApi = {
   getSession: () => call("get_session"),
   signIn: (provider) => call("sign_in", { provider }),
+  cancelSignIn: () => call("cancel_sign_in"),
   signOut: () => call("sign_out"),
   linkIdentity: (provider) => call("link_identity", { provider }),
   unlinkIdentity: (provider) => call("unlink_identity", { provider }),

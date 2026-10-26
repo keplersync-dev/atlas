@@ -96,6 +96,14 @@ class SocialStore {
     }
   }
 
+  /** Stops waiting for the browser, as if sign-in was never started. */
+  cancelSignIn() {
+    this.#signInAttempt++;
+    this.signingIn = null;
+    this.signInError = null;
+    api.cancelSignIn().catch(() => {});
+  }
+
   // ── Account ──
   // Account calls return the updated `Me`; put it straight into the session
   // so everything showing your name or code updates without a reload.

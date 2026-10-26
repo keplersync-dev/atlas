@@ -21,6 +21,12 @@ pub async fn sign_in<R: Runtime>(
     session::sign_in(&state, &app, provider).await
 }
 
+/// Stop waiting for the browser: the pending sign_in or link_identity fails.
+#[tauri::command]
+pub fn cancel_sign_in(state: State<'_, AppState>) {
+    state.cloud.cancel_sign_in();
+}
+
 #[tauri::command]
 pub async fn sign_out(state: State<'_, AppState>) -> AppResult<()> {
     state.cloud.sign_out().await

@@ -170,7 +170,6 @@
       {#each SIGN_IN as p (p.id)}
         <button
           onclick={() => social.signIn(p.id)}
-          disabled={social.signingIn !== null && social.signingIn !== p.id}
           class="flex h-8 w-full items-center justify-center gap-2 rounded-md border border-(--line-2) bg-(--bg-raise-2) font-medium hover:bg-[#252b33] disabled:opacity-50"
         >
           <ProviderIcon provider={p.id} class="size-4" />
@@ -183,6 +182,11 @@
           <button
             onclick={() => social.signingIn && social.signIn(social.signingIn)}
             class="underline hover:text-(--text-primary)">Start again</button
+          >
+          ·
+          <button
+            onclick={() => social.cancelSignIn()}
+            class="underline hover:text-(--text-primary)">Cancel</button
           >
         </p>
       {:else if social.signInError || legalError}

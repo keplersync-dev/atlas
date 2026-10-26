@@ -30,6 +30,10 @@
   {#if social.signingIn}
     <p class="mt-2 text-[12px] text-(--text-faint)">
       Finish signing in in your browser.
+      <button
+        onclick={() => social.cancelSignIn()}
+        class="underline hover:text-(--text-primary)">Cancel</button
+      >
     </p>
   {:else if social.signInError}
     <p class="mt-2 text-[12px] text-(--danger)" role="alert">

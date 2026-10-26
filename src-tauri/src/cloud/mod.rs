@@ -275,6 +275,13 @@ impl Cloud {
         Ok((code?, verifier))
     }
 
+    /// Stop waiting for the browser sign-in or link in progress, if there is one.
+    pub fn cancel_sign_in(&self) {
+        if let Some(cancel) = self.attempt.lock().unwrap().take() {
+            let _ = cancel.send(());
+        }
+    }
+
     /// A new browser sign-in cancels the one in progress (left open in the browser).
     fn new_attempt(&self) -> oneshot::Receiver<()> {
         let (cancel, cancelled) = oneshot::channel();

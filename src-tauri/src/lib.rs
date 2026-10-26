@@ -34,6 +34,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         // Session & account
         commands::session::get_session,
         commands::session::sign_in,
+        commands::session::cancel_sign_in,
         commands::session::sign_out,
         commands::session::link_identity,
         commands::session::unlink_identity,

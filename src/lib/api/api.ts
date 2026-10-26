@@ -55,6 +55,8 @@ export interface AtlasApi {
    * discord:   opens the browser for Discord OAuth and waits for the redirect.
    */
   signIn(provider: AuthProvider): Promise<Session>;
+  /** Stops waiting for the browser; the pending signIn or linkIdentity rejects. */
+  cancelSignIn(): Promise<void>;
   signOut(): Promise<void>;
   linkIdentity(provider: AuthProvider): Promise<Me>;
   /** Fails with "conflict" if it's the last sign-in method. */

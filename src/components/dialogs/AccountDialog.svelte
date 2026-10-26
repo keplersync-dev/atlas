@@ -155,6 +155,16 @@
       : [],
   );
 
+  /** Waiting for the browser to link an account: another Link starts over with it. */
+  const linking = $derived(PROVIDERS.some((p) => p.id === busy));
+
+  function cancelLink() {
+    attempt++;
+    busy = null;
+    error = null;
+    api.cancelSignIn().catch(() => {});
+  }
+
   function signOut() {
     act("signout", async () => {
       await social.signOut();
@@ -398,9 +408,14 @@
             }}>Unlink</Button
           >
         {:else}
+          {#if busy === p.id}
+            <Button size="sm" variant="ghost" onclick={cancelLink}
+              >Cancel</Button
+            >
+          {/if}
           <Button
             size="sm"
-            disabled={busy !== null && busy !== p.id}
+            disabled={busy !== null && !linking}
             onclick={() => act(p.id, () => social.linkIdentity(p.id))}
             >{busy === p.id ? "Start again" : "Link"}</Button
           >
