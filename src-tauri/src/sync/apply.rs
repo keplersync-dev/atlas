@@ -21,7 +21,8 @@ use tauri_plugin_opener::OpenerExt;
 
 use super::backup::{self, FileAction, FileRecord};
 use super::fetch::{self, Route};
-use super::manifest::Manifest;
+use super::manifest::{Manifest, Override, PackBase};
+use super::pack;
 use super::plan::{self, Action, Plan};
 use super::source::Source;
 use super::{adopt, prism_versions};
@@ -180,7 +181,7 @@ pub async fn run<R: Runtime>(
         // meanwhile. Nothing has changed yet, so stopping here drops the backup too.
         let ready = async {
             tokio::select! {
-                fetched = fetch_all(state, progress, source, &game_dir, &plan) => fetched,
+                fetched = fetch_all(state, progress, source, &game_dir, &plan, req.manifest.base.as_ref()) => fetched,
                 _ = progress.cancelled() => Err(jobs::cancelled()),
             }?;
             progress.wait_for_game_exit(state).await
@@ -224,16 +225,35 @@ async fn fetch_all<R: Runtime>(
     source: &Source,
     game_dir: &Path,
     plan: &Plan,
+    base: Option<&PackBase>,
 ) -> AppResult<()> {
     let routes: Vec<_> = plan
         .places()
         .map(|(e, local)| (e, fetch::route(&state.paths, source, game_dir, e, local)))
         .collect();
+    // The modpack's own files come out of its download.
+    let from_pack: Vec<Override> = plan
+        .actions
+        .iter()
+        .filter_map(|a| match a {
+            Action::WriteConfig { config, .. }
+                if config.in_pack && !fetch::blob_file(&state.paths, &config.sha256).is_file() =>
+            {
+                Some(config.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    let pack_bytes = match base {
+        Some(b) if !from_pack.is_empty() && pack::needs_download(&state.paths, b) => b.size_bytes,
+        _ => 0,
+    };
     let total: u64 = routes
         .iter()
         .filter(|(_, r)| *r != Route::Cached)
         .map(|(e, _)| e.size_bytes)
-        .sum();
+        .sum::<u64>()
+        + pack_bytes;
     progress.stage(SyncStage::Download);
     // Uploaded files and config files come from the server: their links in batches.
     let links = source.server_id().map(|shared| {
@@ -245,7 +265,7 @@ async fn fetch_all<R: Runtime>(
             .map(|(e, _)| e.sha256.clone());
         let configs = plan.actions.iter().filter_map(|a| match a {
             Action::WriteConfig { config, .. }
-                if !fetch::blob_file(&state.paths, &config.sha256).is_file() =>
+                if !config.in_pack && !fetch::blob_file(&state.paths, &config.sha256).is_file() =>
             {
                 Some(config.sha256.clone())
             }
@@ -290,7 +310,7 @@ async fn fetch_all<R: Runtime>(
                             &url,
                             &target,
                             Some(&entry.sha1),
-                            &entry.sha256,
+                            Some(&entry.sha256),
                             &mut on_bytes,
                         )
                         .await
@@ -307,8 +327,21 @@ async fn fetch_all<R: Runtime>(
             }
         })
         .await?;
+    if !from_pack.is_empty() {
+        let base = base.ok_or_else(|| {
+            AppError::conflict("This version's files come from a modpack it doesn't name.")
+        })?;
+        let mut on_bytes = |n: u64| {
+            let now = done.fetch_add(n, Ordering::Relaxed) + n;
+            progress.bytes(now.min(total), total);
+        };
+        pack::extract(state, base, from_pack, &mut on_bytes).await?;
+    }
     for a in &plan.actions {
         if let Action::WriteConfig { config, .. } = a {
+            if config.in_pack {
+                continue;
+            }
             match links {
                 Some(links) if !fetch::blob_file(&state.paths, &config.sha256).is_file() => {
                     let url = links

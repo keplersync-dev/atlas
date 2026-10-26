@@ -23,6 +23,12 @@ pub struct Version {
 pub struct VersionFile {
     pub hashes: FileHashes,
     pub url: String,
+    #[serde(default)]
+    pub filename: String,
+    #[serde(default)]
+    pub primary: bool,
+    #[serde(default)]
+    pub size: u64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -61,6 +67,16 @@ pub async fn versions_by_sha1(
         out.extend(found);
     }
     Ok(out)
+}
+
+/// One version by its id (a modpack's, for its download).
+pub async fn version(http: &reqwest::Client, api: &str, id: &str) -> reqwest::Result<Version> {
+    http.get(format!("{api}/version/{id}"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await
 }
 
 pub async fn projects(

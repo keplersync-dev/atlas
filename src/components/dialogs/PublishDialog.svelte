@@ -155,7 +155,12 @@
       unchecked={plan.data.unchecked}
       onrecheck={plan.reload}
     />
-    <ConfigPicker configs={plan.data.configs} bind:excluded={configExclude} />
+    <ConfigPicker
+      configs={plan.data.configs}
+      pack={plan.data.pack}
+      leftOut={plan.data.leftOut}
+      bind:excluded={configExclude}
+    />
 
     <h3 class="mt-4 mb-1.5 text-xs font-semibold text-(--text-muted)">
       What changed? <span class="font-normal text-(--text-faint)"

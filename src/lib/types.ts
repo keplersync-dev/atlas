@@ -258,7 +258,8 @@ export interface ManualDownload {
  * `done` of `total`: files while reading, bytes while uploading, both 0 while saving.
  */
 export interface InstanceWork {
-  stage: "reading" | "uploading" | "saving";
+  /** "downloading": the modpack a share is based on, in bytes. */
+  stage: "reading" | "uploading" | "saving" | "downloading";
   done: number;
   total: number;
 }
@@ -491,6 +492,27 @@ export interface PublishItem {
 }
 
 /** Built before sharing or publishing: every file with its setting, plus removals. */
+export interface PackInfo {
+  name: string;
+  versionLabel: string | null;
+  source: "modrinth" | "curseforge";
+  /** Files shared from it rather than uploaded. */
+  files: number;
+}
+
+export type LeftOutReason =
+  | "folder"
+  | "file_type"
+  | "too_big"
+  | "over_limit"
+  /** Changed here but not uploadable: friends get the modpack's own copy. */
+  | "pack_copy";
+
+export interface LeftOutFile {
+  path: string;
+  reason: LeftOutReason;
+}
+
 export interface PublishPlan {
   /** null when this is the first share. */
   baseRevision: number | null;
@@ -504,6 +526,10 @@ export interface PublishPlan {
   unchecked: number;
   /** Config folders and loose config files, for choosing which are shared. */
   configs: ConfigGroup[];
+  /** The modpack the instance is from: its own files come from its download, not uploads. */
+  pack: PackInfo | null;
+  /** Config files that won't be shared as they are here. */
+  leftOut: LeftOutFile[];
   /**
    * The launcher runs other Minecraft or loader versions than the shared ones: `from` is
    * shared now, `to` is what this version will say. null when they match.

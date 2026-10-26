@@ -83,10 +83,11 @@ pub fn route(
     }
 }
 
-/// Copy `from` into the cache under `to` if its hashes match.
-fn admit(from: &Path, to: &Path, sha1: Option<&str>, sha256: &str) -> AppResult<()> {
+/// Copy `from` into the cache under `to` if its hashes match (at least one is given).
+fn admit(from: &Path, to: &Path, sha1: Option<&str>, sha256: Option<&str>) -> AppResult<()> {
+    debug_assert!(sha1.is_some() || sha256.is_some());
     let h = hash_file(from)?;
-    if sha1.is_some_and(|s| s != h.sha1) || h.sha256 != sha256 {
+    if sha1.is_some_and(|s| s != h.sha1) || sha256.is_some_and(|s| s != h.sha256) {
         return Err(AppError::conflict(format!(
             "{} doesn't match the shared version (it may be corrupt or a different file)",
             from.file_name()
@@ -115,7 +116,7 @@ pub async fn content(
         Route::Local(p) | Route::Source(p) => {
             let (p, t, sha1, sha256) =
                 (p.clone(), target, entry.sha1.clone(), entry.sha256.clone());
-            tokio::task::spawn_blocking(move || admit(&p, &t, Some(&sha1), &sha256))
+            tokio::task::spawn_blocking(move || admit(&p, &t, Some(&sha1), Some(&sha256)))
                 .await
                 .map_err(AppError::from)??;
             on_bytes(entry.size_bytes);
@@ -127,7 +128,7 @@ pub async fn content(
                 url,
                 &target,
                 Some(&entry.sha1),
-                &entry.sha256,
+                Some(&entry.sha256),
                 on_bytes,
             )
             .await
@@ -158,7 +159,7 @@ pub async fn download(
     url: &str,
     target: &Path,
     sha1: Option<&str>,
-    sha256: &str,
+    sha256: Option<&str>,
     on_bytes: &mut (dyn FnMut(u64) + Send),
 ) -> AppResult<()> {
     let offline = |e: reqwest::Error| {
@@ -198,11 +199,12 @@ pub async fn download(
         tmp.clone(),
         target.to_path_buf(),
         sha1.map(str::to_owned),
-        sha256.to_owned(),
+        sha256.map(str::to_owned),
     );
-    let result = tokio::task::spawn_blocking(move || admit(&tmp2, &t, sha1.as_deref(), &sha256))
-        .await
-        .map_err(AppError::from)?;
+    let result =
+        tokio::task::spawn_blocking(move || admit(&tmp2, &t, sha1.as_deref(), sha256.as_deref()))
+            .await
+            .map_err(AppError::from)?;
     let _ = std::fs::remove_file(&tmp);
     result
 }
@@ -216,7 +218,7 @@ pub async fn config_from(
 ) -> AppResult<PathBuf> {
     let target = blob_file(paths, &o.sha256);
     if !target.is_file() {
-        download(http, url, &target, None, &o.sha256, &mut |_| {}).await?;
+        download(http, url, &target, None, Some(&o.sha256), &mut |_| {}).await?;
     }
     Ok(target)
 }
@@ -231,7 +233,7 @@ pub async fn config(paths: &AppPaths, source: &Source, o: &Override) -> AppResul
         .local_copy(&o.path)
         .ok_or_else(|| AppError::conflict(format!("{} isn't available", o.path)))?;
     let (t, sha256) = (target.clone(), o.sha256.clone());
-    tokio::task::spawn_blocking(move || admit(&from, &t, None, &sha256))
+    tokio::task::spawn_blocking(move || admit(&from, &t, None, Some(&sha256)))
         .await
         .map_err(AppError::from)??;
     Ok(target)
@@ -264,7 +266,7 @@ pub fn pick_up_manual_downloads(paths: &AppPaths, wanted: &[&Entry], since: Syst
             &file.path(),
             &cache_file(paths, &e.sha1),
             Some(&e.sha1),
-            &e.sha256,
+            Some(&e.sha256),
         )
         .is_ok()
         {

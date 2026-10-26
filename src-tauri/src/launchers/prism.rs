@@ -186,6 +186,23 @@ fn read_pack(dir: &Path) -> ReadResult<Pack> {
     Ok(out)
 }
 
+/// The Modrinth modpack Prism installed the instance from (`ManagedPack…` in
+/// instance.cfg, next to the game folder). CurseForge ones ("flame") aren't read: Prism
+/// doesn't keep their download.
+pub fn installed_pack(game_dir: &Path) -> Option<super::InstalledPack> {
+    let cfg = parse_ini(&std::fs::read_to_string(game_dir.parent()?.join("instance.cfg")).ok()?);
+    let get = |key: &str| cfg.get(key).filter(|v| !v.is_empty()).cloned();
+    if get("ManagedPack").as_deref() != Some("true")
+        || get("ManagedPackType").as_deref() != Some("modrinth")
+    {
+        return None;
+    }
+    Some(super::InstalledPack::Modrinth {
+        project_id: get("ManagedPackID")?,
+        version_id: get("ManagedPackVersionID")?,
+    })
+}
+
 /// Create an empty instance for a shared one: `instance.cfg`, `mmc-pack.json` with the
 /// Minecraft and loader versions, the game folder, and the picture in Prism's icons
 /// folder. Prism downloads the game itself the first time it's played. Returns the

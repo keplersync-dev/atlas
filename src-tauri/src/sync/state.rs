@@ -186,6 +186,7 @@ mod tests {
                 })
                 .collect(),
             overrides: vec![],
+            base: None,
         }
     }
 

@@ -279,6 +279,8 @@
         />
         <ConfigPicker
           configs={plan.data.configs}
+          pack={plan.data.pack}
+          leftOut={plan.data.leftOut}
           bind:excluded={configExclude}
         />
       {/if}

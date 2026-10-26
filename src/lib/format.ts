@@ -79,6 +79,8 @@ export function workLabel(w: InstanceWork): string {
       return `Uploading ${fileSize(w.done)} of ${fileSize(w.total)}…`;
     case "saving":
       return "Saving the new version…";
+    case "downloading":
+      return `Downloading the modpack… ${fileSize(w.done)} of ${fileSize(w.total)}`;
   }
 }
 

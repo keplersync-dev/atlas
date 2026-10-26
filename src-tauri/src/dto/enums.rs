@@ -33,7 +33,14 @@ wire_enum!(BackupReason {
 
 wire_enum!(
     /// Work on an instance outside a job: see `Work`.
-    WorkStage { Reading, Uploading, Saving }
+    WorkStage { Reading, Uploading, Saving, Downloading }
+);
+
+wire_enum!(
+    /// Why a config file isn't shared as it is (see `LeftOutFile`): not in a folder
+    /// Atlas uploads from, not a file type it uploads, too big, past the count or total
+    /// limit, or changed here but not uploadable so the modpack's own copy goes instead.
+    LeftOutReason { Folder, FileType, TooBig, OverLimit, PackCopy }
 );
 
 wire_enum!(SyncStage {

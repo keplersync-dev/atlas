@@ -162,6 +162,34 @@ where
     result.map_err(|e| ReadError::Format(format!("Modrinth app.db: {e}")))
 }
 
+#[derive(FromRow)]
+struct PackLink {
+    path: String,
+    project_id: Option<String>,
+    version_id: Option<String>,
+}
+
+const PACK_LINKS: &str = "
+    SELECT i.path, l.modrinth_project_id AS project_id, l.modrinth_version_id AS version_id
+    FROM instance_links l
+    JOIN instances i ON i.id = l.instance_id
+    WHERE l.link_kind = 'modrinth_modpack'";
+/// The old schema kept this differently; not read.
+const NO_PACK_LINKS: &str = "SELECT '' AS path, NULL AS project_id, NULL AS version_id WHERE 0";
+
+/// The Modrinth modpack the app installed the instance from, if any.
+pub async fn installed_pack(root: &Path, instance_path: &str) -> Option<super::InstalledPack> {
+    let links: Vec<PackLink> = rows(root, PACK_LINKS, NO_PACK_LINKS)
+        .await
+        .inspect_err(|e| tracing::debug!(error = %e, "couldn't read Modrinth's pack links"))
+        .ok()?;
+    let link = links.into_iter().find(|l| l.path == instance_path)?;
+    Some(super::InstalledPack::Modrinth {
+        project_id: link.project_id?,
+        version_id: link.version_id?,
+    })
+}
+
 /// How long the user has to confirm the new instance in the app.
 const CONFIRM_WAIT: Duration = Duration::from_secs(5 * 60);
 

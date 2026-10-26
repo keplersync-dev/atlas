@@ -4,6 +4,7 @@ pub mod adopt;
 pub mod apply;
 pub mod backup;
 pub mod fetch;
+pub mod pack;
 pub mod plan;
 pub mod prism_versions;
 pub mod recovery;

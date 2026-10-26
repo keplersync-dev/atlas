@@ -301,6 +301,34 @@ async fn blocking(
 }
 
 /// Open the launcher, launching the instance directly where the launcher allows it.
+/// The modpack an instance was installed from, as its launcher recorded it.
+#[derive(Debug, Clone, PartialEq)]
+pub enum InstalledPack {
+    /// CurseForge keeps the pack's download details with the instance.
+    Known(atlas_protocol::manifest::PackBase),
+    /// The Modrinth App and Prism keep only Modrinth's ids.
+    Modrinth {
+        project_id: String,
+        version_id: String,
+    },
+}
+
+/// The modpack the instance came from, if its launcher installed it from one. None for
+/// instances made by hand, by Atlas, or in launchers that don't say.
+pub async fn installed_pack(
+    kind: LauncherKind,
+    root: &Path,
+    launcher_instance_id: &str,
+    game_dir: &Path,
+) -> Option<InstalledPack> {
+    match kind {
+        LauncherKind::Curseforge => curseforge::installed_pack(game_dir),
+        LauncherKind::Modrinth => modrinth::installed_pack(root, launcher_instance_id).await,
+        LauncherKind::Prism | LauncherKind::Multimc => prism::installed_pack(game_dir),
+        LauncherKind::Official | LauncherKind::Folder => None,
+    }
+}
+
 /// A loader's key in a Modrinth pack's `dependencies`.
 pub fn pack_dependency_key(loader: Loader) -> Option<&'static str> {
     modrinth::dependency_key(loader)

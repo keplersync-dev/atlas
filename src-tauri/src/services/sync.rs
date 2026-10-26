@@ -19,7 +19,7 @@ use crate::state::AppState;
 use crate::sync::backup::{self, FileAction, FileRecord};
 use crate::sync::fetch::{self, Route};
 use crate::sync::source::{self, Source};
-use crate::sync::{adopt, apply, prism_versions, state as sync_state};
+use crate::sync::{adopt, apply, pack, prism_versions, state as sync_state};
 use crate::util::ids::new_id;
 
 async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
@@ -110,6 +110,16 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
             _ => download_bytes += e.size_bytes,
         }
     }
+    // The modpack's own files: one download of the pack, if they aren't here yet.
+    if let Some(base) = &target.base {
+        let needed = target
+            .overrides
+            .iter()
+            .any(|o| o.in_pack && !fetch::blob_file(&state.paths, &o.sha256).is_file());
+        if needed && pack::needs_download(&state.paths, base) {
+            download_bytes += base.size_bytes;
+        }
+    }
     let mut config_conflicts = Vec::new();
     for c in &plan.conflicts {
         let mine = std::fs::read_to_string(game_dir.join(&c.path)).unwrap_or_default();
@@ -117,6 +127,13 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
             src.server_id(),
             target.overrides.iter().find(|o| o.path == c.path),
         ) {
+            (_, Some(o)) if o.in_pack => match &target.base {
+                Some(base) => {
+                    pack::extract(state, base, vec![o.clone()], &mut |_| {}).await?;
+                    Some(fetch::blob_file(&state.paths, &o.sha256))
+                }
+                None => None,
+            },
             (Some(shared), Some(o)) => {
                 let url = state.cloud.file_url(shared, &o.sha256).await?;
                 Some(fetch::config_from(&state.paths, state.cloud.file_http(), o, &url).await?)

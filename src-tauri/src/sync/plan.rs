@@ -303,6 +303,7 @@ mod tests {
             recommended_memory_mb: None,
             content,
             overrides,
+            base: None,
         }
     }
 
@@ -519,6 +520,7 @@ mod tests {
             path: path.into(),
             sha256: sha.to_string().repeat(64),
             size_bytes: 1,
+            in_pack: false,
         };
         let synced = manifest(
             vec![],

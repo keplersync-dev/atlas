@@ -1,16 +1,21 @@
 <script lang="ts">
   import { fileSize, plural } from "$lib/format";
-  import type { ConfigGroup } from "$lib/types";
+  import type { ConfigGroup, LeftOutFile, PackInfo } from "$lib/types";
   import Button from "../Button.svelte";
+  import LeftOutFiles from "./LeftOutFiles.svelte";
 
   // Which config folders (one per mod, usually) and loose config files go out with the
   // instance. `excluded` stays null until the user changes something here, so the dialog
   // only sends a new list when there is one.
   let {
     configs,
+    pack = null,
+    leftOut = [],
     excluded = $bindable(null),
   }: {
     configs: ConfigGroup[];
+    pack?: PackInfo | null;
+    leftOut?: LeftOutFile[];
     excluded: string[] | null;
   } = $props();
 
@@ -45,6 +50,13 @@
             sharedBytes,
           )}. Some mods keep personal settings here.
         </small>
+        {#if pack && pack.files}
+          <small class="block text-[11.5px] text-(--text-faint)">
+            {plural(pack.files, "file")} come from {pack.name}{pack.versionLabel
+              ? ` ${pack.versionLabel}`
+              : ""}, so they aren't uploaded.
+          </small>
+        {/if}
       </div>
       <Button size="sm" variant="ghost" onclick={() => (open = !open)}
         >{open ? "Done" : "Choose"}</Button
@@ -83,5 +95,6 @@
         {/each}
       </div>
     {/if}
+    <LeftOutFiles files={leftOut} />
   </div>
 {/if}

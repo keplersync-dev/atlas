@@ -17,8 +17,9 @@ use super::work::Reporter;
 use crate::db::{self, content::ContentRow, instances::InstanceRow};
 use crate::dto::{
     ConfigGroup, ContentKind, ContentSource, CreateRevision, CreateSharedInstance, InstanceSummary,
-    ManualDownload, MemberRole, PublishInput, PublishItem, PublishPlan, RevisionSummary,
-    ShareInstanceInput, ShareMode, SharedInstance, Side, Storage, WorkStage, from_wire, to_wire,
+    LeftOutFile, LeftOutReason, ManualDownload, MemberRole, PackInfo, PublishInput, PublishItem,
+    PublishPlan, RevisionSummary, ShareInstanceInput, ShareMode, SharedInstance, Side, Storage,
+    WorkStage, from_wire, to_wire,
 };
 use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
@@ -26,13 +27,14 @@ use crate::state::AppState;
 use crate::sync::adopt;
 use crate::sync::manifest::{
     self, Entry, MAX_ICON_BYTES, MAX_OVERRIDES, MAX_OVERRIDES_TOTAL, Manifest, MinecraftSpec,
-    Override, SCHEMA_VERSION,
+    Override, PackBase, Refusal, SCHEMA_VERSION,
 };
+use crate::sync::pack::{self, PackIndex};
 
 async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
-    db::instances::get(&state.db, id)
-        .await?
-        .ok_or_else(|| AppError::not_found("Instance not found"))
+    db::instances::get(&state.db, id).await?.ok_or_else(|| {
+        AppError::not_found("That instance isn't there anymore. It may have just been removed.")
+    })
 }
 
 fn mode_of(r: &ContentRow) -> ShareMode {
@@ -125,6 +127,8 @@ pub async fn prepare<R: Runtime>(
             }
         }
     }
+    let configs = plan_configs(state, &row, &Reporter::new(app, id)).await?;
+    let exclude = config_exclude(state, id).await?;
     let storage = match state
         .cloud
         .call(Method::GET, "/me/storage", None::<&()>)
@@ -153,7 +157,14 @@ pub async fn prepare<R: Runtime>(
             .collect(),
         storage,
         unchecked,
-        configs: config_groups(state, &row).await?,
+        pack: configs.base.as_ref().map(|b| PackInfo {
+            name: b.name.clone(),
+            version_label: b.version_label.clone(),
+            source: b.source,
+            files: configs.shared.iter().filter(|(o, _)| o.in_pack).count() as u32,
+        }),
+        left_out: configs.left_out,
+        configs: config_groups(&configs.candidates, &exclude),
         versions: row
             .synced_manifest()
             .and_then(|m| crate::sync::state::version_change(&row, &m)),
@@ -172,25 +183,31 @@ fn modes(rows: &[ContentRow], chosen: &HashMap<String, ShareMode>) -> HashMap<St
         .collect()
 }
 
-/// Config files that may be shared: those matching the instance's `sync_include` patterns
-/// ("config/**" by default) whose format and size the rules allow. Listed, not hashed:
-/// `(path, file, size)`.
+/// Folders whose files are shared besides `sync_include`: configs, and the scripts and
+/// assets packs keep next to them.
+const SHARED_DIRS: [&str; 4] = ["config", "defaultconfigs", "kubejs", "scripts"];
+
+/// The files a share may include, not hashed: `(path, file, size)`. Those under the
+/// shared folders and `sync_include`, and the modpack's own files that are here.
 async fn config_candidates(
     state: &AppState,
     row: &InstanceRow,
+    pack: Option<&PackIndex>,
 ) -> AppResult<Vec<(String, PathBuf, u64)>> {
     let include: Option<String> =
         sqlx::query_scalar("SELECT sync_include FROM instance WHERE id = ?")
             .bind(&row.id)
             .fetch_optional(&state.db)
             .await?;
-    let patterns: Vec<String> = include
+    let mut patterns: Vec<String> = include
         .and_then(|json| serde_json::from_str(&json).ok())
-        .unwrap_or_else(|| vec!["config/**".to_owned()]);
+        .unwrap_or_default();
+    patterns.extend(SHARED_DIRS.iter().map(|d| format!("{d}/**")));
+    patterns.extend(pack.into_iter().flat_map(|p| p.keys().cloned()));
     let game = PathBuf::from(&row.game_dir);
     tokio::task::spawn_blocking(move || candidates_in(&game, &patterns))
         .await
-        .map_err(|e| AppError::unknown(e.to_string()))
+        .map_err(AppError::from)
 }
 
 fn candidates_in(game: &Path, patterns: &[String]) -> Vec<(String, PathBuf, u64)> {
@@ -212,21 +229,19 @@ fn candidates_in(game: &Path, patterns: &[String]) -> Vec<(String, PathBuf, u64)
         .into_iter()
         .filter_map(|(rel, file)| {
             let size = std::fs::metadata(&file).ok()?.len();
-            manifest::is_shareable_config(&rel, size).then_some((rel, file, size))
+            Some((rel, file, size))
         })
         .collect()
 }
 
-/// What the owner switches on and off: the folder directly under config/ that a file is in
-/// ("config/create/", usually one per mod), or the file itself when it's loose
-/// ("config/a.json").
+/// What the owner switches on and off: a top folder's subfolder ("config/create/",
+/// usually one per mod; "kubejs/assets/"), or the file itself when it's loose
+/// ("config/a.json", "options.txt").
 pub fn config_group(path: &str) -> String {
-    match path
-        .strip_prefix("config/")
-        .and_then(|rest| rest.split_once('/'))
-    {
-        Some((dir, _)) => format!("config/{dir}/"),
-        None => path.to_owned(),
+    let mut parts = path.splitn(3, '/');
+    match (parts.next(), parts.next(), parts.next()) {
+        (Some(top), Some(sub), Some(_)) => format!("{top}/{sub}/"),
+        _ => path.to_owned(),
     }
 }
 
@@ -257,58 +272,167 @@ pub async fn shared_config_files(
     row: &InstanceRow,
 ) -> AppResult<Vec<(String, PathBuf)>> {
     let exclude = config_exclude(state, &row.id).await?;
-    Ok(config_candidates(state, row)
+    Ok(config_candidates(state, row, None)
         .await?
         .into_iter()
-        .filter(|(rel, ..)| !exclude.contains(&config_group(rel)))
+        .filter(|(rel, _, size)| {
+            !exclude.contains(&config_group(rel)) && manifest::upload_refusal(rel, *size).is_none()
+        })
         .map(|(rel, file, _)| (rel, file))
         .collect())
 }
 
-/// The config files to share, hashed: the candidates the owner didn't switch off, up to
-/// the count and size limits.
-async fn collect_configs(
+/// What sharing does with the config files.
+struct ConfigPlan {
+    /// The modpack the instance is from, when its download could be read.
+    base: Option<PackBase>,
+    /// Shared, with the local file: `in_pack` ones come from the pack, the rest upload.
+    shared: Vec<(Override, PathBuf)>,
+    /// Not shared, and why. Shown before anything uploads.
+    left_out: Vec<LeftOutFile>,
+    /// Every file that could be, for the dialog's groups: `(path, size)`.
+    candidates: Vec<(String, u64)>,
+}
+
+/// Sort the config files: exactly as the modpack has them (referenced, not uploaded),
+/// uploadable, or left out. A file the owner changed that can't be uploaded falls back
+/// to the pack's own copy, so friends at least get that.
+async fn plan_configs<R: Runtime>(
     state: &AppState,
     row: &InstanceRow,
-) -> AppResult<Vec<(Override, PathBuf)>> {
+    work: &Reporter<R>,
+) -> AppResult<ConfigPlan> {
     let exclude = config_exclude(state, &row.id).await?;
-    let candidates = config_candidates(state, row).await?;
-    tokio::task::spawn_blocking(move || {
-        let (mut out, mut total, mut skipped) = (Vec::new(), 0u64, 0usize);
-        for (rel, file, size) in candidates {
-            if exclude.contains(&config_group(&rel)) {
-                continue;
+    let mut base = pack::base_for(state, row).await;
+    let mut index = None;
+    if let Some(b) = &base {
+        let total = if pack::needs_download(&state.paths, b) {
+            b.size_bytes
+        } else {
+            0
+        };
+        let mut got = 0;
+        let mut progress = |n: u64| {
+            got += n;
+            work.report(WorkStage::Downloading, got.min(total), total);
+        };
+        match pack::index(state, b, &mut progress).await {
+            Ok(i) => index = Some(i),
+            Err(e) => {
+                tracing::info!(pack = %b.name, error = %e, "couldn't read the modpack; uploading its files");
+                base = None;
             }
-            if out.len() >= MAX_OVERRIDES || total + size > MAX_OVERRIDES_TOTAL {
-                skipped += 1;
-                continue;
+        }
+    }
+    let candidates = config_candidates(state, row, index.as_ref()).await?;
+    let wanted: Vec<(String, PathBuf, u64)> = candidates
+        .iter()
+        .filter(|(rel, ..)| !exclude.contains(&config_group(rel)))
+        .cloned()
+        .collect();
+    let count = wanted.len() as u64;
+    let done = Arc::new(AtomicU64::new(0));
+    let counter = Arc::clone(&done);
+    let hashing = tokio::task::spawn_blocking(move || {
+        wanted
+            .into_iter()
+            .map(|(rel, file, size)| {
+                let hashes = crate::scan::hash::hash_file(&file);
+                counter.fetch_add(1, Ordering::Relaxed);
+                hashes.map(|h| (rel, file, size, h.sha256))
+            })
+            .collect::<std::io::Result<Vec<_>>>()
+    });
+    tokio::pin!(hashing);
+    let mut tick = tokio::time::interval(std::time::Duration::from_millis(200));
+    let hashed = loop {
+        tokio::select! {
+            hashed = &mut hashing => break hashed??,
+            _ = tick.tick() => work.report(WorkStage::Reading, done.load(Ordering::Relaxed), count),
+        }
+    };
+
+    let mut plan = ConfigPlan {
+        base: base.clone(),
+        shared: Vec::new(),
+        left_out: Vec::new(),
+        candidates: candidates
+            .into_iter()
+            .map(|(rel, _, size)| (rel, size))
+            .collect(),
+    };
+    let mut uploaded = 0u64;
+    let full =
+        |shared: usize, uploaded: u64| shared > MAX_OVERRIDES || uploaded > MAX_OVERRIDES_TOTAL;
+    for (rel, file, size, sha256) in hashed {
+        let from_pack = index.as_ref().and_then(|i| i.get(&rel)).cloned();
+        let as_is = from_pack.as_ref().is_some_and(|p| p.sha256 == sha256);
+        let reason = if as_is {
+            None
+        } else {
+            manifest::upload_refusal(&rel, size)
+        };
+        let shared = match (as_is, reason, from_pack) {
+            (true, ..) => Some((sha256, size, true, None)),
+            // Changed here, but not a file that can be uploaded: the pack's own copy.
+            (false, Some(_), Some(p)) => {
+                Some((p.sha256, p.size_bytes, true, Some(LeftOutReason::PackCopy)))
             }
-            let hashes = crate::scan::hash::hash_file(&file)?;
-            total += size;
-            out.push((
-                Override {
-                    path: rel,
-                    sha256: hashes.sha256,
-                    size_bytes: size,
-                },
-                file,
-            ));
+            (false, Some(reason), None) => {
+                plan.left_out.push(LeftOutFile {
+                    path: rel.clone(),
+                    reason: match reason {
+                        Refusal::Folder => LeftOutReason::Folder,
+                        Refusal::FileType => LeftOutReason::FileType,
+                        Refusal::TooBig => LeftOutReason::TooBig,
+                    },
+                });
+                None
+            }
+            (false, None, _) => Some((sha256, size, false, None)),
+        };
+        let Some((sha256, size_bytes, in_pack, note)) = shared else {
+            continue;
+        };
+        let upload = if in_pack { 0 } else { size_bytes };
+        if full(plan.shared.len() + 1, uploaded + upload) {
+            plan.left_out.push(LeftOutFile {
+                path: rel,
+                reason: LeftOutReason::OverLimit,
+            });
+            continue;
         }
-        if skipped > 0 {
-            tracing::info!(skipped, "config files left out of the share (limits)");
+        uploaded += upload;
+        if let Some(reason) = note {
+            plan.left_out.push(LeftOutFile {
+                path: rel.clone(),
+                reason,
+            });
         }
-        Ok(out)
-    })
-    .await
-    .map_err(|e| AppError::unknown(e.to_string()))?
+        plan.shared.push((
+            Override {
+                path: rel,
+                sha256,
+                size_bytes,
+                in_pack,
+            },
+            file,
+        ));
+    }
+    if !plan.left_out.is_empty() {
+        tracing::info!(
+            files = plan.left_out.len(),
+            "config files not shared as they are"
+        );
+    }
+    Ok(plan)
 }
 
 /// The config folders and loose files the dialog lists, and whether each is shared.
-async fn config_groups(state: &AppState, row: &InstanceRow) -> AppResult<Vec<ConfigGroup>> {
-    let exclude = config_exclude(state, &row.id).await?;
+fn config_groups(candidates: &[(String, u64)], exclude: &[String]) -> Vec<ConfigGroup> {
     let mut groups: BTreeMap<String, ConfigGroup> = BTreeMap::new();
-    for (rel, _, size) in config_candidates(state, row).await? {
-        let key = config_group(&rel);
+    for (rel, size) in candidates {
+        let key = config_group(rel);
         let group = groups.entry(key.clone()).or_insert_with(|| ConfigGroup {
             shared: !exclude.contains(&key),
             key,
@@ -318,7 +442,7 @@ async fn config_groups(state: &AppState, row: &InstanceRow) -> AppResult<Vec<Con
         group.files += 1;
         group.size_bytes += size;
     }
-    Ok(groups.into_values().collect())
+    groups.into_values().collect()
 }
 
 /// Every file under `dir`, with paths relative to the game folder ("config/a/b.json").
@@ -347,7 +471,8 @@ fn walk(dir: &Path, rel: &str, out: &mut Vec<(String, PathBuf)>) {
 const PARALLEL_UPLOADS: usize = 8;
 
 /// Upload what the version needs that the server doesn't have yet: files on no mod site
-/// that are shared, and the config files. Returns the configs as overrides.
+/// that are shared, and the config files that aren't the modpack's own. Returns the
+/// configs as overrides, and the modpack they're based on.
 async fn send_files<R: Runtime>(
     state: &AppState,
     row: &InstanceRow,
@@ -355,7 +480,7 @@ async fn send_files<R: Runtime>(
     modes: &HashMap<String, ShareMode>,
     confirmed_rights: bool,
     work: &Reporter<R>,
-) -> AppResult<Vec<Override>> {
+) -> AppResult<(Vec<Override>, Option<PackBase>)> {
     let uploads: Vec<&ContentRow> = live(rows)
         .filter(|r| modes.get(&r.id) != Some(&ShareMode::Private) && is_upload(r))
         .collect();
@@ -363,7 +488,11 @@ async fn send_files<R: Runtime>(
         .cloud
         .call(Method::GET, "/me/storage", None::<&()>)
         .await?;
-    let configs = collect_configs(state, row).await?;
+    let ConfigPlan {
+        base,
+        shared: configs,
+        ..
+    } = plan_configs(state, row, work).await?;
 
     let game = PathBuf::from(&row.game_dir);
     // (file, sha256, size, name, rights confirmed): the checkbox covers mods and packs;
@@ -379,7 +508,7 @@ async fn send_files<R: Runtime>(
                 confirmed_rights,
             )
         })
-        .chain(configs.iter().map(|(o, file)| {
+        .chain(configs.iter().filter(|(o, _)| !o.in_pack).map(|(o, file)| {
             (
                 file.clone(),
                 o.sha256.clone(),
@@ -470,7 +599,7 @@ async fn send_files<R: Runtime>(
     if !wanted.is_empty() {
         tracing::info!(files = wanted.len(), bytes = new_bytes, "uploaded files");
     }
-    Ok(configs.into_iter().map(|(o, _)| o).collect())
+    Ok((configs.into_iter().map(|(o, _)| o).collect(), base))
 }
 
 /// Upload the instance's picture so friends see it too; returns the manifest's `icon`.
@@ -523,7 +652,7 @@ fn build(
     rows: &[ContentRow],
     modes: &HashMap<String, ShareMode>,
     description: Option<String>,
-    overrides: Vec<Override>,
+    (overrides, base): (Vec<Override>, Option<PackBase>),
     icon: Option<String>,
 ) -> AppResult<Manifest> {
     let (Some(version), Some(loader)) = (row.minecraft_version.clone(), row.loader()) else {
@@ -572,11 +701,13 @@ fn build(
         },
         recommended_memory_mb: None,
         content,
+        // Only named when some files come from it.
+        base: base.filter(|_| overrides.iter().any(|o| o.in_pack)),
         overrides,
     };
     manifest::validate(&m).map_err(|e| {
         tracing::warn!(error = %e, "built a manifest that doesn't validate");
-        AppError::invalid_input(format!("Atlas can't share this instance: {e}"))
+        AppError::invalid_input(format!("Atlas can't share this instance. {e}"))
     })?;
     Ok(m)
 }
@@ -652,9 +783,16 @@ async fn share_now<R: Runtime>(
     let modes = modes(&rows, &input.share_modes);
     let description = input.description.flatten();
     // Check the manifest builds before uploading anything.
-    build(&row, &rows, &modes, description.clone(), Vec::new(), None)?;
+    build(
+        &row,
+        &rows,
+        &modes,
+        description.clone(),
+        (Vec::new(), None),
+        None,
+    )?;
     let work = Reporter::new(app, id);
-    let overrides = send_files(
+    let configs = send_files(
         state,
         &row,
         &rows,
@@ -664,7 +802,7 @@ async fn share_now<R: Runtime>(
     )
     .await?;
     let icon = send_icon(state, &row).await;
-    let m = build(&row, &rows, &modes, description.clone(), overrides, icon)?;
+    let m = build(&row, &rows, &modes, description.clone(), configs, icon)?;
     work.report(WorkStage::Saving, 0, 0);
     let body = CreateSharedInstance {
         name: row.name.clone(),
@@ -732,9 +870,16 @@ async fn publish_now<R: Runtime>(
         Some(s) => s.description,
         None => row.synced_manifest().and_then(|m| m.description),
     };
-    build(&row, &rows, &modes, description.clone(), Vec::new(), None)?;
+    build(
+        &row,
+        &rows,
+        &modes,
+        description.clone(),
+        (Vec::new(), None),
+        None,
+    )?;
     let work = Reporter::new(app, id);
-    let overrides = send_files(
+    let configs = send_files(
         state,
         &row,
         &rows,
@@ -749,7 +894,7 @@ async fn publish_now<R: Runtime>(
     } else {
         row.synced_manifest().and_then(|m| m.icon)
     };
-    let m = build(&row, &rows, &modes, description, overrides, icon)?;
+    let m = build(&row, &rows, &modes, description, configs, icon)?;
     if row.synced_manifest_hash.as_deref() == Some(manifest::hash(&m).as_str()) {
         return Err(AppError::invalid_input("Nothing to publish"));
     }

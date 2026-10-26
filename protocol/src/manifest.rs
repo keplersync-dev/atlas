@@ -27,6 +27,10 @@ pub struct Manifest {
     pub content: Vec<Entry>,
     #[serde(default)]
     pub overrides: Vec<Override>,
+    /// The modpack it was installed from, when there is one: overrides marked `in_pack`
+    /// come out of the pack's own download instead of being uploaded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub base: Option<PackBase>,
 }
 
 impl Manifest {
@@ -39,14 +43,20 @@ impl Manifest {
             .filter(|h| is_hex(h, 64))
     }
 
-    /// Every uploaded file this version needs: uploads, config files and the picture.
+    /// Every uploaded file this version needs: uploads, config files (not those from the
+    /// modpack) and the picture.
     pub fn blobs(&self) -> Vec<String> {
         let mut out: Vec<String> = self
             .content
             .iter()
             .filter(|e| e.source == ContentSource::Upload)
             .map(|e| e.sha256.clone())
-            .chain(self.overrides.iter().map(|o| o.sha256.clone()))
+            .chain(
+                self.overrides
+                    .iter()
+                    .filter(|o| !o.in_pack)
+                    .map(|o| o.sha256.clone()),
+            )
             .chain(self.icon_sha256().map(str::to_owned))
             .collect();
         out.sort();
@@ -115,21 +125,55 @@ pub struct Override {
     pub path: String,
     pub sha256: String,
     pub size_bytes: u64,
+    /// Exactly as the modpack (`Manifest::base`) has it: members take it from the pack's
+    /// download, so it isn't uploaded.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub in_pack: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+/// A modpack file on CurseForge or Modrinth: a .zip or .mrpack whose `overrides/` folder
+/// holds the pack's own files (configs, scripts, textures).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackBase {
+    /// Modrinth or CurseForge.
+    pub source: ContentSource,
+    pub project_id: String,
+    /// The pack version: Modrinth's version id, CurseForge's file id.
+    pub version_id: String,
+    /// "All the Mods 10: To the Sky"
+    pub name: String,
+    /// "2.0.4"
+    #[serde(default)]
+    pub version_label: Option<String>,
+    pub download_url: String,
+    pub sha1: String,
+    pub size_bytes: u64,
 }
 
 // ── Validation ─────────────────────────────────────
 // A manifest decides where files are written on other people's PCs: treat it as hostile.
 
-pub const MAX_BYTES: usize = 2 * 1024 * 1024;
+pub const MAX_BYTES: usize = 4 * 1024 * 1024;
 const MAX_CONTENT: usize = 2000;
-pub const MAX_OVERRIDES: usize = 500;
-const MAX_OVERRIDE_BYTES: u64 = 1024 * 1024;
-pub const MAX_OVERRIDES_TOTAL: u64 = 20 * 1024 * 1024;
+/// Config files, scripts and the like, from the pack and uploaded together. A big pack
+/// (All the Mods) has a few thousand.
+pub const MAX_OVERRIDES: usize = 10_000;
+/// The largest one uploaded file of those. Files from the pack have no limit of their own.
+pub const MAX_OVERRIDE_BYTES: u64 = 8 * 1024 * 1024;
+/// All uploaded ones together.
+pub const MAX_OVERRIDES_TOTAL: u64 = 150 * 1024 * 1024;
 /// The largest instance picture that can be shared.
 pub const MAX_ICON_BYTES: u64 = 1024 * 1024;
 const CONTENT_DIRS: [&str; 4] = ["mods/", "resourcepacks/", "shaderpacks/", "datapacks/"];
-const OVERRIDE_DIRS: [&str; 3] = ["config/", "defaultconfigs/", "kubejs/"];
-const OVERRIDE_EXTS: [&str; 11] = [
+/// Where uploaded files may go: configs, and the scripts and assets packs keep next to them.
+pub const OVERRIDE_DIRS: [&str; 4] = ["config/", "defaultconfigs/", "kubejs/", "scripts/"];
+/// What uploaded files may be: text, data and pictures, never programs.
+const OVERRIDE_EXTS: [&str; 22] = [
     "json",
     "json5",
     "toml",
@@ -140,7 +184,23 @@ const OVERRIDE_EXTS: [&str; 11] = [
     "yaml",
     "snbt",
     "js",
+    "zs",
     "conf",
+    "lang",
+    "mcmeta",
+    "md",
+    "csv",
+    "nbt",
+    "png",
+    "jpg",
+    "jpeg",
+    "ogg",
+    "ttf",
+];
+/// Never written from a pack either: programs and scripts Windows runs.
+const RISKY_EXTS: [&str; 16] = [
+    "exe", "dll", "bat", "cmd", "com", "scr", "ps1", "psm1", "vbs", "vbe", "wsf", "msi", "lnk",
+    "reg", "jar", "sh",
 ];
 const DOWNLOAD_HOSTS: [&str; 3] = [
     "cdn.modrinth.com",
@@ -148,6 +208,7 @@ const DOWNLOAD_HOSTS: [&str; 3] = [
     "mediafilez.forgecdn.net",
 ];
 
+/// Why a manifest was refused, as a sentence players can read.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 #[error("{0}")]
 pub struct Invalid(pub String);
@@ -155,10 +216,10 @@ pub struct Invalid(pub String);
 /// Parse and validate a manifest from JSON bytes.
 pub fn parse(bytes: &[u8]) -> Result<Manifest, Invalid> {
     if bytes.len() > MAX_BYTES {
-        return Err(Invalid("manifest is larger than 2 MB".into()));
+        return Err(Invalid("The list of files is over 4 MB.".into()));
     }
-    let m: Manifest =
-        serde_json::from_slice(bytes).map_err(|e| Invalid(format!("not a manifest: {e}")))?;
+    let m: Manifest = serde_json::from_slice(bytes)
+        .map_err(|_| Invalid("The list of files is damaged.".into()))?;
     validate(&m)?;
     Ok(m)
 }
@@ -166,72 +227,151 @@ pub fn parse(bytes: &[u8]) -> Result<Manifest, Invalid> {
 pub fn validate(m: &Manifest) -> Result<(), Invalid> {
     let bad = |s: String| Err(Invalid(s));
     if m.schema_version != SCHEMA_VERSION {
-        return bad(format!("unknown schemaVersion {}", m.schema_version));
+        return bad("It was made by a newer Atlas. Update Atlas.".into());
     }
     if m.content.len() > MAX_CONTENT || m.overrides.len() > MAX_OVERRIDES {
-        return bad("too many files".into());
+        return bad(format!(
+            "It has too many files: at most {MAX_CONTENT} mods and packs, and {MAX_OVERRIDES} config files."
+        ));
+    }
+    if let Some(b) = &m.base {
+        if !matches!(
+            b.source,
+            ContentSource::Modrinth | ContentSource::Curseforge
+        ) || b.project_id.is_empty()
+            || b.version_id.is_empty()
+            || b.name.trim().is_empty()
+            || !is_hex(&b.sha1, 40)
+        {
+            return bad("The modpack it's based on is damaged.".into());
+        }
+        if !allowed_download(&b.download_url) {
+            return bad(format!(
+                "{} downloads from a site Atlas doesn't allow.",
+                b.name
+            ));
+        }
     }
     let mut seen = HashSet::new();
     for e in &m.content {
-        check_path(&e.path, &CONTENT_DIRS)?;
+        check_path(&e.path, Some(&CONTENT_DIRS))?;
         let ext = if e.kind == ContentKind::Mod {
             "jar"
         } else {
             "zip"
         };
         if !e.path.to_ascii_lowercase().ends_with(&format!(".{ext}")) {
-            return bad(format!("{}: a {:?} must be a .{ext} file", e.path, e.kind));
+            return bad(format!("{} has to be a .{ext} file.", e.path));
         }
         if !is_hex(&e.sha1, 40) || !is_hex(&e.sha256, 64) {
-            return bad(format!("{}: bad hash", e.path));
+            return bad(format!("{} couldn't be read properly. Try again.", e.path));
         }
         if e.source == ContentSource::Local {
-            return bad(format!("{}: local files can't be in a manifest", e.path));
+            return bad(format!("{} is set to Only me.", e.path));
         }
         if let Some(url) = &e.download_url
             && !allowed_download(url)
         {
             return bad(format!(
-                "{}: downloads from that host aren't allowed",
+                "{} downloads from a site Atlas doesn't allow.",
                 e.path
             ));
         }
         if !seen.insert(e.path.to_lowercase()) {
-            return bad(format!("{}: listed twice", e.path));
+            return bad(format!("{} is in it twice.", e.path));
         }
     }
     let mut total = 0;
     for o in &m.overrides {
-        check_path(&o.path, &OVERRIDE_DIRS)?;
-        let ext = o.path.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
-        if !OVERRIDE_EXTS.contains(&ext.as_str()) {
-            return bad(format!("{}: only text config files can be shared", o.path));
+        if o.in_pack {
+            if m.base.is_none() {
+                return bad(format!("{} comes from a modpack it doesn't name.", o.path));
+            }
+            if !can_come_from_pack(&o.path) {
+                return bad(format!(
+                    "{} isn't a file Atlas writes from a modpack.",
+                    o.path
+                ));
+            }
+        } else {
+            check_path(&o.path, Some(&OVERRIDE_DIRS))?;
+            if !shareable_type(&o.path) {
+                return bad(format!("{} isn't a file type Atlas shares.", o.path));
+            }
+            if o.size_bytes > MAX_OVERRIDE_BYTES {
+                return bad(format!(
+                    "{} is over 8 MB. Leave it out under Config files.",
+                    o.path
+                ));
+            }
+            total += o.size_bytes;
         }
-        if o.size_bytes > MAX_OVERRIDE_BYTES || !is_hex(&o.sha256, 64) {
-            return bad(format!("{}: too big or bad hash", o.path));
+        if !is_hex(&o.sha256, 64) {
+            return bad(format!("{} couldn't be read properly. Try again.", o.path));
         }
-        total += o.size_bytes;
         if !seen.insert(o.path.to_lowercase()) {
-            return bad(format!("{}: listed twice", o.path));
+            return bad(format!("{} is in it twice.", o.path));
         }
     }
     if total > MAX_OVERRIDES_TOTAL {
-        return bad("config files add up to more than 20 MB".into());
+        return bad(
+            "The uploaded config files add up to more than 150 MB. Leave some out under Config files."
+                .into(),
+        );
     }
     Ok(())
 }
 
-/// Whether a file can be shared as a config override: an allowed folder and text format,
-/// at most 1 MB. (The count and total limits apply to the whole set.)
-pub fn is_shareable_config(path: &str, size_bytes: u64) -> bool {
-    let ext = path.rsplit('.').next().unwrap_or("").to_ascii_lowercase();
-    check_path(path, &OVERRIDE_DIRS).is_ok()
-        && OVERRIDE_EXTS.contains(&ext.as_str())
-        && size_bytes <= MAX_OVERRIDE_BYTES
+/// Why a file can't be uploaded as a config override, if it can't: its folder, its type
+/// or its size. (The count and total limits apply to the whole set.)
+pub fn upload_refusal(path: &str, size_bytes: u64) -> Option<Refusal> {
+    if check_path(path, Some(&OVERRIDE_DIRS)).is_err() {
+        Some(Refusal::Folder)
+    } else if !shareable_type(path) {
+        Some(Refusal::FileType)
+    } else if size_bytes > MAX_OVERRIDE_BYTES {
+        Some(Refusal::TooBig)
+    } else {
+        None
+    }
 }
 
-fn check_path(path: &str, dirs: &[&str]) -> Result<(), Invalid> {
-    let bad = |why: &str| Err(Invalid(format!("{path}: {why}")));
+/// Why a file can't be shared.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Refusal {
+    Folder,
+    FileType,
+    TooBig,
+}
+
+/// Whether a modpack's own file may be written from the pack: a safe path, not where
+/// mods and packs go (those are content), and nothing Windows runs.
+pub fn can_come_from_pack(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    check_path(path, None).is_ok()
+        && !CONTENT_DIRS.iter().any(|d| lower.starts_with(d))
+        && !RISKY_EXTS.contains(&extension(path).as_str())
+}
+
+fn shareable_type(path: &str) -> bool {
+    OVERRIDE_EXTS.contains(&extension(path).as_str())
+}
+
+fn extension(path: &str) -> String {
+    let name = path.rsplit('/').next().unwrap_or(path);
+    name.rsplit_once('.')
+        .map(|(_, ext)| ext.to_ascii_lowercase())
+        .unwrap_or_default()
+}
+
+/// A relative path that stays inside the instance, in one of `dirs` when given.
+fn check_path(path: &str, dirs: Option<&[&str]>) -> Result<(), Invalid> {
+    // The reason is for whoever reads this code; players only need to know which file.
+    let bad = |_why: &str| {
+        Err(Invalid(format!(
+            "{path} has a name or folder Atlas can't share."
+        )))
+    };
     if path.is_empty() || path.len() > 255 {
         return bad("bad length");
     }
@@ -251,7 +391,7 @@ fn check_path(path: &str, dirs: &[&str]) -> Result<(), Invalid> {
         return bad("characters Windows doesn't allow");
     }
     let lower = path.to_ascii_lowercase();
-    if !dirs.iter().any(|d| lower.starts_with(d)) {
+    if dirs.is_some_and(|dirs| !dirs.iter().any(|d| lower.starts_with(d))) {
         return bad("not in an allowed folder");
     }
     Ok(())
@@ -378,6 +518,59 @@ mod tests {
         assert!(with_path("MODS/Upper.JAR").is_ok());
     }
 
+    fn pack() -> PackBase {
+        PackBase {
+            source: ContentSource::Curseforge,
+            project_id: "1298402".into(),
+            version_id: "8854298".into(),
+            name: "All the Mods 10: To the Sky".into(),
+            version_label: Some("2.0.4".into()),
+            download_url: "https://edge.forgecdn.net/files/8854/298/ATM10SKY-2.0.4.zip".into(),
+            sha1: "f9f68e0cf0eb61326ea5b54a303386467fd885d0".into(),
+            size_bytes: 56_892_260,
+        }
+    }
+
+    #[test]
+    fn files_from_the_pack() {
+        let mut m = parse(&example()).unwrap();
+        m.overrides[0].path = "fancymenu_data/menu.png".into();
+        m.overrides[0].in_pack = true;
+        assert!(validate(&m).is_err(), "only with a pack named");
+        m.base = Some(pack());
+        assert!(validate(&m).is_ok(), "any folder the pack has");
+        assert!(
+            !m.blobs().contains(&m.overrides[0].sha256),
+            "and it isn't uploaded"
+        );
+        m.overrides[0].size_bytes = 50 * 1024 * 1024;
+        assert!(validate(&m).is_ok(), "no size limit of its own");
+        for risky in [
+            "mods/extra.jar",
+            "config/setup.ps1",
+            "run.bat",
+            "../evil.txt",
+        ] {
+            m.overrides[0].path = risky.into();
+            assert!(validate(&m).is_err(), "{risky}");
+        }
+
+        let mut m = parse(&example()).unwrap();
+        m.base = Some(PackBase {
+            download_url: "https://evil.example/pack.zip".into(),
+            ..pack()
+        });
+        assert!(validate(&m).is_err(), "download host allowlist");
+    }
+
+    #[test]
+    fn old_manifests_hash_the_same() {
+        let m = parse(&example()).unwrap();
+        let json = serde_json::to_value(&m).unwrap();
+        assert!(json.get("base").is_none());
+        assert!(json["overrides"][0].get("inPack").is_none());
+    }
+
     #[test]
     fn duplicates_differing_only_in_case_are_refused() {
         let mut m = parse(&example()).unwrap();
@@ -397,7 +590,11 @@ mod tests {
 
         let mut m = parse(&example()).unwrap();
         m.overrides[0].path = "config/run.bat".into();
-        assert!(validate(&m).is_err(), "only text configs");
+        assert!(validate(&m).is_err(), "no programs");
+
+        let mut m = parse(&example()).unwrap();
+        m.overrides[0].path = "kubejs/assets/atm/textures/logo.png".into();
+        assert!(validate(&m).is_ok(), "pictures next to scripts");
 
         let mut m = parse(&example()).unwrap();
         m.schema_version = 2;
@@ -409,12 +606,28 @@ mod tests {
 
     #[test]
     fn shareable_configs() {
-        assert!(is_shareable_config("config/sodium-options.json", 100));
-        assert!(is_shareable_config("kubejs/server_scripts/a.js", 100));
-        assert!(!is_shareable_config("config/big.json", 2 * 1024 * 1024));
-        assert!(!is_shareable_config("config/native.dll", 100));
-        assert!(!is_shareable_config("options.txt", 100));
-        assert!(!is_shareable_config("config/../options.txt", 100));
+        assert_eq!(upload_refusal("config/sodium-options.json", 100), None);
+        assert_eq!(upload_refusal("kubejs/server_scripts/a.js", 100), None);
+        assert_eq!(upload_refusal("config/fancymenu/assets/bg.png", 100), None);
+        assert_eq!(
+            upload_refusal("config/big.json", 9 * 1024 * 1024),
+            Some(Refusal::TooBig)
+        );
+        assert_eq!(
+            upload_refusal("config/native.dll", 100),
+            Some(Refusal::FileType)
+        );
+        assert_eq!(upload_refusal("options.txt", 100), Some(Refusal::Folder));
+        assert_eq!(
+            upload_refusal("config/../options.txt", 100),
+            Some(Refusal::Folder)
+        );
+        assert!(
+            can_come_from_pack("options.txt"),
+            "packs ship their own settings"
+        );
+        assert!(can_come_from_pack("fancymenu_data/menu.png"));
+        assert!(!can_come_from_pack("mods/extra.jar"));
     }
 
     #[test]

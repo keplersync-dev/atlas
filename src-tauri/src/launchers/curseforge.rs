@@ -67,6 +67,67 @@ struct Instance {
 #[serde(rename_all = "camelCase")]
 struct InstalledModpack {
     thumbnail_url: Option<String>,
+    #[serde(rename = "addonID")]
+    addon_id: Option<u64>,
+    name: Option<String>,
+    allow_mod_distribution: Option<bool>,
+    installed_file: Option<InstalledFile>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct InstalledFile {
+    id: Option<u64>,
+    download_url: Option<String>,
+    file_length: Option<u64>,
+    display_name: Option<String>,
+    file_name_on_disk: Option<String>,
+    #[serde(default)]
+    hashes: Vec<FileHash>,
+}
+
+#[derive(Deserialize)]
+struct FileHash {
+    /// 1 = sha1, 2 = md5.
+    #[serde(rename = "type")]
+    kind: u32,
+    value: String,
+}
+
+/// The modpack CurseForge installed the instance from, with its download. None when it
+/// wasn't from one, or the pack's author doesn't allow downloads outside CurseForge.
+pub fn installed_pack(instance_dir: &Path) -> Option<super::InstalledPack> {
+    let text = std::fs::read_to_string(instance_dir.join("minecraftinstance.json")).ok()?;
+    let i: Instance = serde_json::from_str(text.trim_start_matches('\u{feff}')).ok()?;
+    let pack = i.installed_modpack?;
+    if pack.allow_mod_distribution == Some(false) {
+        return None;
+    }
+    let file = pack.installed_file?;
+    let sha1 = file
+        .hashes
+        .iter()
+        .find(|h| h.kind == 1)
+        .map(|h| h.value.to_ascii_lowercase())?;
+    // The pack's own manifest has the version players know ("2.0.4").
+    let version_label = std::fs::read_to_string(instance_dir.join("manifest.json"))
+        .ok()
+        .and_then(|t| serde_json::from_str::<Value>(t.trim_start_matches('\u{feff}')).ok())
+        .and_then(|m| m["version"].as_str().map(str::to_owned))
+        .or(file.display_name)
+        .or(file.file_name_on_disk);
+    Some(super::InstalledPack::Known(
+        atlas_protocol::manifest::PackBase {
+            source: atlas_protocol::enums::ContentSource::Curseforge,
+            project_id: pack.addon_id?.to_string(),
+            version_id: file.id?.to_string(),
+            name: pack.name?.trim().to_owned(),
+            version_label,
+            download_url: file.download_url?,
+            sha1,
+            size_bytes: file.file_length?,
+        },
+    ))
 }
 
 #[derive(Deserialize)]

@@ -7,7 +7,7 @@ pub use atlas_protocol::api::{
     UpdatedItem,
 };
 
-use super::{ContentKind, ContentSource, Id, ManualDownload, ShareMode, Storage};
+use super::{ContentKind, ContentSource, Id, LeftOutReason, ManualDownload, ShareMode, Storage};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,6 +63,26 @@ pub struct ConfigGroup {
     pub shared: bool,
 }
 
+/// A config file that won't be shared as it is here, and why. Listed in the dialog
+/// before anything uploads.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeftOutFile {
+    pub path: String,
+    pub reason: LeftOutReason,
+}
+
+/// The modpack a share is based on: its own files come from its download.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PackInfo {
+    pub name: String,
+    pub version_label: Option<String>,
+    pub source: ContentSource,
+    /// Files shared from it rather than uploaded.
+    pub files: u32,
+}
+
 /// One file in the share/publish picker.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -95,6 +115,10 @@ pub struct PublishPlan {
     pub unchecked: u32,
     /// Config folders and loose config files, for choosing which are shared.
     pub configs: Vec<ConfigGroup>,
+    /// The modpack the instance is from, when its files can come from its download.
+    pub pack: Option<PackInfo>,
+    /// Config files that won't be shared as they are here.
+    pub left_out: Vec<LeftOutFile>,
     /// The launcher runs other Minecraft or loader versions than the shared ones: `from`
     /// is shared now, `to` is what this version will say. `automatic` is unused here.
     pub versions: Option<LauncherChange>,
