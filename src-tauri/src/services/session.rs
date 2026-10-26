@@ -1,7 +1,7 @@
 //! Signing in and the account. The server does the work; `Cloud` keeps the session.
 
 use reqwest::Method;
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::dto::{
@@ -105,6 +105,24 @@ pub async fn report_file(
         shared_instance_id: Some(shared),
     };
     report(state, input).await
+}
+
+/// Everything the server stores about this account, saved as JSON in Downloads and shown
+/// in Explorer. Returns where it went.
+pub async fn export_data<R: Runtime>(app: &AppHandle<R>, state: &AppState) -> AppResult<String> {
+    let data: serde_json::Value = state
+        .cloud
+        .call(Method::GET, "/me/export", None::<&()>)
+        .await?;
+    let dir = app
+        .path()
+        .download_dir()
+        .map_err(|_| AppError::unknown("Couldn't find your Downloads folder"))?;
+    let date = &crate::util::time::now_iso()[..10];
+    let file = dir.join(format!("Atlas data {date}.json"));
+    std::fs::write(&file, serde_json::to_vec_pretty(&data)?)?;
+    super::reveal(app, &file);
+    Ok(file.to_string_lossy().into_owned())
 }
 
 /// The Terms of Service or Privacy Policy, in the browser, from this Atlas's server.

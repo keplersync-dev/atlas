@@ -74,6 +74,7 @@
   let error = $state<string | null>(null);
   let busy = $state<string | null>(null);
   let attempt = 0;
+  let exported = $state<string | null>(null);
 
   // This PC's settings, which aren't part of the account.
   let pc = $state<AppSettings | null>(null);
@@ -312,6 +313,24 @@
         onchange={(next) =>
           act("offline", () => social.updateProfile({ appearOffline: next }))}
       />
+    </div>
+    <div class="mt-3 flex items-center gap-3">
+      <div class="flex-1">
+        <b class="block font-medium">Your data</b>
+        <small class="text-[11.5px] text-(--text-faint)"
+          >{exported
+            ? `Saved to ${exported}`
+            : "A copy of everything Atlas stores about you, as a file."}</small
+        >
+      </div>
+      <Button
+        size="sm"
+        disabled={busy !== null}
+        onclick={() =>
+          act("export", async () => {
+            exported = await api.exportMyData();
+          })}>{busy === "export" ? "Saving…" : "Download"}</Button
+      >
     </div>
 
     <!-- ── This PC: saves the moment you flip it, like Privacy ── -->

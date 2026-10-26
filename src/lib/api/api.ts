@@ -212,6 +212,8 @@ export interface AtlasApi {
   ): Promise<void>;
   /** Opens the Terms of Service or Privacy Policy in the browser. */
   openLegalPage(page: "terms" | "privacy"): Promise<void>;
+  /** Everything the server stores about this account, saved as JSON in Downloads (shown in Explorer). Returns the file's path. */
+  exportMyData(): Promise<string>;
 
   // ── This PC ──────────────────────────────────────────────────────────
   getAppSettings(): Promise<AppSettings>;

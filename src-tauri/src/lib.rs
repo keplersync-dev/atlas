@@ -57,6 +57,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::session::report,
         commands::session::report_file,
         commands::session::open_legal_page,
+        commands::session::export_my_data,
         commands::app::get_app_settings,
         commands::app::update_app_settings,
         commands::app::window_ready,

@@ -63,6 +63,15 @@ pub async fn report(state: State<'_, AppState>, input: NewReport) -> AppResult<(
     session::report(&state, input).await
 }
 
+/// Everything the server stores about this account, saved in Downloads. Returns the path.
+#[tauri::command]
+pub async fn export_my_data<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+) -> AppResult<String> {
+    session::export_data(&app, &state).await
+}
+
 /// "terms" or "privacy", from this Atlas's server, in the browser.
 #[tauri::command]
 pub async fn open_legal_page<R: Runtime>(
