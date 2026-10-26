@@ -7,6 +7,8 @@
   import ContentIcon from "../ContentIcon.svelte";
   import Button from "../Button.svelte";
   import Dialog from "../Dialog.svelte";
+  import ConfigPicker from "./ConfigPicker.svelte";
+  import RightsCheck from "./RightsCheck.svelte";
   import SharePicker, {
     differences,
     uploadBytes,
@@ -24,6 +26,7 @@
 
   let modes = $state<Record<Id, ShareMode>>({}); // only what the user changes here
   let rights = $state(false);
+  let configExclude = $state<string[] | null>(null);
   let changelog = $state("");
   let submitting = $state(false);
   let error = $state<string | null>(null);
@@ -73,6 +76,7 @@
         changelog: changelog.trim() || null,
         shareModes: modes,
         confirmedUploadRights: rights,
+        configExclude: configExclude ?? undefined,
       });
       await instances.load();
       onclose();
@@ -148,10 +152,10 @@
       storage={plan.data.storage}
       firstShare={false}
       bind:modes
-      bind:rights
       unchecked={plan.data.unchecked}
       onrecheck={plan.reload}
     />
+    <ConfigPicker configs={plan.data.configs} bind:excluded={configExclude} />
 
     <h3 class="mt-4 mb-1.5 text-xs font-semibold text-(--text-muted)">
       What changed? <span class="font-normal text-(--text-faint)"
@@ -168,16 +172,18 @@
   {/if}
 
   {#snippet footer()}
-    {#if submitting && work}
+    {#if needsRights}
+      <RightsCheck
+        bind:checked={rights}
+        note={submitting && work ? workLabel(work) : error}
+        tone={submitting && work ? "muted" : "danger"}
+      />
+    {:else if submitting && work}
       <span class="mr-auto text-xs text-(--text-muted) tabular-nums"
         >{workLabel(work)}</span
       >
     {:else if error}
       <span class="mr-auto text-xs text-(--danger)" role="alert">{error}</span>
-    {:else if needsRights && !rights}
-      <span class="mr-auto text-xs text-(--warn)"
-        >Confirm you can share the uploaded files</span
-      >
     {:else if plan.data && total}
       <span class="mr-auto text-xs text-(--text-faint)"
         >{plural(total, "change")}</span

@@ -47,6 +47,20 @@ pub struct SyncPreview {
     pub launcher_change: Option<LauncherChange>,
     pub game_running: bool,
     pub new_optional: Vec<OptionalItem>,
+    /// Files this update brings that aren't from Modrinth or CurseForge: someone uploaded
+    /// them, and nobody has checked what's inside.
+    pub unverified: Vec<String>,
+}
+
+/// A config folder directly under config/ (usually one per mod) or a loose config file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConfigGroup {
+    /// "config/create/" (a folder) or "config/a.json" (a file).
+    pub key: String,
+    pub files: u32,
+    pub size_bytes: u64,
+    pub shared: bool,
 }
 
 /// One file in the share/publish picker.
@@ -79,6 +93,8 @@ pub struct PublishPlan {
     /// Files Modrinth or CurseForge couldn't be asked about (unreachable). They count as
     /// uploads.
     pub unchecked: u32,
+    /// Config folders and loose config files, for choosing which are shared.
+    pub configs: Vec<ConfigGroup>,
     /// The launcher runs other Minecraft or loader versions than the shared ones: `from`
     /// is shared now, `to` is what this version will say. `automatic` is unused here.
     pub versions: Option<LauncherChange>,

@@ -225,6 +225,16 @@
       </div>
     {/if}
 
+    {#if preview.unverified.length}
+      <div class="mb-5.5 rounded-lg bg-(--warn)/10 px-4 py-3 text-[12.5px]">
+        <b class="font-semibold text-(--warn)"
+          >Unverified: not from Modrinth or CurseForge.</b
+        >
+        {preview.unverified.join(", ")} were uploaded by a member. Mods are code:
+        only update if you trust whoever shared them.
+      </div>
+    {/if}
+
     {#each preview.configConflicts as conflict (conflict.path)}
       {@const choice = choices[conflict.path] ?? "theirs"}
       <div class="mb-5.5 rounded-lg bg-(--warn)/10 px-4 py-3.5">

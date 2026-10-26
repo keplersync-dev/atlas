@@ -57,7 +57,7 @@
     storage,
     firstShare,
     modes = $bindable({}),
-    rights = $bindable(false),
+
     unchecked = 0,
     onrecheck,
   }: {
@@ -66,7 +66,7 @@
     /** First share: everything is new, so there's no New/All filter. */
     firstShare: boolean;
     modes: Record<Id, ShareMode>;
-    rights: boolean;
+
     /** Files Modrinth or CurseForge couldn't be asked about; they count as uploads. */
     unchecked?: number;
     onrecheck?: () => void;
@@ -195,14 +195,6 @@
         )} per-file limit.
       </p>
     {/if}
-    <label class="mt-2.5 flex cursor-pointer items-start gap-2.5 text-[12.5px]">
-      <input
-        type="checkbox"
-        bind:checked={rights}
-        class="mt-0.5 accent-(--accent)"
-      />
-      <span>I made these files or have permission to share them.</span>
-    </label>
   </div>
 {/if}
 

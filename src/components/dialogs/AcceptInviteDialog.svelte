@@ -295,6 +295,15 @@
     {/if}
 
     <OptionalPicker items={invite.optionalItems} bind:selected={optional} />
+    {#if invite.uploadedFiles?.length}
+      <div class="mt-3 rounded-lg bg-(--warn)/10 px-4 py-3 text-[12.5px]">
+        <b class="font-semibold text-(--warn)"
+          >Unverified: not from Modrinth or CurseForge.</b
+        >
+        {invite.uploadedFiles.join(", ")} were uploaded by a member. Mods are code:
+        only accept if you trust whoever shared them.
+      </div>
+    {/if}
   {/if}
 
   {#snippet footer()}

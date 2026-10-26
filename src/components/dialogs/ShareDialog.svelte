@@ -8,6 +8,8 @@
   import ContentIcon from "../ContentIcon.svelte";
   import Dialog from "../Dialog.svelte";
   import Head from "../Head.svelte";
+  import ConfigPicker from "./ConfigPicker.svelte";
+  import RightsCheck from "./RightsCheck.svelte";
   import SharePicker, { uploadBytes, uploadsOf } from "./SharePicker.svelte";
 
   // "share": first share of an instance that's only on this PC (creates revision 1).
@@ -48,6 +50,7 @@
   // Share setting per file the user changed here; everything else starts "required".
   let modes = $state<Record<Id, ShareMode>>({});
   let rights = $state(false);
+  let configExclude = $state<string[] | null>(null);
   let submitting = $state(false);
   let error = $state<string | null>(null);
 
@@ -102,6 +105,7 @@
           role,
           shareModes: modes,
           confirmedUploadRights: rights,
+          configExclude: configExclude ?? undefined,
         });
       } else if (sharedId) {
         await api.inviteToSharedInstance(sharedId, {
@@ -270,24 +274,30 @@
           storage={plan.data.storage}
           firstShare
           bind:modes
-          bind:rights
           unchecked={plan.data.unchecked}
           onrecheck={plan.reload}
+        />
+        <ConfigPicker
+          configs={plan.data.configs}
+          bind:excluded={configExclude}
         />
       {/if}
     {/if}
   {/if}
 
   {#snippet footer()}
-    {#if submitting && work}<span
+    {#if mode === "share" && needsRights}
+      <RightsCheck
+        bind:checked={rights}
+        note={submitting && work ? workLabel(work) : error}
+        tone={submitting && work ? "muted" : "danger"}
+      />
+    {:else if submitting && work}<span
         class="mr-auto text-xs text-(--text-muted) tabular-nums"
         >{workLabel(work)}</span
       >{:else if error}<span
         class="mr-auto text-xs text-(--danger)"
         role="alert">{error}</span
-      >{:else if mode === "share" && needsRights && !rights}<span
-        class="mr-auto text-xs text-(--warn)"
-        >Confirm you can share the uploaded files</span
       >{/if}
     <Button variant="ghost" onclick={onclose}>Cancel</Button>
     <Button type="submit" variant="primary" disabled={!canSubmit}>

@@ -200,6 +200,10 @@ pub struct SharedInstance {
     #[serde(default)]
     pub local_instance_id: Option<Id>,
     pub optional_items: Vec<OptionalItem>,
+    /// Files in the latest version that aren't from Modrinth or CurseForge: someone
+    /// uploaded them, and nobody has checked what's inside.
+    #[serde(default)]
+    pub uploaded_files: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -469,6 +473,9 @@ pub struct NewUpload {
     pub size_bytes: u64,
     /// For display only.
     pub file_name: String,
+    /// The uploader confirmed they made it or may share it (the share dialog's checkbox).
+    #[serde(default)]
+    pub rights_confirmed: bool,
 }
 
 /// Either the server has the file already, or `url` is a presigned PUT for its bytes,

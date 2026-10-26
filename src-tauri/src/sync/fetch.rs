@@ -166,7 +166,7 @@ pub async fn download(
             .ok()
             .and_then(|u| u.host_str().map(str::to_owned))
             .unwrap_or_default();
-        tracing::warn!(error = %e, %host, "download failed");
+        tracing::warn!(error = %e.without_url(), %host, "download failed");
         download_failed()
     };
     std::fs::create_dir_all(target.parent().expect("cache files have a parent"))?;

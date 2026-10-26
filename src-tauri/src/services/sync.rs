@@ -8,7 +8,8 @@ use tauri::{AppHandle, Runtime};
 
 use crate::db::{self, instances::InstanceRow};
 use crate::dto::{
-    BackupReason, ConfigConflict, InstanceSyncInfo, MemberRole, SyncOptions, SyncPreview, SyncStage,
+    BackupReason, ConfigConflict, ContentSource, InstanceSyncInfo, MemberRole, SyncOptions,
+    SyncPreview, SyncStage,
 };
 use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
@@ -98,7 +99,11 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
 
     let mut download_bytes = 0;
     let mut manual = Vec::new();
+    let mut unverified = Vec::new();
     for (e, local) in plan.places() {
+        if e.source == ContentSource::Upload {
+            unverified.push(e.name.clone());
+        }
         match fetch::route(&state.paths, &src, &game_dir, e, local) {
             Route::Cached | Route::Local(_) => {}
             Route::Manual(m) => manual.push(m),
@@ -142,6 +147,7 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
         launcher_change: prism_versions::change(&row, &target),
         game_running: state.is_running(id),
         new_optional: plan.new_optional,
+        unverified,
     })
 }
 

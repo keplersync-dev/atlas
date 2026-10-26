@@ -44,7 +44,8 @@ pub struct ManualDownload {
 
 /// What Atlas is doing to an instance outside an update, so it doesn't look stuck:
 /// reading its files after it's tracked, or uploading files and saving a version while
-/// sharing. `done` of `total` files (both 0 for `Saving`).
+/// sharing. `done` of `total`: files while reading, bytes while uploading, both 0 for
+/// `Saving`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Work {

@@ -61,6 +61,9 @@ pub struct ShareInstanceInput {
     /// Setting per PublishItem.contentId. Missing = keep the item's current shareMode.
     pub share_modes: HashMap<Id, ShareMode>,
     pub confirmed_upload_rights: bool,
+    /// ConfigGroup keys not to share, saved for later publishes. Missing = keep the saved ones.
+    #[serde(default)]
+    pub config_exclude: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -69,6 +72,9 @@ pub struct PublishInput {
     pub changelog: Option<String>,
     pub share_modes: HashMap<Id, ShareMode>,
     pub confirmed_upload_rights: bool,
+    /// As in ShareInstanceInput.
+    #[serde(default)]
+    pub config_exclude: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

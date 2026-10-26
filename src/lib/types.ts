@@ -253,7 +253,7 @@ export interface ManualDownload {
 /**
  * What Atlas is doing to an instance outside an update, so it doesn't look stuck:
  * reading its files after it's tracked, or uploading and saving while sharing.
- * `done` of `total` files (both 0 while saving).
+ * `done` of `total`: files while reading, bytes while uploading, both 0 while saving.
  */
 export interface InstanceWork {
   stage: "reading" | "uploading" | "saving";
@@ -412,6 +412,8 @@ export interface SharedInstance {
   localInstanceId: Id | null;
   /** Optional items in the latest version — what a friend can choose to download. */
   optionalItems: OptionalItem[];
+  /** Files in the latest version that aren't from Modrinth or CurseForge: someone uploaded them, and nobody has checked what's inside. */
+  uploadedFiles: string[];
 }
 
 /** An optional file a friend can choose to download. */
@@ -463,6 +465,8 @@ export interface SyncPreview {
   gameRunning: boolean;
   /** Optional items that are new in this update. Offered unticked; pass the chosen keys to syncInstance. */
   newOptional: OptionalItem[];
+  /** Files this update brings that aren't from Modrinth or CurseForge: someone uploaded them, and nobody has checked what's inside. */
+  unverified: string[];
 }
 
 /** One file in the share/publish picker. */
@@ -498,6 +502,8 @@ export interface PublishPlan {
   storage: { usedBytes: number; quotaBytes: number; maxFileBytes: number };
   /** Files Modrinth or CurseForge couldn't be asked about (unreachable). They count as uploads. */
   unchecked: number;
+  /** Config folders and loose config files, for choosing which are shared. */
+  configs: ConfigGroup[];
   /**
    * The launcher runs other Minecraft or loader versions than the shared ones: `from` is
    * shared now, `to` is what this version will say. null when they match.
@@ -610,6 +616,8 @@ export interface ShareInstanceInput {
   shareModes: Record<Id, ShareMode>;
   /** User ticked "I have the right to share these files". Required when any needsUpload item isn't "private". */
   confirmedUploadRights: boolean;
+  /** ConfigGroup keys not to share, saved for later publishes. Missing = keep the saved ones. */
+  configExclude?: string[];
 }
 
 export interface PublishInput {
@@ -617,6 +625,16 @@ export interface PublishInput {
   /** Setting per PublishItem.contentId. Missing = keep the item's current shareMode. */
   shareModes: Record<Id, ShareMode>;
   confirmedUploadRights: boolean;
+  configExclude?: string[];
+}
+
+/** A config folder directly under config/ (usually one per mod) or a loose config file. */
+export interface ConfigGroup {
+  /** "config/create/" (a folder) or "config/a.json" (a file). */
+  key: string;
+  files: number;
+  sizeBytes: number;
+  shared: boolean;
 }
 
 export interface CreateGroupInviteInput {

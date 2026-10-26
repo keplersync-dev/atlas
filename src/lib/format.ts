@@ -75,7 +75,8 @@ export function workLabel(w: InstanceWork): string {
     case "reading":
       return `Reading files… ${w.done} of ${w.total}`;
     case "uploading":
-      return `Uploading ${w.done} of ${plural(w.total, "file")}…`;
+      // Counted in bytes, so it moves within a big file too.
+      return `Uploading ${fileSize(w.done)} of ${fileSize(w.total)}…`;
     case "saving":
       return "Saving the new version…";
   }

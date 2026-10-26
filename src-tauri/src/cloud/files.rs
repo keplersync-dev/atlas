@@ -10,6 +10,9 @@ use reqwest::{Method, StatusCode};
 use super::{Cloud, server_error};
 use crate::error::{AppError, AppResult, ErrorCode};
 
+/// Uploads go out in pieces this big, so progress moves within a big file.
+const UPLOAD_CHUNK: usize = 256 * 1024;
+
 impl Cloud {
     /// Which of these files the server already stores.
     pub async fn stored(&self, sha256: Vec<String>) -> AppResult<Vec<String>> {
@@ -23,11 +26,22 @@ impl Cloud {
     }
 
     /// Upload one file unless the server has it already. `name` is shown in errors.
-    pub async fn upload(&self, file: &Path, sha256: &str, size: u64, name: &str) -> AppResult<()> {
+    /// Upload a file to storage unless the server has it already. `on_bytes` hears how
+    /// many more bytes went out, as they go.
+    pub async fn upload(
+        &self,
+        file: &Path,
+        sha256: &str,
+        size: u64,
+        name: &str,
+        rights_confirmed: bool,
+        on_bytes: impl Fn(u64) + Send + Sync + 'static,
+    ) -> AppResult<()> {
         let request = NewUpload {
             sha256: sha256.to_owned(),
             size_bytes: size,
             file_name: name.to_owned(),
+            rights_confirmed,
         };
         let ticket: UploadTicket = self.call(Method::POST, "/uploads", Some(&request)).await?;
         if ticket.already_exists {
@@ -42,7 +56,23 @@ impl Cloud {
             tracing::warn!(file = %file.display(), error = %e, "couldn't read a file to upload");
             AppError::conflict(format!("Couldn't read {name}"))
         })?;
-        let put = self.blob_http.put(&url).body(bytes).send().await;
+        // Always say the size: without it an empty file goes out with none, and storage
+        // refuses it (411 Length Required).
+        let length = bytes.len();
+        let chunks: Vec<Vec<u8>> = bytes.chunks(UPLOAD_CHUNK).map(<[u8]>::to_vec).collect();
+        let body = reqwest::Body::wrap_stream(futures_util::stream::iter(chunks.into_iter().map(
+            move |chunk| {
+                on_bytes(chunk.len() as u64);
+                Ok::<_, std::io::Error>(chunk)
+            },
+        )));
+        let put = self
+            .blob_http
+            .put(&url)
+            .header(reqwest::header::CONTENT_LENGTH, length)
+            .body(body)
+            .send()
+            .await;
         match put {
             Ok(res) if res.status().is_success() => {}
             Ok(res) => {
@@ -50,7 +80,8 @@ impl Cloud {
                 return Err(AppError::unknown(format!("Uploading {name} didn't work")));
             }
             Err(e) => {
-                tracing::warn!(error = %e, "upload failed");
+                // The URL is presigned: keep it out of the log.
+                tracing::warn!(error = %e.without_url(), "upload failed");
                 return Err(AppError::offline());
             }
         }
