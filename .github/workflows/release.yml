@@ -53,3 +53,4 @@ jobs:
           releaseName: Atlas ${{ github.ref_name }}
           releaseDraft: true
           includeUpdaterJson: true
+          args: --config src-tauri/tauri.release.conf.json
