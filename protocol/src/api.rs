@@ -572,6 +572,9 @@ pub struct ActivityItem {
     pub group_id: Option<Id>,
     pub group_name: Option<String>,
     pub revision: Option<u32>,
+    /// `role_changed`: the role they have now.
+    #[serde(default)]
+    pub role: Option<MemberRole>,
 }
 
 /// `POST /notifications/read`: these ids, or everything.

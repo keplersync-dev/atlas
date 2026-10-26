@@ -28,7 +28,14 @@ enum End {
     Lost,
     /// The server ended this session: stay signed out.
     Revoked,
+    /// Refused: this account has too many open (other PCs, or copies of Atlas).
+    TooMany,
 }
+
+/// The server's close code for too many open sockets.
+const TOO_MANY_CONNECTIONS: u16 = 4008;
+/// How long to wait before trying again after that.
+const TOO_MANY_WAIT: Duration = Duration::from_secs(5 * 60);
 
 impl Cloud {
     /// Start the socket if signed in and it isn't running already.
@@ -79,6 +86,12 @@ impl Cloud {
                             return;
                         }
                         End::Lost => tracing::info!("connection to the Atlas server lost"),
+                        End::TooMany => {
+                            tracing::info!("too many connections for this account; waiting");
+                            self.set_online(false);
+                            tokio::time::sleep(TOO_MANY_WAIT).await;
+                            continue;
+                        }
                     }
                 }
                 // Retrying won't help until Atlas is updated.
@@ -148,6 +161,11 @@ impl Cloud {
                 incoming = stream.next() => {
                     let text = match incoming {
                         Some(Ok(Message::Text(text))) => text,
+                        Some(Ok(Message::Close(Some(frame))))
+                            if u16::from(frame.code) == TOO_MANY_CONNECTIONS =>
+                        {
+                            return End::TooMany;
+                        }
                         Some(Ok(Message::Close(_))) | None | Some(Err(_)) => return End::Lost,
                         Some(Ok(_)) => continue,
                     };

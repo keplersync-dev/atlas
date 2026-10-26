@@ -37,6 +37,18 @@ class SocialStore {
   );
 
   async load() {
+    try {
+      await this.loadNow();
+    } catch (err) {
+      // Show the sign-in buttons rather than nothing at all.
+      console.error("couldn't load the account", err);
+      this.session ??= { user: null, online: false };
+    } finally {
+      this.loaded = true;
+    }
+  }
+
+  private async loadNow() {
     this.session = await api.getSession();
     if (!this.session.user) {
       this.friends = [];
@@ -62,7 +74,6 @@ class SocialStore {
       if (groups.status === "fulfilled") this.groups = groups.value;
       if (activity.status === "fulfilled") this.activity = activity.value;
     }
-    this.loaded = true;
   }
 
   /** Opens the browser. Calling it again while waiting starts over. Failures go in

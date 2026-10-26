@@ -10,6 +10,7 @@
     "member_left",
     "ownership_transferred",
     "instance_frozen",
+    "role_changed",
   ]);
 
   /** One event as a sentence in three parts, so the names can be bold. `me` is the
@@ -56,6 +57,13 @@
           verb: "",
           what,
           tail: " was frozen: the owner left",
+        };
+      case "role_changed":
+        return {
+          who,
+          verb: `made you ${a.role === "editor" ? "an editor" : a.role === "owner" ? "the owner" : "a viewer"} of`,
+          what,
+          tail: "",
         };
       default:
         return { who, verb: "", what, tail: "" };

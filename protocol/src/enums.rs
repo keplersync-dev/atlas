@@ -103,6 +103,7 @@ wire_enum!(ActivityType {
     OwnershipTransferred,
     InstanceFrozen,
     GroupJoined,
+    RoleChanged,
 });
 
 wire_enum!(

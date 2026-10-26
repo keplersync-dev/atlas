@@ -526,7 +526,8 @@ export type ActivityType =
   | "member_left"
   | "ownership_transferred"
   | "instance_frozen"
-  | "group_joined";
+  | "group_joined"
+  | "role_changed";
 
 export interface ActivityItem {
   id: Id;
@@ -540,6 +541,8 @@ export interface ActivityItem {
   groupId: Id | null;
   groupName: string | null;
   revision: number | null;
+  /** `role_changed`: the role they have now. */
+  role?: MemberRole | null;
 }
 
 // ── Real-time events ───────────────────────────────────────────────────

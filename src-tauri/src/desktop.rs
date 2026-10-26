@@ -196,8 +196,21 @@ fn describe(a: &ActivityItem, me: Option<&str>) -> (String, String) {
             format!("{what} was frozen: the owner left"),
         ),
         ActivityType::GroupJoined => ("New group member", format!("{who} joined {group}")),
+        ActivityType::RoleChanged => (
+            "New role",
+            format!("{who} made you {} of {what}", role_phrase(a.role)),
+        ),
     };
     (title.to_owned(), body)
+}
+
+/// "an editor", "a viewer": what someone was made in `role_changed`.
+fn role_phrase(role: Option<crate::dto::MemberRole>) -> &'static str {
+    match role {
+        Some(crate::dto::MemberRole::Editor) => "an editor",
+        Some(crate::dto::MemberRole::Owner) => "the owner",
+        _ => "a viewer",
+    }
 }
 
 /// The tray and startup settings. Starting with Windows is Windows' own list of apps to
@@ -267,6 +280,7 @@ mod tests {
             group_id: None,
             group_name: None,
             revision: Some(4),
+            role: None,
         }
     }
 
@@ -298,6 +312,12 @@ mod tests {
             describe(&owner, Some("u")).1,
             "You now own SkyFactory 4 fixed",
             "to the new owner themselves"
+        );
+        let mut role = item(ActivityType::RoleChanged);
+        role.role = Some(crate::dto::MemberRole::Editor);
+        assert_eq!(
+            describe(&role, None).1,
+            "dakep made you an editor of SkyFactory 4 fixed"
         );
     }
 }
