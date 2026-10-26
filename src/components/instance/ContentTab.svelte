@@ -182,8 +182,8 @@
   }
 </script>
 
-<div class="mt-4 mb-1.5 flex items-center gap-2.5">
-  <div class="flex gap-1">
+<div class="mt-4 mb-1.5 flex flex-wrap items-center gap-2.5">
+  <div class="flex flex-wrap gap-1">
     {#each [{ id: "all" as const, label: "All", count: instance.content.length }, ...chips] as chip (chip.id)}
       <button
         aria-pressed={kind === chip.id}
@@ -199,7 +199,7 @@
   </div>
 
   <label
-    class="ml-auto flex h-7.5 w-56 items-center gap-2 rounded-md bg-(--bg-raise) px-2.5 text-(--text-faint)"
+    class="ml-auto flex h-7.5 w-56 max-w-full items-center gap-2 rounded-md bg-(--bg-raise) px-2.5 text-(--text-faint)"
   >
     <Icon name="search" class="size-3.5" />
     <!-- bind:value keeps `query` and the input in sync both ways -->
@@ -230,8 +230,8 @@
     <div
       class="grid items-center gap-3.5 rounded-md px-2 py-2.25 hover:bg-(--bg-hover)
         {canSetModes
-        ? 'grid-cols-[28px_minmax(0,1fr)_110px_auto_36px]'
-        : 'grid-cols-[28px_minmax(0,1fr)_150px_130px_36px]'}"
+        ? 'grid-cols-[28px_minmax(0,1fr)_minmax(0,110px)_auto_36px]'
+        : 'grid-cols-[28px_minmax(0,1fr)_minmax(0,150px)_minmax(0,130px)_36px]'}"
     >
       <ContentIcon
         src={item.iconUrl}
@@ -298,10 +298,10 @@
       {:else}
         <span
           title={SOURCES[item.source].hint}
-          class="flex items-center gap-1.5 text-[11.5px] text-(--text-muted)"
+          class="flex min-w-0 items-center gap-1.5 text-[11.5px] text-(--text-muted)"
         >
-          <i class="size-1.5 rounded-xs {SOURCES[item.source].dot}"
-          ></i>{SOURCES[item.source].label}
+          <i class="size-1.5 shrink-0 rounded-xs {SOURCES[item.source].dot}"
+          ></i><span class="truncate">{SOURCES[item.source].label}</span>
         </span>
       {/if}
 

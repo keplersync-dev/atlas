@@ -33,7 +33,9 @@
 <div class="grid h-screen grid-rows-[auto_1fr]">
   <TitleBar />
 
-  <div class="grid min-h-0 grid-cols-[236px_1fr]">
+  <!-- minmax(0, …): the page column shrinks with the window instead of growing to fit
+       its widest content (bigger Windows text sizes) and getting cut off. -->
+  <div class="grid min-h-0 grid-cols-[236px_minmax(0,1fr)]">
     <Sidebar />
 
     <div class="flex min-h-0 flex-col">
