@@ -19,6 +19,7 @@ use crate::dto::ContentSource;
 use crate::error::{AppError, AppResult};
 use crate::launchers::{self, InstalledPack};
 use crate::state::{AppPaths, AppState};
+use crate::util::ids::new_id;
 
 /// One of the pack's own files.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -239,7 +240,7 @@ pub async fn extract(
             }
             let target = fetch::blob_file(&paths, &o.sha256);
             std::fs::create_dir_all(target.parent().expect("has a parent"))?;
-            let tmp = target.with_extension("part");
+            let tmp = target.with_extension(format!("{}.part", new_id()));
             std::fs::File::create(&tmp)?.write_all(&bytes)?;
             std::fs::rename(&tmp, &target)?;
         }

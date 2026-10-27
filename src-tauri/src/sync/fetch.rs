@@ -16,6 +16,7 @@ use crate::dto::{ContentSource, ManualDownload};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::scan::hash::hash_file;
 use crate::state::AppPaths;
+use crate::util::ids::new_id;
 
 /// A download gives up when no bytes arrive for this long.
 pub const STALL: Duration = Duration::from_secs(30);
@@ -99,7 +100,7 @@ fn admit(from: &Path, to: &Path, sha1: Option<&str>, sha256: Option<&str>) -> Ap
         )));
     }
     std::fs::create_dir_all(to.parent().expect("cache files have a parent"))?;
-    let tmp = to.with_extension("part");
+    let tmp = to.with_extension(format!("{}.part", new_id()));
     std::fs::copy(from, &tmp)?;
     std::fs::rename(&tmp, to)?;
     Ok(())
@@ -175,7 +176,8 @@ pub async fn download(
         download_failed()
     };
     std::fs::create_dir_all(target.parent().expect("cache files have a parent"))?;
-    let tmp = target.with_extension("download");
+    // Unique: another instance's job may be fetching the same file right now.
+    let tmp = target.with_extension(format!("{}.download", new_id()));
     let stalled = || {
         tracing::warn!("download stalled");
         download_failed()
