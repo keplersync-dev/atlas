@@ -207,6 +207,8 @@ const DOWNLOAD_HOSTS: [&str; 3] = [
     "edge.forgecdn.net",
     "mediafilez.forgecdn.net",
 ];
+/// Where a file's page may be: Atlas opens it in the browser for hand downloads.
+const PAGE_HOSTS: [&str; 2] = ["modrinth.com", "www.curseforge.com"];
 
 /// Why a manifest was refused, as a sentence players can read.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -276,6 +278,11 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
                 "{} downloads from a site Atlas doesn't allow.",
                 e.path
             ));
+        }
+        if let Some(url) = &e.page_url
+            && !allowed_page(url)
+        {
+            return bad(format!("{} links to a site Atlas doesn't allow.", e.path));
         }
         if !seen.insert(e.path.to_lowercase()) {
             return bad(format!("{} is in it twice.", e.path));
@@ -403,11 +410,21 @@ fn is_hex(s: &str, len: usize) -> bool {
 
 /// A download link a manifest may carry: https on Modrinth's or CurseForge's CDN.
 pub fn allowed_download(url: &str) -> bool {
+    https_on(url, &DOWNLOAD_HOSTS)
+}
+
+/// A page link a manifest may carry: https on Modrinth or CurseForge. Anything else could
+/// make Windows run a program when it's opened.
+pub fn allowed_page(url: &str) -> bool {
+    https_on(url, &PAGE_HOSTS)
+}
+
+fn https_on(url: &str, hosts: &[&str]) -> bool {
     let Some(rest) = url.strip_prefix("https://") else {
         return false;
     };
-    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
-    DOWNLOAD_HOSTS.contains(&host)
+    let host = rest.split(['/', '\\', '?', '#']).next().unwrap_or("");
+    hosts.contains(&host)
 }
 
 // ── Canonical hash ─────────────────────────────────────────────────────
@@ -515,6 +532,26 @@ mod tests {
             assert!(with_path(p).is_err(), "{p:?} should be refused");
         }
         assert!(with_path("mods/sub/ok.jar").is_ok());
+    }
+
+    #[test]
+    fn page_links_only_go_to_mod_sites() {
+        let with_page = |url: &str| {
+            let mut m = parse(&example()).unwrap();
+            m.content[0].page_url = Some(url.into());
+            validate(&m)
+        };
+        for url in [
+            "file://server/share/setup.exe",
+            "ms-settings:",
+            "http://www.curseforge.com/minecraft/mc-mods/x/files/1",
+            "https://www.curseforge.com.evil.example/x",
+            "https://www.curseforge.com@evil.example/x",
+        ] {
+            assert!(with_page(url).is_err(), "{url}");
+        }
+        assert!(with_page("https://www.curseforge.com/minecraft/mc-mods/x/files/1").is_ok());
+        assert!(with_page("https://modrinth.com/mod/sodium").is_ok());
         assert!(with_path("MODS/Upper.JAR").is_ok());
     }
 

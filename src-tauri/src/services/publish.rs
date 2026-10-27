@@ -679,7 +679,10 @@ fn build(
             sha256: r.sha256.clone(),
             size_bytes: r.size_bytes.max(0) as u64,
             download_url: r.download_url.clone().filter(|_| !upload),
-            page_url: r.page_url.clone().filter(|_| !upload),
+            page_url: r
+                .page_url
+                .clone()
+                .filter(|u| !upload && manifest::allowed_page(u)),
             side: from_wire(&r.side).unwrap_or(Side::Both),
             required: mode == ShareMode::Required,
         });

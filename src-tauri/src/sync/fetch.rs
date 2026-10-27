@@ -64,16 +64,19 @@ pub fn route(
         return Route::Download(url.clone());
     }
     match (entry.source, &entry.page_url) {
-        (ContentSource::Curseforge, Some(page)) => Route::Manual(ManualDownload {
-            content_name: entry.name.clone(),
-            file_name: entry
-                .path
-                .rsplit('/')
-                .next()
-                .unwrap_or(&entry.path)
-                .to_string(),
-            page_url: direct_download(page),
-        }),
+        // Checked again here: a synced manifest saved before the check came in isn't re-validated.
+        (ContentSource::Curseforge, Some(page)) if super::manifest::allowed_page(page) => {
+            Route::Manual(ManualDownload {
+                content_name: entry.name.clone(),
+                file_name: entry
+                    .path
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or(&entry.path)
+                    .to_string(),
+                page_url: direct_download(page),
+            })
+        }
         (ContentSource::Upload, _) if source.server_id().is_some() => Route::Blob,
         (ContentSource::Upload, _) => Route::Unavailable(format!(
             "{} was uploaded to Atlas, but this instance isn't linked to the server",
