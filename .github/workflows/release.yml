@@ -42,6 +42,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Test
+        run: |
+          cargo test --manifest-path protocol/Cargo.toml
+          cargo test --manifest-path src-tauri/Cargo.toml
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
