@@ -189,7 +189,7 @@ fn read_index(pack: &Path, source: ContentSource) -> AppResult<PackIndex> {
             if !super::manifest::can_come_from_pack(rel) {
                 continue;
             }
-            let mut bytes = Vec::with_capacity(file.size() as usize);
+            let mut bytes = Vec::new();
             file.read_to_end(&mut bytes)?;
             index.insert(
                 rel.to_owned(),
@@ -255,7 +255,7 @@ fn open(pack: &Path) -> AppResult<zip::ZipArchive<std::fs::File>> {
 
 fn read_entry(zip: &mut zip::ZipArchive<std::fs::File>, name: &str) -> AppResult<Vec<u8>> {
     let mut file = zip.by_name(name).map_err(damaged)?;
-    let mut bytes = Vec::with_capacity(file.size() as usize);
+    let mut bytes = Vec::new(); // not sized from the header: a damaged zip can claim anything
     file.read_to_end(&mut bytes)?;
     Ok(bytes)
 }
