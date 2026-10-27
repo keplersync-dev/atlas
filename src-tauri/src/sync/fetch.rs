@@ -272,11 +272,20 @@ pub fn pick_up_manual_downloads(paths: &AppPaths, wanted: &[&Entry], since: Syst
         if !meta.is_file() || !recent {
             continue;
         }
-        // Cheap check first: only hash files of a size we're waiting for.
-        let Some(e) = wanted
-            .iter()
-            .find(|e| e.size_bytes == meta.len() && !cache_file(paths, &e.sha1).is_file())
-        else {
+        // Cheap check first: only hash files of a size we're waiting for. Several wanted
+        // files can share a size, so the hash picks which one this is.
+        let same_size = || {
+            wanted
+                .iter()
+                .filter(|e| e.size_bytes == meta.len() && !cache_file(paths, &e.sha1).is_file())
+        };
+        if same_size().next().is_none() {
+            continue;
+        }
+        let Ok(h) = hash_file(&file.path()) else {
+            continue;
+        };
+        let Some(e) = same_size().find(|e| e.sha1 == h.sha1) else {
             continue;
         };
         if admit(
@@ -337,6 +346,38 @@ mod tests {
         assert!(cache_file(&paths, &entry.sha1).is_file(), "Atlas has it");
         assert!(!wanted_file.exists(), "and it left Downloads");
         assert!(other.exists(), "other files stay");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_manual_download_is_matched_by_hash_not_just_size() {
+        let root =
+            std::env::temp_dir().join(format!("atlas-fetch-test-{}", crate::util::ids::new_id()));
+        let mut paths = AppPaths::new(&root);
+        paths.downloads = root.join("Downloads");
+        std::fs::create_dir_all(&paths.downloads).unwrap();
+        let entry = |name: &str, bytes: &[u8]| -> Entry {
+            let file = root.join(name);
+            std::fs::write(&file, bytes).unwrap();
+            let h = hash_file(&file).unwrap();
+            serde_json::from_value(serde_json::json!({
+                "kind": "mod", "source": "curseforge", "name": name,
+                "path": format!("mods/{name}"), "sha1": h.sha1, "sha256": h.sha256,
+                "sizeBytes": bytes.len(), "required": true
+            }))
+            .unwrap()
+        };
+        let first = entry("first.jar", b"aaaa");
+        let second = entry("second.jar", b"bbbb");
+        std::fs::write(paths.downloads.join("second.jar"), b"bbbb").unwrap();
+        let since = SystemTime::now() - Duration::from_secs(60);
+
+        assert_eq!(
+            pick_up_manual_downloads(&paths, &[&first, &second], since),
+            1
+        );
+        assert!(cache_file(&paths, &second.sha1).is_file());
+        assert!(!cache_file(&paths, &first.sha1).is_file());
         std::fs::remove_dir_all(&root).ok();
     }
 }
