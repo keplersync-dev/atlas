@@ -387,9 +387,10 @@ fn check_path(path: &str, dirs: Option<&[&str]>) -> Result<(), Invalid> {
     }
     if path
         .split('/')
-        .any(|seg| seg.is_empty() || seg == "." || seg == "..")
+        .any(|seg| seg.is_empty() || seg.ends_with(['.', ' ']))
     {
-        return bad("empty, . or .. segment");
+        // Covers . and .., and names Windows would quietly trim ("x.bat." → "x.bat").
+        return bad("empty segment, or one ending in . or a space");
     }
     if path
         .chars()
@@ -527,6 +528,8 @@ mod tests {
             "saves/x.jar",
             "mods/x.exe",
             "mods/con<1>.jar",
+            "mods/sub./x.jar",
+            "mods/sub /x.jar",
             "",
         ] {
             assert!(with_path(p).is_err(), "{p:?} should be refused");
@@ -587,6 +590,8 @@ mod tests {
             "config/setup.ps1",
             "run.bat",
             "../evil.txt",
+            "run.bat.",
+            "run.bat ",
         ] {
             m.overrides[0].path = risky.into();
             assert!(validate(&m).is_err(), "{risky}");
