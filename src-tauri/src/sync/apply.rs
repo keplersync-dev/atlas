@@ -21,7 +21,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use super::backup::{self, FileAction, FileRecord};
 use super::fetch::{self, Route};
-use super::manifest::{Manifest, Override, PackBase};
+use super::manifest::{Entry, Manifest, Override, PackBase};
 use super::pack;
 use super::plan::{self, Action, Plan};
 use super::source::Source;
@@ -129,6 +129,14 @@ impl Journal {
         std::fs::write(&tmp, serde_json::to_vec(self)?)?;
         std::fs::rename(tmp, staging.join("journal.json"))?;
         Ok(())
+    }
+
+    fn record(&mut self, staging: &Path, path: &str, action: FileAction) -> AppResult<()> {
+        self.done.push(FileRecord {
+            path: path.to_string(),
+            action,
+        });
+        self.save(staging)
     }
 }
 
@@ -382,7 +390,7 @@ fn taken_down(e: AppError, name: &str) -> AppError {
 async fn wait_for_manual_downloads<R: Runtime>(
     state: &AppState,
     progress: &Progress<R>,
-    manual: &[(&super::manifest::Entry, crate::dto::ManualDownload)],
+    manual: &[(&Entry, crate::dto::ManualDownload)],
 ) -> AppResult<()> {
     let since = SystemTime::now();
     for (_, m) in manual {
@@ -441,46 +449,33 @@ fn apply_actions(
         done: vec![],
     };
     journal.save(&staging)?;
+    // Each step is journaled before it's made, so a crash in between is still undone.
     let result = (|| -> AppResult<()> {
         for a in actions {
             match a {
                 Action::Remove { path } | Action::RemoveConfig { path } => {
+                    journal.record(&staging, path, FileAction::Removed)?;
                     remove(&game_dir.join(path))?;
-                    journal.done.push(FileRecord {
-                        path: path.clone(),
-                        action: FileAction::Removed,
-                    });
                 }
                 Action::Place {
-                    entry: _, replaces, ..
+                    entry: Entry { path, .. },
+                    ..
                 }
                 | Action::WriteConfig {
-                    config: _,
-                    replaces,
+                    config: Override { path, .. },
+                    ..
                 } => {
-                    let path = match a {
-                        Action::Place { entry, .. } => &entry.path,
-                        Action::WriteConfig { config, .. } => &config.path,
-                        _ => unreachable!(),
-                    };
+                    // Anything already there was backed up, tracked or not.
                     let target = game_dir.join(path);
-                    if *replaces && target.exists() {
+                    if target.exists() {
+                        journal.record(&staging, path, FileAction::Removed)?;
                         remove(&target)?;
-                        journal.done.push(FileRecord {
-                            path: path.clone(),
-                            action: FileAction::Removed,
-                        });
-                        journal.save(&staging)?;
                     }
                     std::fs::create_dir_all(target.parent().expect("relative path has a parent"))?;
+                    journal.record(&staging, path, FileAction::Added)?;
                     std::fs::rename(staging.join("files").join(path), &target)?;
-                    journal.done.push(FileRecord {
-                        path: path.clone(),
-                        action: FileAction::Added,
-                    });
                 }
             }
-            journal.save(&staging)?;
         }
         Ok(())
     })();

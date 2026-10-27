@@ -56,15 +56,19 @@ pub async fn create(
     reason: BackupReason,
     from_revision: Option<u32>,
     to_revision: Option<u32>,
-    files: Vec<FileRecord>,
+    mut files: Vec<FileRecord>,
 ) -> AppResult<(String, PathBuf)> {
     let id = new_id();
     let folder = dir(paths, instance_id, &id);
     std::fs::create_dir_all(&folder)?;
     let mut size = 0u64;
-    for f in files.iter().filter(|f| f.action != FileAction::Added) {
+    for f in &mut files {
         let from = game_dir.join(&f.path);
         if from.is_file() {
+            // Not in the database yet (the rescan hadn't run), but still the user's file.
+            if f.action == FileAction::Added {
+                f.action = FileAction::Replaced;
+            }
             let to = folder.join(&f.path);
             std::fs::create_dir_all(to.parent().expect("relative path has a parent"))?;
             size += std::fs::copy(&from, &to)?;

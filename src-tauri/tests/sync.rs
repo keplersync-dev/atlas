@@ -386,6 +386,31 @@ fn restoring_a_backup_puts_files_and_revision_back() {
 }
 
 #[test]
+fn a_file_atlas_has_not_scanned_yet_is_backed_up_before_being_replaced() {
+    let w = World::new();
+    w.link();
+    // Dropped in just before the update, before any rescan saw it.
+    std::fs::write(w.game.join("mods/sodium-1.jar"), b"my own sodium build").unwrap();
+    let d = w.sync(json!({}));
+    assert_eq!(
+        w.read("mods/sodium-1.jar").as_deref(),
+        Some("sodium version one")
+    );
+
+    let backup = d["backups"][0]["id"].as_str().unwrap().to_string();
+    w.app.ok(
+        "restore_backup",
+        json!({ "instanceId": w.id, "backupId": backup }),
+    );
+    w.wait();
+    assert_eq!(
+        w.read("mods/sodium-1.jar").as_deref(),
+        Some("my own sodium build"),
+        "restoring puts the user's file back"
+    );
+}
+
+#[test]
 fn a_failed_update_changes_nothing() {
     let w = World::new();
     w.link();
