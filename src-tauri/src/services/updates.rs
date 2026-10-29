@@ -57,7 +57,7 @@ pub async fn install<R: Runtime>(app: &AppHandle<R>) -> AppResult<()> {
 }
 
 /// Where releases are published, for downloading one by hand.
-const RELEASE_PAGE: &str = "https://github.com/xhalo-dev/atlas/releases/latest";
+const RELEASE_PAGE: &str = "https://github.com/keplersync-dev/atlas/releases/latest";
 
 pub fn open_release_page<R: Runtime>(app: &AppHandle<R>) -> AppResult<()> {
     let opener = app
