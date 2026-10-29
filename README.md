@@ -46,6 +46,8 @@ If you need help or have any questions, open a [GitHub issue](../../issues) or e
 
 ## License
 
-[GPL-3.0](LICENSE)
+The code is licensed under [GPL-3.0](LICENSE).
+
+The Atlas and KeplerSync names and logos (`static/atlas-icon.svg`, `static/atlas-logo.svg`, `static/atlas-mark.svg`, the favicons in `static/` and the app icons in `src-tauri/icons/`) aren't covered by that license and may not be used without permission.
 
 Not an official Minecraft product. Not approved by or associated with Mojang or Microsoft.
