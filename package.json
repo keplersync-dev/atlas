@@ -1,6 +1,6 @@
 {
   "name": "atlas",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Keep Minecraft modpacks in sync with friends, alongside the launcher you already use",
   "type": "module",
   "scripts": {
