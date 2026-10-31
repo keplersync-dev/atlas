@@ -280,7 +280,6 @@
         <FileTree
           files={plan.data.files}
           saved={plan.data.rules}
-          pack={plan.data.pack}
           leftOut={plan.data.leftOut}
           bind:rules={fileRules}
         />

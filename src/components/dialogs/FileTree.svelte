@@ -13,7 +13,7 @@
     type Folder,
   } from "$lib/fileRules";
   import { fileSize, plural } from "$lib/format";
-  import type { FileRules, LeftOutFile, PackInfo, ShareFile } from "$lib/types";
+  import type { FileRules, LeftOutFile, ShareFile } from "$lib/types";
   import Icon from "../Icon.svelte";
   import Menu from "../Menu.svelte";
 
@@ -24,14 +24,12 @@
   let {
     files,
     saved,
-    pack = null,
     leftOut = [],
     rules = $bindable(null),
   }: {
     files: ShareFile[];
     /** The rules from the last share, until the user changes them. */
     saved: FileRules;
-    pack?: PackInfo | null;
     leftOut?: LeftOutFile[];
     rules: FileRules | null;
   } = $props();
@@ -41,13 +39,6 @@
   const tree = $derived(buildTree(visible));
   const counts = $derived(countShared(tree, current));
 
-  // ── Summary ──
-  const shared = $derived(
-    visible.filter((f) => isShared(current, f.path, f.fromPack)),
-  );
-  const fromPack = $derived(shared.some((f) => f.fromPack));
-  const uploads = $derived(shared.filter((f) => !f.fromPack));
-  const uploadBytes = $derived(uploads.reduce((n, f) => n + f.sizeBytes, 0));
   const overLimit = $derived(
     leftOut.filter((f) => f.reason === "over_limit").length,
   );
@@ -257,65 +248,11 @@
 
 {#if visible.length}
   <section class="mt-4 rounded-lg border border-(--line) bg-(--bg-raise)">
-    <header class="px-4 pt-3.5">
-      <h3 class="text-[14px] font-semibold">Other files</h3>
-      <p class="text-[13px] text-(--text-muted)">
-        Ticked files go to your friends with the pack. Settings and scripts are
-        ticked for you; mods and packs are chosen above.
-      </p>
-    </header>
-
-    <div class="flex flex-wrap gap-x-6 gap-y-2 px-4 pt-3">
-      {#if pack && fromPack}
-        <div class="flex min-w-0 items-center gap-2.5">
-          <span
-            class="grid size-8 shrink-0 place-items-center rounded-full bg-(--bg) text-(--text-muted)"
-          >
-            <Icon name="cube" class="size-4" />
-          </span>
-          <div class="min-w-0">
-            <b class="block truncate text-[13px] font-medium"
-              >From {pack.name}</b
-            >
-            <small class="block text-[13px] text-(--text-muted)"
-              >Friends get these with the modpack</small
-            >
-          </div>
-        </div>
-      {/if}
-      <div class="flex min-w-0 items-center gap-2.5">
-        <span
-          class="grid size-8 shrink-0 place-items-center rounded-full bg-(--bg) text-(--text-muted)"
-        >
-          <Icon name="upload" class="size-4" />
-        </span>
-        <div class="min-w-0">
-          <b class="block text-[13px] font-medium">Uploaded from your PC</b>
-          <small class="block text-[13px] text-(--text-muted)">
-            {#if uploads.length}
-              {plural(uploads.length, "file")} · {fileSize(uploadBytes)}
-            {:else if pack && fromPack}
-              Nothing, your files match the modpack
-            {:else}
-              Nothing
-            {/if}
-          </small>
-        </div>
-      </div>
-    </div>
-    {#if overLimit}
-      <p
-        class="mx-4 mt-2 flex items-center gap-2 text-[13px] text-(--warn)"
-        role="alert"
-      >
-        <Icon name="warn" class="size-4 shrink-0" />
-        {plural(overLimit, "file")} won't fit in the 150 MB limit. Untick some to
-        make room.
-      </p>
-    {/if}
-
-    <div class="flex items-center gap-2 px-4 pt-3 pb-2">
-      <label class="relative block min-w-0 flex-1">
+    <header class="flex items-center gap-2 px-4 pt-3 pb-2.5">
+      <h3 class="mr-auto shrink-0 text-[14px] font-semibold">
+        Configs and other files
+      </h3>
+      <label class="relative block w-52 min-w-0">
         <span
           class="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2 text-(--text-faint)"
         >
@@ -338,7 +275,18 @@
           <Icon name="restore" class="size-3.5" />Reset
         </button>
       {/if}
-    </div>
+    </header>
+
+    {#if overLimit}
+      <p
+        class="mx-4 mb-2.5 flex items-center gap-2 text-[13px] text-(--warn)"
+        role="alert"
+      >
+        <Icon name="warn" class="size-4 shrink-0" />
+        {plural(overLimit, "file")} won't fit in the 150 MB limit. Untick some to
+        make room.
+      </p>
+    {/if}
 
     <div role="table" aria-label="Files to share" class="text-[13.5px]">
       <div
@@ -364,11 +312,12 @@
           <button
             type="button"
             onclick={() => (at = parent)}
-            class="{ROW} w-full border-t border-(--line) py-2 text-left text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+            class="{ROW} w-full border-t border-(--line) py-2 text-left hover:bg-(--bg-hover)"
           >
             <span></span>
             <span class="flex items-center gap-2.5">
-              <Icon name="parent" class="size-4.5 shrink-0" />Parent folder
+              <Icon name="folder-up" class="size-4.5 text-(--text-muted)" />
+              Parent folder
             </span>
           </button>
         {/if}
