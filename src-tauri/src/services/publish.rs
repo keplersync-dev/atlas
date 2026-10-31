@@ -56,6 +56,56 @@ fn is_upload(r: &ContentRow) -> bool {
     )
 }
 
+/// Modrinth and CurseForge couldn't be asked about it (offline, or they failed), so
+/// whether it has to be uploaded isn't known yet.
+fn not_checked(r: &ContentRow) -> bool {
+    r.source == "local" && r.resolved_at.is_none()
+}
+
+/// Files on no mod site that the modpack names by CurseForge id: CurseForge can't find
+/// some files by fingerprint, but the pack lists them, so they aren't uploads.
+async fn look_up_in_pack<R: Runtime>(state: &AppState, app: &AppHandle<R>, row: &InstanceRow) {
+    let has_local = db::content::list(&state.db, &row.id)
+        .await
+        .is_ok_and(|rows| live(&rows).any(|r| r.source == "local"));
+    if !has_local {
+        return;
+    }
+    let Some(base) = pack::base_for(state, row).await else {
+        return;
+    };
+    let work = Reporter::new(app, &row.id);
+    let total = if pack::needs_download(&state.paths, &base) {
+        base.size_bytes
+    } else {
+        0
+    };
+    let mut got = 0;
+    let mut progress = |n: u64| {
+        got += n;
+        work.report(WorkStage::Downloading, got.min(total), total);
+    };
+    let found = match pack::curseforge_file_ids(state, &base, &mut progress).await {
+        Ok(ids) => crate::resolve::resolve_from_pack(&state.db, &state.cloud, &row.id, &ids).await,
+        Err(e) => Err(e),
+    };
+    match found {
+        Ok(0) => {}
+        Ok(n) => {
+            tracing::info!(pack = %base.name, files = n, "found files by the modpack's list");
+            emit(
+                app,
+                AtlasEvent::InstanceChanged {
+                    instance_id: row.id.clone(),
+                },
+            );
+        }
+        Err(e) => {
+            tracing::info!(pack = %base.name, error = %e, "couldn't look files up in the modpack's list")
+        }
+    }
+}
+
 fn manual_download(r: &ContentRow) -> Option<ManualDownload> {
     let page = r.page_url.clone()?;
     (from_wire(&r.source) == Some(ContentSource::Curseforge) && r.download_url.is_none()).then(
@@ -83,10 +133,13 @@ pub async fn prepare<R: Runtime>(
     super::instances::rescan(state, app, id).await?;
     // Files not looked up yet would all count as uploads.
     super::instances::look_up_now(state, app, id).await;
-    let rows = db::content::list(&state.db, id).await?;
-    let unchecked = live(&rows)
-        .filter(|r| r.source == "local" && r.resolved_at.is_none())
-        .count() as u32;
+    look_up_in_pack(state, app, &row).await;
+    let mut rows = db::content::list(&state.db, id).await?;
+    if live(&rows).any(not_checked) {
+        // Once more before telling the owner: the sites may only have hiccuped.
+        super::instances::look_up_now(state, app, id).await;
+        rows = db::content::list(&state.db, id).await?;
+    }
     let to_check: Vec<String> = live(&rows)
         .filter(|r| is_upload(r))
         .map(|r| r.sha256.clone())
@@ -114,6 +167,7 @@ pub async fn prepare<R: Runtime>(
                 published_share_mode: r.published_share_mode.as_deref().and_then(from_wire),
                 needs_upload: is_upload(r),
                 already_uploaded: stored.contains(&r.sha256),
+                unchecked: not_checked(r),
             }
         })
         .collect();
@@ -157,7 +211,6 @@ pub async fn prepare<R: Runtime>(
             .filter_map(manual_download)
             .collect(),
         storage,
-        unchecked,
         pack: configs.base.as_ref().map(|b| PackInfo {
             name: b.name.clone(),
             version_label: b.version_label.clone(),
@@ -434,6 +487,14 @@ async fn send_files<R: Runtime>(
     let uploads: Vec<&ContentRow> = live(rows)
         .filter(|r| modes.get(&r.id) != Some(&ShareMode::Private) && is_upload(r))
         .collect();
+    // Not known to be on no mod site: uploading it could share a mod friends could
+    // have downloaded, under a permission the owner never needed to give.
+    if let Some(r) = uploads.iter().find(|r| not_checked(r)) {
+        return Err(AppError::conflict(format!(
+            "Couldn't check {} with Modrinth and CurseForge. Try again in a moment, or set it to Only me.",
+            r.name
+        )));
+    }
     let storage: Storage = state
         .cloud
         .call(Method::GET, "/me/storage", None::<&()>)

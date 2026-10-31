@@ -14,8 +14,23 @@
   ) =>
     items.filter(
       (i) =>
-        i.needsUpload && !i.alreadyUploaded && modeOf(i, modes) !== "private",
+        i.needsUpload &&
+        !i.alreadyUploaded &&
+        !i.unchecked &&
+        modeOf(i, modes) !== "private",
     );
+
+  /** Shared files Modrinth and CurseForge couldn't be asked about: sharing waits. */
+  export const uncheckedOf = (
+    items: PublishItem[],
+    modes: Record<Id, ShareMode>,
+  ) => items.filter((i) => i.unchecked && modeOf(i, modes) !== "private");
+
+  /** "Global Packs", "Global Packs and Foo", "Global Packs and 2 others". */
+  export function names(items: PublishItem[]) {
+    if (items.length <= 2) return items.map((i) => i.name).join(" and ");
+    return `${items[0].name} and ${items.length - 1} others`;
+  }
 
   export const uploadBytes = (
     items: PublishItem[],
@@ -57,8 +72,6 @@
     storage,
     firstShare,
     modes = $bindable({}),
-
-    unchecked = 0,
     onrecheck,
   }: {
     items: PublishItem[];
@@ -66,9 +79,6 @@
     /** First share: everything is new, so there's no New/All filter. */
     firstShare: boolean;
     modes: Record<Id, ShareMode>;
-
-    /** Files Modrinth or CurseForge couldn't be asked about; they count as uploads. */
-    unchecked?: number;
     onrecheck?: () => void;
   } = $props();
 
@@ -128,6 +138,12 @@
   }
 
   const uploads = $derived(uploadsOf(items, modes));
+  const unchecked = $derived(uncheckedOf(items, modes));
+  function keepLocal(list: PublishItem[]) {
+    const next = { ...modes };
+    for (const i of list) next[i.contentId] = "private";
+    modes = next;
+  }
   const adding = $derived(uploadBytes(items, modes));
   const usedAfter = $derived(storage.usedBytes + adding);
   const overQuota = $derived(usedAfter > storage.quotaBytes);
@@ -136,41 +152,67 @@
   );
 </script>
 
-{#if unchecked}
-  <!-- Files that couldn't be looked up would be uploaded; say so plainly. -->
+{#if unchecked.length}
+  <!-- Whether these need uploading isn't known, so sharing waits for an answer. -->
   <div
     class="mb-3 flex items-start gap-3 rounded-lg bg-(--warn)/10 px-3.5 py-3 text-[12.5px]"
+    role="alert"
   >
     <Icon name="warn" class="mt-0.5 size-4 text-(--warn)" />
     <p class="flex-1 text-(--text-muted)">
-      Atlas couldn't check {plural(unchecked, "file")} on Modrinth and CurseForge,
-      so
-      {unchecked === 1 ? "it counts" : "they count"} as {unchecked === 1
-        ? "an upload"
-        : "uploads"} for now. Either site may be unreachable.
+      Couldn't check <b class="text-(--text-primary)">{names(unchecked)}</b>
+      with Modrinth and CurseForge, so Atlas doesn't know yet whether {unchecked.length ===
+      1
+        ? "it needs"
+        : "they need"} uploading. Either site may be down.
     </p>
-    <button
-      type="button"
-      onclick={onrecheck}
-      class="shrink-0 rounded px-2 py-0.5 font-medium text-(--accent) hover:bg-(--bg-hover)"
-      >Check again</button
-    >
+    <div class="flex shrink-0 flex-col items-end gap-0.5">
+      <button
+        type="button"
+        onclick={onrecheck}
+        class="rounded px-2 py-0.5 font-medium text-(--accent) hover:bg-(--bg-hover)"
+        >Try again</button
+      >
+      <button
+        type="button"
+        onclick={() => keepLocal(unchecked)}
+        class="rounded px-2 py-0.5 text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+        >Set to Only me</button
+      >
+    </div>
   </div>
 {/if}
 
 {#if uploads.length}
-  <!-- Only shown when an unknown file is set to be shared. -->
+  <!-- Only shown when an unknown file is set to be shared. Named, so the checkbox
+       is about files the owner can see. -->
   <div class="mb-3 rounded-lg bg-(--bg-raise) px-3.5 py-3">
     <p class="text-[12.5px] text-(--text-muted)">
-      {plural(uploads.length, "file")}
-      {uploads.length === 1 ? "isn't" : "aren't"} on Modrinth or CurseForge, so
-      {uploads.length === 1 ? "it" : "they"} will be uploaded to Atlas for your friends.
-      Set
-      {uploads.length === 1 ? "it" : "them"} to <b>Only me</b> to keep {uploads.length ===
-      1
-        ? "it"
-        : "them"} local.
+      {uploads.length === 1 ? "This isn't" : "These aren't"} on Modrinth or CurseForge,
+      so {uploads.length === 1 ? "it" : "they"} will be uploaded to Atlas for your
+      friends.
     </p>
+    <ul class="mt-2 flex flex-col">
+      {#each uploads as item (item.contentId)}
+        <li class="flex items-center gap-2.5 py-1">
+          <ContentIcon
+            src={item.iconUrl}
+            seed={item.name}
+            class="size-5 rounded-[4px]"
+          />
+          <span class="min-w-0 flex-1 truncate font-medium">{item.name}</span>
+          <span class="text-[11.5px] text-(--text-faint)"
+            >{fileSize(item.sizeBytes)}</span
+          >
+          <button
+            type="button"
+            onclick={() => keepLocal([item])}
+            class="rounded px-2 py-0.5 text-[12px] text-(--accent) hover:bg-(--bg-hover)"
+            >Set to Only me</button
+          >
+        </li>
+      {/each}
+    </ul>
     <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-(--line-2)">
       <div
         class="h-full {overQuota ? 'bg-(--danger)' : 'bg-(--accent)'}"
@@ -289,7 +331,11 @@
             )?.label}{/if}
         </small>
         <!-- Its own line, so the warning is never the part that gets cut off. -->
-        {#if item.needsUpload && !item.alreadyUploaded && mode !== "private"}
+        {#if item.unchecked && mode !== "private"}
+          <small class="block text-[11.5px] text-(--warn)">
+            Couldn't check with Modrinth and CurseForge yet
+          </small>
+        {:else if item.needsUpload && !item.alreadyUploaded && mode !== "private"}
           <small class="block text-[11.5px] text-(--warn)">
             Not on Modrinth or CurseForge · uploads {fileSize(item.sizeBytes)}
           </small>

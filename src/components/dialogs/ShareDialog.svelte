@@ -10,7 +10,12 @@
   import Head from "../Head.svelte";
   import FileTree from "./FileTree.svelte";
   import RightsCheck from "./RightsCheck.svelte";
-  import SharePicker, { uploadBytes, uploadsOf } from "./SharePicker.svelte";
+  import SharePicker, {
+    names,
+    uncheckedOf,
+    uploadBytes,
+    uploadsOf,
+  } from "./SharePicker.svelte";
 
   // "share": first share of an instance that's only on this PC (creates revision 1).
   // "invite": add people to an instance that's already shared.
@@ -68,8 +73,11 @@
     new Set(shared.data?.groups.map((g) => g.group.id) ?? []),
   );
 
-  const needsRights = $derived(
-    !!plan.data && uploadsOf(plan.data.items, modes).length > 0,
+  const uploads = $derived(plan.data ? uploadsOf(plan.data.items, modes) : []);
+  const needsRights = $derived(uploads.length > 0);
+  // A file Modrinth and CurseForge couldn't be asked about: sharing waits for them.
+  const waiting = $derived(
+    !!plan.data && uncheckedOf(plan.data.items, modes).length > 0,
   );
   const overQuota = $derived(
     !!plan.data &&
@@ -87,7 +95,11 @@
     !submitting &&
       social.signedIn &&
       (mode === "share"
-        ? !!plan.data && (!needsRights || rights) && !overQuota && !tooBig
+        ? !!plan.data &&
+          (!needsRights || rights) &&
+          !waiting &&
+          !overQuota &&
+          !tooBig
         : friendIds.length + groupIds.length > 0),
   );
 
@@ -274,7 +286,6 @@
           storage={plan.data.storage}
           firstShare
           bind:modes
-          unchecked={plan.data.unchecked}
           onrecheck={plan.reload}
         />
         <FileTree
@@ -291,6 +302,8 @@
     {#if mode === "share" && needsRights}
       <RightsCheck
         bind:checked={rights}
+        names={names(uploads)}
+        count={uploads.length}
         note={submitting && work ? workLabel(work) : error}
         tone={submitting && work ? "muted" : "danger"}
       />

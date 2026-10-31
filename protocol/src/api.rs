@@ -563,6 +563,14 @@ pub struct CurseForgeLookup {
     pub fingerprints: Vec<u32>,
 }
 
+/// `POST /curseforge/files`: look files up by CurseForge file id, for the mods a modpack
+/// lists that have no fingerprint. Answers a `CurseForgeLookupResult`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurseForgeFileIds {
+    pub file_ids: Vec<u64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CurseForgeLookupResult {

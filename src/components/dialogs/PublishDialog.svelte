@@ -11,6 +11,8 @@
   import RightsCheck from "./RightsCheck.svelte";
   import SharePicker, {
     differences,
+    names,
+    uncheckedOf,
     uploadBytes,
     uploadsOf,
   } from "./SharePicker.svelte";
@@ -42,8 +44,11 @@
   const total = $derived(
     diff.added.length + diff.changed.length + removedCount + (versions ? 1 : 0),
   );
-  const needsRights = $derived(
-    !!plan.data && uploadsOf(plan.data.items, modes).length > 0,
+  const uploads = $derived(plan.data ? uploadsOf(plan.data.items, modes) : []);
+  const needsRights = $derived(uploads.length > 0);
+  // A file Modrinth and CurseForge couldn't be asked about: sharing waits for them.
+  const waiting = $derived(
+    !!plan.data && uncheckedOf(plan.data.items, modes).length > 0,
   );
   const overQuota = $derived(
     !!plan.data &&
@@ -61,6 +66,7 @@
       !!plan.data &&
       total > 0 &&
       (!needsRights || rights) &&
+      !waiting &&
       !overQuota &&
       !tooBig,
   );
@@ -152,7 +158,6 @@
       storage={plan.data.storage}
       firstShare={false}
       bind:modes
-      unchecked={plan.data.unchecked}
       onrecheck={plan.reload}
     />
     <FileTree
@@ -180,6 +185,8 @@
     {#if needsRights}
       <RightsCheck
         bind:checked={rights}
+        names={names(uploads)}
+        count={uploads.length}
         note={submitting && work ? workLabel(work) : error}
         tone={submitting && work ? "muted" : "danger"}
       />

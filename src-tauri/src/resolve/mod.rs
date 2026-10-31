@@ -12,14 +12,16 @@ pub mod modrinth;
 
 use std::collections::HashMap;
 
-use atlas_protocol::api::{CurseForgeFile, CurseForgeLookup, CurseForgeLookupResult};
+use atlas_protocol::api::{
+    CurseForgeFile, CurseForgeFileIds, CurseForgeLookup, CurseForgeLookupResult,
+};
 use reqwest::Method;
 use sqlx::SqlitePool;
 
 use crate::cloud::Cloud;
 use crate::db::content::ContentRow;
 use crate::dto::{ContentSource, Side};
-use crate::error::ErrorCode;
+use crate::error::{AppResult, ErrorCode};
 use crate::util::time::{iso, now_iso};
 
 /// Look files up again after this long (a mod may have been uploaded since).
@@ -97,22 +99,38 @@ pub fn match_curseforge(rows: &[&ContentRow], files: &[CurseForgeFile]) -> Vec<M
             let f = files
                 .iter()
                 .find(|f| f.fingerprint == fp && f.sha1.as_deref() == Some(r.sha1.as_str()))?;
-            Some(Match {
-                content_id: r.id.clone(),
-                sha1: r.sha1.clone(),
-                source: ContentSource::Curseforge,
-                project_id: f.project_id.clone(),
-                version_id: f.file_id.clone(),
-                name: f.name.clone(),
-                version_label: f.version_label.clone(),
-                author: f.author.clone(),
-                icon_url: f.icon_url.clone(),
-                download_url: f.download_url.clone(),
-                page_url: f.page_url.clone(),
-                side: f.side,
-            })
+            Some(curseforge_match(r, f))
         })
         .collect()
+}
+
+/// Pair rows with CurseForge files looked up by id: the sha1 alone decides.
+pub fn match_by_sha1(rows: &[&ContentRow], files: &[CurseForgeFile]) -> Vec<Match> {
+    rows.iter()
+        .filter_map(|r| {
+            let f = files
+                .iter()
+                .find(|f| f.sha1.as_deref() == Some(r.sha1.as_str()))?;
+            Some(curseforge_match(r, f))
+        })
+        .collect()
+}
+
+fn curseforge_match(r: &ContentRow, f: &CurseForgeFile) -> Match {
+    Match {
+        content_id: r.id.clone(),
+        sha1: r.sha1.clone(),
+        source: ContentSource::Curseforge,
+        project_id: f.project_id.clone(),
+        version_id: f.file_id.clone(),
+        name: f.name.clone(),
+        version_label: f.version_label.clone(),
+        author: f.author.clone(),
+        icon_url: f.icon_url.clone(),
+        download_url: f.download_url.clone(),
+        page_url: f.page_url.clone(),
+        side: f.side,
+    }
 }
 
 /// Modrinth's client/server support → which side the file is for.
@@ -209,6 +227,37 @@ async fn ask_curseforge(cloud: &Cloud, rows: &[&ContentRow]) -> Option<Vec<Match
         }
     }
     Some(match_curseforge(rows, &files))
+}
+
+/// Look the instance's files on no mod site up among the CurseForge files its modpack
+/// lists (`file_ids`). CurseForge can't find some files by fingerprint (it records 0 for
+/// them), but the pack names them. Returns how many rows changed.
+pub async fn resolve_from_pack(
+    db: &SqlitePool,
+    cloud: &Cloud,
+    instance_id: &str,
+    file_ids: &[u64],
+) -> AppResult<usize> {
+    let rows = crate::db::content::list(db, instance_id).await?;
+    let asked: Vec<&ContentRow> = rows
+        .iter()
+        .filter(|r| r.installed && r.source == "local")
+        .collect();
+    if asked.is_empty() || file_ids.is_empty() {
+        return Ok(0);
+    }
+    let mut files = Vec::new();
+    for batch in file_ids.chunks(CURSEFORGE_BATCH) {
+        let body = CurseForgeFileIds {
+            file_ids: batch.to_vec(),
+        };
+        let found: CurseForgeLookupResult = cloud
+            .call(Method::POST, "/curseforge/files", Some(&body))
+            .await?;
+        files.extend(found.files);
+    }
+    let matches = match_by_sha1(&asked, &files);
+    Ok(save(db, &asked, &matches, false).await?)
 }
 
 /// Look up an instance's unknown files and save what's found. `cloud`: also ask
@@ -498,6 +547,14 @@ mod tests {
         assert_eq!(clash.source, "local");
         assert!(clash.resolved_at.is_none(), "asked again next scan");
         assert_eq!(needs_lookup(&rows).len(), 2);
+
+        // Looked up by the modpack's file id: CurseForge recorded no fingerprint (0),
+        // so the sha1 alone decides.
+        let custom = rows.iter().find(|r| r.path == "mods/custom.jar").unwrap();
+        let by_id = [file(0, "3333333333333333333333333333333333333333")];
+        let matches = match_by_sha1(&[custom, clash], &by_id);
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].content_id, custom.id);
     }
 
     #[test]

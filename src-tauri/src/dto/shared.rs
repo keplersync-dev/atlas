@@ -120,6 +120,8 @@ pub struct PublishItem {
     pub published_share_mode: Option<ShareMode>,
     pub needs_upload: bool,
     pub already_uploaded: bool,
+    /// Modrinth and CurseForge couldn't be asked about it: not an upload until they can.
+    pub unchecked: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -131,9 +133,6 @@ pub struct PublishPlan {
     pub removed: Vec<String>,
     pub manual_downloads: Vec<ManualDownload>,
     pub storage: Storage,
-    /// Files Modrinth or CurseForge couldn't be asked about (unreachable). They count as
-    /// uploads.
-    pub unchecked: u32,
     /// Every other file in the folder, for the tree.
     pub files: Vec<ShareFile>,
     /// Which of them are shared now.

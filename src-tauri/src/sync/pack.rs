@@ -162,6 +162,35 @@ pub async fn index(
     Ok(index)
 }
 
+/// The CurseForge file ids a CurseForge pack's manifest.json lists (its mods and packs,
+/// which aren't in the zip), downloading the pack first if needed.
+pub async fn curseforge_file_ids(
+    state: &AppState,
+    base: &PackBase,
+    on_bytes: &mut (dyn FnMut(u64) + Send),
+) -> AppResult<Vec<u64>> {
+    if base.source != ContentSource::Curseforge {
+        return Ok(Vec::new());
+    }
+    let pack = download(state, base, on_bytes).await?;
+    tokio::task::spawn_blocking(move || {
+        let manifest = read_entry(&mut open(&pack)?, "manifest.json")?;
+        Ok(file_ids(&manifest))
+    })
+    .await?
+}
+
+fn file_ids(manifest: &[u8]) -> Vec<u64> {
+    serde_json::from_slice::<serde_json::Value>(manifest)
+        .ok()
+        .and_then(|m| {
+            m["files"]
+                .as_array()
+                .map(|files| files.iter().filter_map(|f| f["fileID"].as_u64()).collect())
+        })
+        .unwrap_or_default()
+}
+
 /// Where a pack keeps its own files: CurseForge names the folder in its manifest.json
 /// ("overrides"); a Modrinth pack has overrides/ and, winning over it, client-overrides/.
 fn read_index(pack: &Path, source: ContentSource) -> AppResult<PackIndex> {
@@ -281,6 +310,14 @@ mod tests {
             zip.write_all(bytes).unwrap();
         }
         zip.finish().unwrap();
+    }
+
+    #[test]
+    fn reads_the_file_ids_a_curseforge_pack_lists() {
+        let manifest =
+            br#"{"files":[{"projectID":317134,"fileID":4573646,"required":true},{"projectID":1}]}"#;
+        assert_eq!(file_ids(manifest), vec![4573646]);
+        assert_eq!(file_ids(b"not json"), Vec::<u64>::new());
     }
 
     #[test]

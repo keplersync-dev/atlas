@@ -497,6 +497,8 @@ export interface PublishItem {
   needsUpload: boolean;
   /** Already on Atlas's servers (no upload or quota needed). */
   alreadyUploaded: boolean;
+  /** Modrinth and CurseForge couldn't be asked about it: not an upload until they can. */
+  unchecked: boolean;
 }
 
 /** Built before sharing or publishing: every file with its setting, plus removals. */
@@ -535,8 +537,6 @@ export interface PublishPlan {
   /** CurseForge files whose authors disabled third-party downloads. Members download them by hand. */
   manualDownloads: ManualDownload[];
   storage: { usedBytes: number; quotaBytes: number; maxFileBytes: number };
-  /** Files Modrinth or CurseForge couldn't be asked about (unreachable). They count as uploads. */
-  unchecked: number;
   /** Every other file in the folder, for the tree. */
   files: ShareFile[];
   /** Which of them are shared now. */
