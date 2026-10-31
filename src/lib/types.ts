@@ -702,6 +702,7 @@ export interface ShareFile {
   /** "config/create/server.toml" */
   path: string;
   sizeBytes: number;
+  modified: IsoDate | null;
   /** The modpack ships it: ticked by default, and not uploaded if unchanged. */
   fromPack: boolean;
   /** Why it can't be uploaded even when ticked (a file from the pack still goes out as the pack has it). */

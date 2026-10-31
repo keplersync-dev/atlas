@@ -72,40 +72,70 @@ export function setFirstInstall(
 /** A file that can't be uploaded and doesn't come from the pack never goes out. */
 export const blocked = (f: ShareFile) => !!f.refusal && !f.fromPack;
 
+/** The defaults: config and script folders and the pack's own files, nothing else. */
+export const DEFAULT_RULES: FileRules = {
+  include: [],
+  exclude: [],
+  firstInstall: [],
+};
+
 export interface Folder {
   name: string;
   /** "config/create/" */
   path: string;
   folders: Folder[];
   files: ShareFile[];
+  /** Everything inside, and the newest change inside. */
+  sizeBytes: number;
+  modified: string | null;
 }
 
-/** The tree of `files`, folders first, each level sorted by name. */
+/** The tree of `files`. Levels aren't sorted: the table sorts what it shows. */
 export function buildTree(files: ShareFile[]): Folder {
-  const root: Folder = { name: "", path: "", folders: [], files: [] };
+  const folder = (name: string, path: string): Folder => ({
+    name,
+    path,
+    folders: [],
+    files: [],
+    sizeBytes: 0,
+    modified: null,
+  });
+  const root = folder("", "");
   const index = new Map<string, Folder>([["", root]]);
   for (const f of files) {
     const parts = f.path.split("/");
     let parent = root;
+    const add = (to: Folder) => {
+      to.sizeBytes += f.sizeBytes;
+      if (f.modified && (!to.modified || f.modified > to.modified))
+        to.modified = f.modified;
+    };
+    add(root);
     for (let i = 0; i < parts.length - 1; i++) {
       const path = parts.slice(0, i + 1).join("/") + "/";
-      let folder = index.get(path);
-      if (!folder) {
-        folder = { name: parts[i], path, folders: [], files: [] };
-        index.set(path, folder);
-        parent.folders.push(folder);
+      let next = index.get(path);
+      if (!next) {
+        next = folder(parts[i], path);
+        index.set(path, next);
+        parent.folders.push(next);
       }
-      parent = folder;
+      add(next);
+      parent = next;
     }
     parent.files.push(f);
   }
-  const sort = (f: Folder) => {
-    f.folders.sort((a, b) => a.name.localeCompare(b.name));
-    f.files.sort((a, b) => a.path.localeCompare(b.path));
-    f.folders.forEach(sort);
-  };
-  sort(root);
   return root;
+}
+
+/** The folder at `path` ("" for the top). */
+export function folderAt(root: Folder, path: string): Folder {
+  let at = root;
+  for (const part of path.split("/").filter(Boolean)) {
+    const next = at.folders.find((f) => f.name === part);
+    if (!next) return root;
+    at = next;
+  }
+  return at;
 }
 
 export interface Count {

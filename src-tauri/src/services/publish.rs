@@ -31,6 +31,7 @@ use crate::sync::manifest::{
     Override, PackBase, Refusal, SCHEMA_VERSION,
 };
 use crate::sync::pack;
+use crate::util::time::iso_from_millis;
 
 async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
     db::instances::get(&state.db, id).await?.ok_or_else(|| {
@@ -225,11 +226,11 @@ pub async fn shared_config_files(
     let listed = tokio::task::spawn_blocking(move || share_files::list(&game)).await?;
     Ok(listed
         .into_iter()
-        .filter(|(rel, _, size)| {
-            share_files::shared(&rules, rel, false)
-                && manifest::upload_refusal(rel, *size).is_none()
+        .filter(|l| {
+            share_files::shared(&rules, &l.path, false)
+                && manifest::upload_refusal(&l.path, l.size).is_none()
         })
-        .map(|(rel, file, _)| (rel, file))
+        .map(|l| (l.path, l.file))
         .collect())
 }
 
@@ -290,16 +291,18 @@ async fn plan_configs<R: Runtime>(
     let listed = tokio::task::spawn_blocking(move || share_files::list(&game)).await?;
     let files: Vec<ShareFile> = listed
         .iter()
-        .map(|(rel, _, size)| ShareFile {
-            path: rel.clone(),
-            size_bytes: *size,
-            from_pack: in_pack(rel),
-            refusal: manifest::upload_refusal(rel, *size).map(left_out_reason),
+        .map(|l| ShareFile {
+            path: l.path.clone(),
+            size_bytes: l.size,
+            modified: l.modified.and_then(iso_from_millis),
+            from_pack: in_pack(&l.path),
+            refusal: manifest::upload_refusal(&l.path, l.size).map(left_out_reason),
         })
         .collect();
     let wanted: Vec<(String, PathBuf, u64)> = listed
         .into_iter()
-        .filter(|(rel, ..)| share_files::shared(&rules, rel, in_pack(rel)))
+        .filter(|l| share_files::shared(&rules, &l.path, in_pack(&l.path)))
+        .map(|l| (l.path, l.file, l.size))
         .collect();
     let count = wanted.len() as u64;
     let done = Arc::new(AtomicU64::new(0));

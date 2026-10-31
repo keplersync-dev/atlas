@@ -7,7 +7,9 @@ pub use atlas_protocol::api::{
     UpdatedItem,
 };
 
-use super::{ContentKind, ContentSource, Id, LeftOutReason, ManualDownload, ShareMode, Storage};
+use super::{
+    ContentKind, ContentSource, Id, IsoDate, LeftOutReason, ManualDownload, ShareMode, Storage,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -60,6 +62,7 @@ pub struct ShareFile {
     /// "config/create/server.toml"
     pub path: String,
     pub size_bytes: u64,
+    pub modified: Option<IsoDate>,
     /// The modpack ships it: ticked by default, and not uploaded if unchanged.
     pub from_pack: bool,
     /// Why it can't be uploaded even when ticked. A file from the pack still goes out

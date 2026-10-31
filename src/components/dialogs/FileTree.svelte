@@ -4,6 +4,8 @@
     buildTree,
     canChooseFirstInstall,
     countShared,
+    DEFAULT_RULES,
+    folderAt,
     isShared,
     keptAs,
     setFirstInstall,
@@ -11,20 +13,14 @@
     type Folder,
   } from "$lib/fileRules";
   import { fileSize, plural } from "$lib/format";
-  import type {
-    FileRules,
-    LeftOutFile,
-    LeftOutReason,
-    PackInfo,
-    ShareFile,
-  } from "$lib/types";
-  import Button from "../Button.svelte";
+  import type { FileRules, LeftOutFile, PackInfo, ShareFile } from "$lib/types";
   import Icon from "../Icon.svelte";
-  import LeftOutFiles from "./LeftOutFiles.svelte";
+  import Menu from "../Menu.svelte";
 
-  // Every file in the instance besides mods and packs, as a tree to tick, like the
-  // Modrinth App's export. `rules` stays null until the user changes something, so the
-  // dialog only sends new rules when there are some.
+  // Every file in the instance besides mods and packs, as a table to tick, like the
+  // Modrinth App's export. Files that can never be sent (programs, logins) aren't
+  // shown. `rules` stays null until the user changes something, so the dialog only
+  // sends new rules when there are some.
   let {
     files,
     saved,
@@ -41,212 +37,374 @@
   } = $props();
 
   const current = $derived(rules ?? saved);
-  const tree = $derived(buildTree(files));
+  const visible = $derived(files.filter((f) => !blocked(f)));
+  const tree = $derived(buildTree(visible));
   const counts = $derived(countShared(tree, current));
-  const all = $derived(
-    counts.get("") ?? { total: 0, shared: 0, sharedBytes: 0 },
+
+  // ── Summary ──
+  const shared = $derived(
+    visible.filter((f) => isShared(current, f.path, f.fromPack)),
+  );
+  const fromPack = $derived(shared.filter((f) => f.fromPack).length);
+  const uploads = $derived(shared.filter((f) => !f.fromPack));
+  const uploadBytes = $derived(uploads.reduce((n, f) => n + f.sizeBytes, 0));
+  const overLimit = $derived(
+    leftOut.filter((f) => f.reason === "over_limit").length,
+  );
+  const isDefault = $derived(
+    current.include.length +
+      current.exclude.length +
+      current.firstInstall.length ===
+      0,
   );
 
-  let open = $state<Set<string>>(new Set());
+  // ── Where you are, and what's listed ──
+  let at = $state("");
   let query = $state("");
+  type Sort = "name" | "size" | "modified";
+  let sortBy = $state<Sort>("name");
+  let asc = $state(true);
+
+  const folder = $derived(folderAt(tree, at));
+  const crumbs = $derived(
+    at
+      .split("/")
+      .filter(Boolean)
+      .map((name, i, all) => ({
+        name,
+        path: all.slice(0, i + 1).join("/") + "/",
+      })),
+  );
+
+  const key = (x: {
+    name?: string;
+    path: string;
+    sizeBytes: number;
+    modified: string | null;
+  }) =>
+    sortBy === "size"
+      ? x.sizeBytes
+      : sortBy === "modified"
+        ? (x.modified ?? "")
+        : (x.name ?? x.path.split("/").pop() ?? "").toLowerCase();
+  function sorted<
+    T extends {
+      path: string;
+      sizeBytes: number;
+      modified: string | null;
+      name?: string;
+    },
+  >(list: T[]) {
+    const dir = asc ? 1 : -1;
+    return [...list].sort((a, b) => {
+      const [x, y] = [key(a), key(b)];
+      return (x < y ? -1 : x > y ? 1 : 0) * dir;
+    });
+  }
+
   const matches = $derived(
     query.trim()
-      ? files
+      ? visible
           .filter((f) => f.path.toLowerCase().includes(query.toLowerCase()))
-          .slice(0, 200)
+          .slice(0, 300)
       : [],
   );
+  const searching = $derived(!!query.trim());
+  const rowFolders = $derived(searching ? [] : sorted(folder.folders));
+  const rowFiles = $derived(sorted(searching ? matches : folder.files));
 
-  const WHY: Partial<Record<LeftOutReason, string>> = {
-    login: "Can hold your Minecraft login, so it's never sent",
-    program: "A program, so it's never sent",
-    file_type: "Atlas doesn't send this kind of file",
-    too_big: "Over 8 MB, too big to send",
-  };
+  // The header checkbox covers what's listed: this folder, or the search results.
+  const scope = $derived(
+    searching
+      ? {
+          total: matches.length,
+          shared: matches.filter((f) => isShared(current, f.path, f.fromPack))
+            .length,
+        }
+      : (counts.get(folder.path) ?? { total: 0, shared: 0 }),
+  );
 
-  function toggleOpen(path: string) {
-    const next = new Set(open);
-    if (next.has(path)) next.delete(path);
-    else next.add(path);
-    open = next;
+  function tickAll() {
+    const on = scope.shared < scope.total;
+    if (searching) {
+      let next = current;
+      for (const f of matches) next = setShared(next, f.path, on);
+      rules = next;
+    } else {
+      rules = setShared(current, folder.path, on);
+    }
   }
 
   const tick = (target: string, on: boolean) =>
     (rules = setShared(current, target, on));
+
+  function sortOn(s: Sort) {
+    if (sortBy === s) asc = !asc;
+    else {
+      sortBy = s;
+      asc = s === "name";
+    }
+  }
+
+  const when = (iso: string | null) =>
+    iso
+      ? new Date(iso).toLocaleString(undefined, {
+          dateStyle: "short",
+          timeStyle: "short",
+        })
+      : "";
+
+  const ROW =
+    "grid grid-cols-[28px_minmax(0,1fr)_84px_140px_36px] items-center gap-2 px-3";
 </script>
 
-{#snippet checkbox(
-  on: boolean,
-  part: boolean,
-  label: string,
-  onchange: () => void,
-)}
-  <input
-    type="checkbox"
-    checked={on}
-    indeterminate={part}
-    aria-label={label}
-    {onchange}
-    class="size-4 shrink-0 accent-(--accent)"
-  />
+{#snippet sortHeader(s: Sort, label: string, cls = "")}
+  <button
+    type="button"
+    onclick={() => sortOn(s)}
+    class="flex items-center gap-1 text-left font-medium hover:text-(--text-primary) {cls}"
+  >
+    {label}
+    {#if sortBy === s}
+      <Icon name="chev" class="size-3 {asc ? '-rotate-90' : 'rotate-90'}" />
+    {/if}
+  </button>
 {/snippet}
 
-{#snippet file(f: ShareFile, showPath: boolean)}
-  {@const on = isShared(current, f.path, f.fromPack)}
-  {@const kept = on ? keptAs(current, f.path) : null}
-  <div
-    class="group flex items-center gap-2 rounded-md px-2 py-1 hover:bg-(--bg-hover)"
-  >
-    {#if blocked(f)}
-      <span
-        class="grid size-4 shrink-0 place-items-center text-(--text-faint)"
-        title={f.refusal ? WHY[f.refusal] : undefined}
-      >
-        <Icon name="shield" class="size-3.5" />
-      </span>
-    {:else}
-      {@render checkbox(on, false, f.path, () => tick(f.path, !on))}
-    {/if}
-    <span
-      class="min-w-0 flex-1 truncate font-mono text-[12.5px] {blocked(f)
-        ? 'text-(--text-faint)'
-        : ''}">{showPath ? f.path : f.path.split("/").pop()}</span
+{#snippet folderRow(f: Folder)}
+  {@const c = counts.get(f.path) ?? { total: 0, shared: 0 }}
+  <div class="{ROW} border-t border-(--line) py-2 hover:bg-(--bg-hover)">
+    <input
+      type="checkbox"
+      checked={c.total > 0 && c.shared === c.total}
+      indeterminate={c.shared > 0 && c.shared < c.total}
+      aria-label="Share {f.name}"
+      onchange={() => tick(f.path, c.shared < c.total)}
+      class="size-4 accent-(--accent)"
+    />
+    <button
+      type="button"
+      onclick={() => (at = f.path)}
+      class="flex min-w-0 items-center gap-2.5 text-left"
     >
-    {#if blocked(f) && f.refusal}
-      <small class="shrink-0 text-[12px] text-(--text-faint)"
-        >{WHY[f.refusal]}</small
+      <Icon name="folder" class="size-4.5 shrink-0 text-(--text-muted)" />
+      <span class="truncate">{f.name}</span>
+      <span class="shrink-0 text-[13px] text-(--text-faint)"
+        >{c.shared} of {c.total}</span
       >
-    {:else if kept === "merged"}
-      <small class="shrink-0 text-[12px] text-(--accent)"
-        >Added to friends' own list</small
+    </button>
+    <span class="text-[13px] text-(--text-muted)">{fileSize(f.sizeBytes)}</span>
+    <span class="truncate text-[13px] text-(--text-muted)"
+      >{when(f.modified)}</span
+    >
+    <button
+      type="button"
+      aria-label="Open {f.name}"
+      onclick={() => (at = f.path)}
+      class="grid size-7 place-items-center rounded text-(--text-muted) hover:bg-(--bg-raise-2) hover:text-(--text-primary)"
+    >
+      <Icon name="chev" class="size-4" />
+    </button>
+  </div>
+{/snippet}
+
+{#snippet fileRow(f: ShareFile)}
+  {@const on = isShared(current, f.path, f.fromPack)}
+  {@const kept = keptAs(current, f.path)}
+  <div class="{ROW} border-t border-(--line) py-2 hover:bg-(--bg-hover)">
+    <input
+      type="checkbox"
+      checked={on}
+      aria-label="Share {f.path}"
+      onchange={() => tick(f.path, !on)}
+      class="size-4 accent-(--accent)"
+    />
+    <span class="flex min-w-0 items-center gap-2.5">
+      <Icon name="file" class="size-4.5 shrink-0 text-(--text-faint)" />
+      <span class="truncate"
+        >{searching ? f.path : f.path.split("/").pop()}</span
       >
-    {:else if on && canChooseFirstInstall(f.path)}
-      <button
-        type="button"
-        onclick={() =>
-          (rules = setFirstInstall(current, f.path, kept !== "first_install"))}
-        class="shrink-0 rounded px-1.5 text-[12px] {kept === 'first_install'
-          ? 'text-(--accent)'
-          : 'text-(--text-faint) opacity-0 group-hover:opacity-100 focus-visible:opacity-100'}"
-        title="Friends get your copy once, then keep their own"
-        >{kept === "first_install"
-          ? "First install only"
-          : "Every update"}</button
-      >
-    {:else if kept === "first_install"}
-      <small class="shrink-0 text-[12px] text-(--accent)"
-        >First install only</small
-      >
+      {#if on && kept === "first_install"}
+        <span
+          class="shrink-0 rounded-full bg-(--accent)/12 px-2 text-[12px] text-(--accent)"
+          title="Friends get your copy when they join. After that, their own changes stay."
+          >Sent once</span
+        >
+      {:else if on && kept === "merged"}
+        <span
+          class="shrink-0 rounded-full bg-(--accent)/12 px-2 text-[12px] text-(--accent)"
+          title="Your servers are added to each friend's server list. Theirs stay too."
+          >Added to theirs</span
+        >
+      {/if}
+    </span>
+    <span class="text-[13px] text-(--text-muted)">{fileSize(f.sizeBytes)}</span>
+    <span class="truncate text-[13px] text-(--text-muted)"
+      >{when(f.modified)}</span
+    >
+    {#if on && canChooseFirstInstall(f.path)}
+      <Menu
+        label="Options for {f.path}"
+        items={[
+          kept === "first_install"
+            ? {
+                label: "Keep it in sync on every update",
+                onselect: () =>
+                  (rules = setFirstInstall(current, f.path, false)),
+              }
+            : {
+                label: "Send it once, then friends keep their own",
+                onselect: () =>
+                  (rules = setFirstInstall(current, f.path, true)),
+              },
+        ]}
+      />
     {:else}
-      <small class="shrink-0 text-[12px] text-(--text-faint)"
-        >{fileSize(f.sizeBytes)}</small
-      >
+      <span></span>
     {/if}
   </div>
 {/snippet}
 
-{#snippet folder(f: Folder, depth: number)}
-  {#each f.folders as sub (sub.path)}
-    {@const c = counts.get(sub.path)}
-    {@const expanded = open.has(sub.path)}
-    <div
-      class="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-(--bg-hover)"
-      style="padding-left: {depth * 18 + 8}px"
-    >
-      <button
-        type="button"
-        aria-label={expanded ? `Close ${sub.name}` : `Open ${sub.name}`}
-        aria-expanded={expanded}
-        onclick={() => toggleOpen(sub.path)}
-        class="-ml-1 grid size-5 shrink-0 place-items-center rounded text-(--text-muted) hover:text-(--text-primary)"
-      >
-        <Icon
-          name="chev"
-          class="size-3.5 transition-transform {expanded ? 'rotate-90' : ''}"
-        />
-      </button>
-      {#if c && c.total}
-        {@render checkbox(
-          c.shared === c.total,
-          c.shared > 0 && c.shared < c.total,
-          sub.path,
-          () => tick(sub.path, c.shared < c.total),
-        )}
-      {:else}
-        <span class="size-4 shrink-0"></span>
+{#if visible.length}
+  <section class="mt-4 rounded-lg border border-(--line) bg-(--bg-raise)">
+    <header class="flex items-start gap-3 px-4 pt-3.5">
+      <div class="min-w-0 flex-1">
+        <h3 class="text-[14px] font-semibold">Other files</h3>
+        <p class="text-[13px] text-(--text-muted)">
+          Settings, scripts and anything else in the instance. Mods and packs
+          are chosen above.
+        </p>
+      </div>
+      {#if !isDefault}
+        <button
+          type="button"
+          onclick={() => (rules = DEFAULT_RULES)}
+          class="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+        >
+          <Icon name="restore" class="size-3.5" />Reset
+        </button>
       {/if}
-      <button
-        type="button"
-        onclick={() => toggleOpen(sub.path)}
-        class="min-w-0 flex-1 truncate text-left text-[13px]">{sub.name}</button
-      >
-      <small class="shrink-0 text-[12px] text-(--text-faint)"
-        >{c?.total
-          ? `${c.shared} of ${plural(c.total, "file")}`
-          : "Can't be sent"}</small
-      >
-    </div>
-    {#if expanded}
-      {@render folder(sub, depth + 1)}
-    {/if}
-  {/each}
-  {#each f.files as entry (entry.path)}
-    <div style="padding-left: {depth * 18 + 22}px">
-      {@render file(entry, false)}
-    </div>
-  {/each}
-{/snippet}
+    </header>
 
-{#if files.length}
-  <div class="mt-4 rounded-lg bg-(--bg-raise) px-4 py-3">
-    <div class="flex flex-wrap items-baseline gap-x-3">
-      <b class="text-[13px] font-medium">Other files</b>
-      <small class="text-[12.5px] text-(--text-muted)">
-        Sharing {all.shared} of {plural(all.total, "file")} · {fileSize(
-          all.sharedBytes,
-        )}. Mods and packs are chosen above.
-      </small>
-    </div>
-    {#if pack && pack.files}
-      <small class="block text-[12.5px] text-(--text-muted)">
-        {plural(pack.files, "file")} come from {pack.name}{pack.versionLabel
-          ? ` ${pack.versionLabel}`
-          : ""}, so they aren't uploaded.
-      </small>
-    {/if}
-
-    <div class="mt-2.5 flex items-center gap-2">
-      <input
-        bind:value={query}
-        placeholder="Search {plural(files.length, 'file')}"
-        aria-label="Search files"
-        class="h-8 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-2.5 text-[13px] outline-none focus:border-(--accent)"
-      />
-      <Button size="sm" variant="ghost" onclick={() => tick("", true)}
-        >Tick all</Button
-      >
-      <Button size="sm" variant="ghost" onclick={() => tick("", false)}
-        >Untick all</Button
-      >
-    </div>
-
-    <div
-      class="mt-1.5 h-72 overflow-y-auto"
-      role="tree"
-      aria-label="Files to share"
+    <dl
+      class="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2 px-4 pt-3"
     >
-      {#if query.trim()}
-        {#each matches as m (m.path)}
-          {@render file(m, true)}
-        {:else}
-          <p class="px-2 py-3 text-[13px] text-(--text-muted)">
+      <div class="rounded-md bg-(--bg) px-3 py-2">
+        <dt class="text-[12px] text-(--text-muted)">Shared</dt>
+        <dd class="text-[14px] font-semibold">
+          {shared.length}
+          <span class="font-normal text-(--text-muted)"
+            >of {plural(visible.length, "file")}</span
+          >
+        </dd>
+      </div>
+      {#if pack && fromPack}
+        <div class="rounded-md bg-(--bg) px-3 py-2">
+          <dt class="truncate text-[12px] text-(--text-muted)">
+            From {pack.name}
+          </dt>
+          <dd class="text-[14px] font-semibold">
+            {plural(fromPack, "file")}
+            <span class="font-normal text-(--text-muted)">· not uploaded</span>
+          </dd>
+        </div>
+      {/if}
+      <div class="rounded-md bg-(--bg) px-3 py-2">
+        <dt class="text-[12px] text-(--text-muted)">You upload</dt>
+        <dd class="text-[14px] font-semibold">
+          {#if uploads.length}
+            {plural(uploads.length, "file")}
+            <span class="font-normal text-(--text-muted)"
+              >· {fileSize(uploadBytes)}</span
+            >
+          {:else}
+            Nothing
+          {/if}
+        </dd>
+      </div>
+    </dl>
+    {#if overLimit}
+      <p
+        class="mx-4 mt-2 flex items-center gap-2 text-[13px] text-(--warn)"
+        role="alert"
+      >
+        <Icon name="warn" class="size-4 shrink-0" />
+        {plural(overLimit, "file")} won't fit in the 150 MB limit. Untick some to
+        make room.
+      </p>
+    {/if}
+
+    <div class="flex flex-wrap items-center gap-2 px-4 pt-3 pb-2">
+      <nav
+        aria-label="Folder"
+        class="flex min-w-0 flex-1 items-center gap-1 text-[13px]"
+      >
+        <button
+          type="button"
+          onclick={() => (at = "")}
+          class="rounded px-1 {at
+            ? 'text-(--text-muted) hover:text-(--text-primary)'
+            : 'font-medium'}">All files</button
+        >
+        {#each crumbs as c (c.path)}
+          <Icon name="chev" class="size-3 shrink-0 text-(--text-faint)" />
+          <button
+            type="button"
+            onclick={() => (at = c.path)}
+            class="truncate rounded px-1 {c.path === at
+              ? 'font-medium'
+              : 'text-(--text-muted) hover:text-(--text-primary)'}"
+            >{c.name}</button
+          >
+        {/each}
+      </nav>
+      <label class="relative block w-52 max-w-full">
+        <span
+          class="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2 text-(--text-faint)"
+        >
+          <Icon name="search" class="size-3.5" />
+        </span>
+        <input
+          bind:value={query}
+          placeholder="Search files"
+          aria-label="Search files"
+          class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg) pr-2.5 pl-8 text-[13px] outline-none focus:border-(--accent)"
+        />
+      </label>
+    </div>
+
+    <div role="table" aria-label="Files to share" class="text-[13.5px]">
+      <div
+        role="row"
+        class="{ROW} border-t border-(--line) py-2 text-[13px] text-(--text-muted)"
+      >
+        <input
+          type="checkbox"
+          checked={scope.total > 0 && scope.shared === scope.total}
+          indeterminate={scope.shared > 0 && scope.shared < scope.total}
+          aria-label={scope.shared < scope.total ? "Tick all" : "Untick all"}
+          title={scope.shared < scope.total ? "Tick all" : "Untick all"}
+          onchange={tickAll}
+          class="size-4 accent-(--accent)"
+        />
+        {@render sortHeader("name", "Name")}
+        {@render sortHeader("size", "Size")}
+        {@render sortHeader("modified", "Modified")}
+        <span></span>
+      </div>
+      <div class="h-72 overflow-y-auto">
+        {#each rowFolders as f (f.path)}
+          {@render folderRow(f)}
+        {/each}
+        {#each rowFiles as f (f.path)}
+          {@render fileRow(f)}
+        {/each}
+        {#if searching && !matches.length}
+          <p class="border-t border-(--line) px-4 py-4 text-(--text-muted)">
             Nothing matches “{query}”.
           </p>
-        {/each}
-      {:else}
-        {@render folder(tree, 0)}
-      {/if}
+        {/if}
+      </div>
     </div>
-    <LeftOutFiles files={leftOut} />
-  </div>
+  </section>
 {/if}

@@ -46,17 +46,27 @@ fn listed(path: &str) -> bool {
         .any(|p| lower.starts_with(p) || name == *p)
 }
 
-/// Every file the tree lists, `(path, file, size)`, sorted by path. Hidden folders aren't
-/// walked at all (a world can hold tens of thousands of files).
-pub fn list(game: &Path) -> Vec<(String, PathBuf, u64)> {
+/// A file the tree lists.
+pub struct Listed {
+    /// "config/create/server.toml"
+    pub path: String,
+    pub file: PathBuf,
+    pub size: u64,
+    /// Milliseconds since 1970, when known.
+    pub modified: Option<i64>,
+}
+
+/// Every file the tree lists, sorted by path. Hidden folders aren't walked at all (a
+/// world can hold tens of thousands of files).
+pub fn list(game: &Path) -> Vec<Listed> {
     let mut out = Vec::new();
     walk(game, "", &mut out);
-    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out.sort_by(|a, b| a.path.cmp(&b.path));
     out
 }
 
 /// Folder links (symlinks, junctions) aren't followed: one pointing back up would never end.
-fn walk(dir: &Path, rel: &str, out: &mut Vec<(String, PathBuf, u64)>) {
+fn walk(dir: &Path, rel: &str, out: &mut Vec<Listed>) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
@@ -80,7 +90,17 @@ fn walk(dir: &Path, rel: &str, out: &mut Vec<(String, PathBuf, u64)>) {
             && listed(&child)
             && let Ok(meta) = entry.metadata()
         {
-            out.push((child, entry.path(), meta.len()));
+            let modified = meta
+                .modified()
+                .ok()
+                .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                .map(|d| d.as_millis() as i64);
+            out.push(Listed {
+                path: child,
+                file: entry.path(),
+                size: meta.len(),
+                modified,
+            });
         }
     }
 }
@@ -216,7 +236,7 @@ mod tests {
             std::fs::create_dir_all(p.parent().unwrap()).unwrap();
             std::fs::write(p, b"x").unwrap();
         }
-        let paths: Vec<String> = list(&dir).into_iter().map(|(p, ..)| p).collect();
+        let paths: Vec<String> = list(&dir).into_iter().map(|l| l.path).collect();
         std::fs::remove_dir_all(&dir).unwrap();
         assert_eq!(
             paths,
