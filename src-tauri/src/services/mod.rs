@@ -2,6 +2,7 @@
 //! UI expects, emit events. One file per section of src/lib/api/api.ts.
 
 pub mod accept;
+pub mod auto_update;
 pub mod friends;
 pub mod groups;
 pub mod instances;

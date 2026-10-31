@@ -294,13 +294,31 @@ pub async fn set_link(
             sqlx::query(
                 "UPDATE instance SET shared_instance_id = NULL, shared_role = NULL, synced_revision = NULL,
                     synced_manifest = NULL, synced_manifest_hash = NULL, sync_report_due = 0,
-                    shared_scope = NULL WHERE id = ?",
+                    shared_scope = NULL, auto_update = 0 WHERE id = ?",
             )
             .bind(id)
             .execute(db)
             .await?
         }
     };
+    Ok(())
+}
+
+/// Whether new versions of this shared instance install by themselves.
+pub async fn auto_update(db: &SqlitePool, id: &str) -> sqlx::Result<bool> {
+    let on: Option<bool> = sqlx::query_scalar("SELECT auto_update FROM instance WHERE id = ?")
+        .bind(id)
+        .fetch_optional(db)
+        .await?;
+    Ok(on.unwrap_or(false))
+}
+
+pub async fn set_auto_update(db: &SqlitePool, id: &str, on: bool) -> sqlx::Result<()> {
+    sqlx::query("UPDATE instance SET auto_update = ? WHERE id = ?")
+        .bind(on)
+        .bind(id)
+        .execute(db)
+        .await?;
     Ok(())
 }
 

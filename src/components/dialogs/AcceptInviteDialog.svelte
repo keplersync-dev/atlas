@@ -11,6 +11,7 @@
   import Dialog from "../Dialog.svelte";
   import Icon from "../Icon.svelte";
   import OptionalPicker from "../OptionalPicker.svelte";
+  import Switch from "../Switch.svelte";
 
   let {
     sharedInstanceId,
@@ -49,6 +50,13 @@
 
   // Optional extras the user ticks (none to begin with).
   let optional = $state<string[]>([]);
+
+  // Starts where Settings says (on unless changed there); the friend can switch it here.
+  let autoUpdate = $state(true);
+  const settings = resource(() => api.getAppSettings());
+  $effect(() => {
+    if (settings.data) autoUpdate = settings.data.autoUpdate;
+  });
 
   let submitting = $state(false);
   let error = $state<string | null>(null);
@@ -116,12 +124,30 @@
     try {
       const created =
         target.kind === "launcher"
-          ? await api.acceptInvite(sharedInstanceId, target.id, optional)
-          : await api.acceptInviteInto(sharedInstanceId, target.id, optional);
+          ? await api.acceptInvite(
+              sharedInstanceId,
+              target.id,
+              optional,
+              autoUpdate,
+            )
+          : await api.acceptInviteInto(
+              sharedInstanceId,
+              target.id,
+              optional,
+              autoUpdate,
+            );
       await Promise.all([instances.load(), social.load()]);
       onclose();
       // Open the new instance: its sync bar shows the files arriving.
       go({ page: "instance", id: created.id });
+      // The first pack: offer to start with Windows, once, so updates land before Play.
+      const pc = settings.data;
+      if (pc && !pc.startWithWindows && !pc.startWithWindowsOffered) {
+        openDialog({
+          kind: "startWithWindows",
+          owner: invite?.owner?.displayName ?? null,
+        });
+      }
     } catch (err) {
       error = (err as Error).message;
     } finally {
@@ -295,13 +321,31 @@
     {/if}
 
     <OptionalPicker items={invite.optionalItems} bind:selected={optional} />
+    {#if !nowhere}
+      <div
+        class="mt-4 flex items-center gap-3 rounded-lg bg-(--bg-raise) px-3.5 py-3"
+      >
+        <div class="min-w-0 flex-1">
+          <b class="block font-medium">Keep it up to date automatically</b>
+          <small class="block text-[12.5px] text-(--text-muted)">
+            When {invite.owner?.displayName ?? "the owner"} sends an update, it's
+            installed before you next play.
+          </small>
+        </div>
+        <Switch
+          checked={autoUpdate}
+          label="Keep it up to date automatically"
+          onchange={(next) => (autoUpdate = next)}
+        />
+      </div>
+    {/if}
     {#if invite.uploadedFiles?.length}
       <div class="mt-3 rounded-lg bg-(--warn)/10 px-4 py-3 text-[12.5px]">
         <b class="font-semibold text-(--warn)"
           >Unverified: not from Modrinth or CurseForge.</b
         >
-        {invite.uploadedFiles.join(", ")} were uploaded by a member. Mods are code:
-        only accept if you trust whoever shared them.
+        {invite.uploadedFiles.join(", ")} were uploaded by a member. Only accept if
+        you trust whoever shared them.
       </div>
     {/if}
   {/if}

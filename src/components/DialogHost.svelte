@@ -6,6 +6,7 @@
   import PublishDialog from "./dialogs/PublishDialog.svelte";
   import ReportDialog from "./dialogs/ReportDialog.svelte";
   import ShareDialog from "./dialogs/ShareDialog.svelte";
+  import StartWithWindowsDialog from "./dialogs/StartWithWindowsDialog.svelte";
   import TrackDialog from "./dialogs/TrackDialog.svelte";
 
   // Rendered once in the app shell. Whatever dialogs.active says is shown;
@@ -36,5 +37,7 @@
     <LinkDialog link={active.link} onclose={closeDialog} />
   {:else if active?.kind === "report"}
     <ReportDialog about={active.about} onclose={closeDialog} />
+  {:else if active?.kind === "startWithWindows"}
+    <StartWithWindowsDialog owner={active.owner} onclose={closeDialog} />
   {/if}
 {/key}

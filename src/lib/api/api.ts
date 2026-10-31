@@ -133,11 +133,13 @@ export interface AtlasApi {
    * Creates a new instance in the chosen launcher, fills it with the latest revision, and tracks it.
    * Accepts a pending invite; members and owners can also add one that isn't on this PC.
    * `installOptional`: keys from SharedInstance.optionalItems the user ticked (optional items start unticked).
+   * `autoUpdate`: new versions install by themselves (InstanceSyncInfo.autoUpdate).
    */
   acceptInvite(
     sharedInstanceId: Id,
     launcherId: Id,
     installOptional: string[],
+    autoUpdate: boolean,
   ): Promise<InstanceSummary>;
   /**
    * Like acceptInvite, but into an instance already tracked here (any launcher, not shared yet).
@@ -147,6 +149,7 @@ export interface AtlasApi {
     sharedInstanceId: Id,
     instanceId: Id,
     installOptional: string[],
+    autoUpdate: boolean,
   ): Promise<InstanceSummary>;
   declineInvite(sharedInstanceId: Id): Promise<void>;
   /** Step 1 of sharing/publishing: what would be shared, and which files need a decision. */

@@ -409,7 +409,7 @@
     />
   {:else if tab === "sharing"}
     {#if summary.sync}
-      <SharingTab sync={summary.sync} />
+      <SharingTab instanceId={summary.id} sync={summary.sync} />
     {:else}
       <div class="py-12 text-center text-(--text-muted)">
         <b class="block text-sm text-(--text-primary)"

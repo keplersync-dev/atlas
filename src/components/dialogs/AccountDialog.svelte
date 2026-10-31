@@ -86,6 +86,11 @@
   const PC_SETTINGS: { key: keyof AppSettings; title: string; hint: string }[] =
     [
       {
+        key: "autoUpdate",
+        title: "Keep new packs up to date automatically",
+        hint: "Where the switch starts when you add a pack. Change it for each pack on its Sharing tab.",
+      },
+      {
         key: "notifications",
         title: "Notifications",
         hint: "When Atlas isn't in front: friend requests, invites and new versions of shared instances.",

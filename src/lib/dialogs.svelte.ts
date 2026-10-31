@@ -9,7 +9,9 @@ export type ActiveDialog =
   | { kind: "track" }
   | { kind: "account" }
   | { kind: "link"; link: OpenedLink }
-  | { kind: "report"; about: ReportAbout };
+  | { kind: "report"; about: ReportAbout }
+  /** After the first accepted pack. `owner` names who sends the updates. */
+  | { kind: "startWithWindows"; owner: string | null };
 
 /** What the report dialog is about: an uploaded file is found by its content row. */
 export type ReportAbout =

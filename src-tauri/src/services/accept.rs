@@ -33,6 +33,7 @@ pub async fn into_new<R: Runtime>(
     shared_id: &Id,
     launcher_id: &Id,
     install_optional: Vec<String>,
+    auto_update: bool,
 ) -> AppResult<InstanceSummary> {
     let launcher = db::launchers::get(&state.db, launcher_id)
         .await?
@@ -103,6 +104,7 @@ pub async fn into_new<R: Runtime>(
         src,
         manifest,
         install_optional,
+        auto_update,
         true,
     )
     .await
@@ -115,6 +117,7 @@ pub async fn into_existing<R: Runtime>(
     shared_id: &Id,
     instance_id: &Id,
     install_optional: Vec<String>,
+    auto_update: bool,
 ) -> AppResult<InstanceSummary> {
     let row = db::instances::get(&state.db, instance_id)
         .await?
@@ -143,6 +146,7 @@ pub async fn into_existing<R: Runtime>(
         src,
         manifest,
         install_optional,
+        auto_update,
         false,
     )
     .await
@@ -230,9 +234,11 @@ async fn install<R: Runtime>(
     src: Source,
     manifest: crate::sync::manifest::Manifest,
     install_optional: Vec<String>,
+    auto_update: bool,
     new_instance: bool,
 ) -> AppResult<InstanceSummary> {
     db::instances::set_link(&state.db, instance_id, Some((&shared.id, shared.my_role))).await?;
+    db::instances::set_auto_update(&state.db, instance_id, auto_update).await?;
     let revision = shared.latest_revision;
     let state2 = state.clone();
     jobs::spawn(state, app, instance_id, move |progress| async move {

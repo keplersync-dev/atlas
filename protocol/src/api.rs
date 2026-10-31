@@ -202,8 +202,8 @@ pub struct SharedInstance {
     #[serde(default)]
     pub local_instance_id: Option<Id>,
     pub optional_items: Vec<OptionalItem>,
-    /// Files in the latest version that aren't from Modrinth or CurseForge: someone
-    /// uploaded them, and nobody has checked what's inside.
+    /// Mods and resource packs in the latest version that aren't from Modrinth or
+    /// CurseForge: someone uploaded them, and nobody has checked what's inside.
     #[serde(default)]
     pub uploaded_files: Vec<String>,
 }

@@ -84,6 +84,10 @@ export interface AppSettings {
   closeToTray: boolean;
   /** Atlas starts in the tray when you sign in to Windows. */
   startWithWindows: boolean;
+  /** Where the accept dialog's "Keep it up to date automatically" starts. */
+  autoUpdate: boolean;
+  /** The "start with Windows" screen after the first accepted pack has been shown. */
+  startWithWindowsOffered: boolean;
 }
 
 /** A newer Atlas on the release page. */
@@ -289,6 +293,8 @@ export interface InstanceSyncInfo {
   state: Exclude<SyncState, "local_only">;
   /** Number of managed files changed locally (drives "N changes to publish"). */
   localChangeCount: number;
+  /** New versions install by themselves, when nothing needs the player's say. */
+  autoUpdate: boolean;
 }
 
 /** What the sidebar, tiles and lists need. Cheap to fetch for every instance. */
@@ -619,6 +625,7 @@ export interface TrackInstanceRef {
 export interface UpdateInstanceInput {
   isFavorite?: boolean;
   hideActivity?: boolean;
+  autoUpdate?: boolean;
 }
 
 export interface SyncOptions {

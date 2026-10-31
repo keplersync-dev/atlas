@@ -23,11 +23,15 @@ const NOTIFICATIONS: &str = "notifications";
 const CLOSE_TO_TRAY: &str = "close_to_tray";
 /// Set once the player has been told that closing the window leaves Atlas in the tray.
 const TRAY_HINT_SHOWN: &str = "tray_hint_shown";
+const AUTO_UPDATE: &str = "auto_update";
+const START_WITH_WINDOWS_OFFERED: &str = "start_with_windows_offered";
 
 pub struct Prefs {
     pub notifications: AtomicBool,
     pub close_to_tray: AtomicBool,
     tray_hint_shown: AtomicBool,
+    auto_update: AtomicBool,
+    start_with_windows_offered: AtomicBool,
     /// Started with Windows: the window stays closed until the player opens it.
     pub started_hidden: bool,
 }
@@ -38,6 +42,8 @@ impl Default for Prefs {
             notifications: AtomicBool::new(true),
             close_to_tray: AtomicBool::new(true),
             tray_hint_shown: AtomicBool::new(false),
+            auto_update: AtomicBool::new(true),
+            start_with_windows_offered: AtomicBool::new(false),
             started_hidden: std::env::args().any(|a| a == STARTED_BY_WINDOWS),
         }
     }
@@ -49,9 +55,14 @@ impl Prefs {
         let notifications: bool = db::settings::get_or(db, NOTIFICATIONS, true).await?;
         let close_to_tray: bool = db::settings::get_or(db, CLOSE_TO_TRAY, true).await?;
         let hint_shown: bool = db::settings::get_or(db, TRAY_HINT_SHOWN, false).await?;
+        let auto_update: bool = db::settings::get_or(db, AUTO_UPDATE, true).await?;
+        let offered: bool = db::settings::get_or(db, START_WITH_WINDOWS_OFFERED, false).await?;
         self.notifications.store(notifications, Ordering::Relaxed);
         self.close_to_tray.store(close_to_tray, Ordering::Relaxed);
         self.tray_hint_shown.store(hint_shown, Ordering::Relaxed);
+        self.auto_update.store(auto_update, Ordering::Relaxed);
+        self.start_with_windows_offered
+            .store(offered, Ordering::Relaxed);
         Ok(())
     }
 }
@@ -262,6 +273,11 @@ pub fn settings<R: Runtime>(app: &AppHandle<R>, state: &AppState) -> AppSettings
         start_with_windows: app
             .try_state::<AutoLaunchManager>()
             .is_some_and(|m| m.is_enabled().unwrap_or(false)),
+        auto_update: state.prefs.auto_update.load(Ordering::Relaxed),
+        start_with_windows_offered: state
+            .prefs
+            .start_with_windows_offered
+            .load(Ordering::Relaxed),
     }
 }
 
@@ -277,6 +293,17 @@ pub async fn update_settings<R: Runtime>(
     if let Some(on) = patch.close_to_tray {
         db::settings::set(&state.db, CLOSE_TO_TRAY, &on).await?;
         state.prefs.close_to_tray.store(on, Ordering::Relaxed);
+    }
+    if let Some(on) = patch.auto_update {
+        db::settings::set(&state.db, AUTO_UPDATE, &on).await?;
+        state.prefs.auto_update.store(on, Ordering::Relaxed);
+    }
+    if let Some(offered) = patch.start_with_windows_offered {
+        db::settings::set(&state.db, START_WITH_WINDOWS_OFFERED, &offered).await?;
+        state
+            .prefs
+            .start_with_windows_offered
+            .store(offered, Ordering::Relaxed);
     }
     if let Some(on) = patch.start_with_windows {
         let manager = app

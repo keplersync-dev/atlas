@@ -8,8 +8,7 @@ use tauri::{AppHandle, Runtime};
 
 use crate::db::{self, instances::InstanceRow};
 use crate::dto::{
-    BackupReason, ConfigConflict, ContentSource, InstanceSyncInfo, MemberRole, SyncOptions,
-    SyncPreview, SyncStage,
+    BackupReason, ConfigConflict, InstanceSyncInfo, MemberRole, SyncOptions, SyncPreview, SyncStage,
 };
 use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
@@ -68,6 +67,7 @@ pub async fn info(state: &AppState, row: &InstanceRow) -> AppResult<Option<Insta
         latest_revision: latest,
         state: sync_state::sync_state(frozen, synced, latest, changes),
         local_change_count: changes,
+        auto_update: db::instances::auto_update(&state.db, &row.id).await?,
     }))
 }
 
@@ -101,7 +101,7 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
     let mut manual = Vec::new();
     let mut unverified = Vec::new();
     for (e, local) in plan.places() {
-        if e.source == ContentSource::Upload {
+        if e.needs_approval() {
             unverified.push(e.name.clone());
         }
         match fetch::route(&state.paths, &src, &game_dir, e, local) {

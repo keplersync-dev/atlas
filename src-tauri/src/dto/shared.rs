@@ -47,8 +47,8 @@ pub struct SyncPreview {
     pub launcher_change: Option<LauncherChange>,
     pub game_running: bool,
     pub new_optional: Vec<OptionalItem>,
-    /// Files this update brings that aren't from Modrinth or CurseForge: someone uploaded
-    /// them, and nobody has checked what's inside.
+    /// Mods and resource packs this update brings that aren't from Modrinth or CurseForge:
+    /// someone uploaded them, and nobody has checked what's inside.
     pub unverified: Vec<String>,
 }
 

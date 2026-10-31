@@ -116,6 +116,13 @@ impl Entry {
     pub fn key(&self) -> &str {
         self.project_id.as_deref().unwrap_or(&self.sha256)
     }
+
+    /// An uploaded mod or resource pack: members approve it before it installs. Shaders
+    /// and datapacks can't reach outside the game, so they install like configs.
+    pub fn needs_approval(&self) -> bool {
+        self.source == ContentSource::Upload
+            && matches!(self.kind, ContentKind::Mod | ContentKind::Resourcepack)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -507,6 +514,24 @@ mod tests {
         assert_eq!(pack.source, ContentSource::Upload);
         assert_eq!(pack.key(), pack.sha256, "uploads are keyed by hash");
         assert!(!pack.required);
+    }
+
+    #[test]
+    fn only_uploaded_mods_and_resource_packs_need_approval() {
+        let mut e = parse(&example()).unwrap().content[3].clone();
+        e.source = ContentSource::Upload;
+        for (kind, needs) in [
+            (ContentKind::Mod, true),
+            (ContentKind::Resourcepack, true),
+            (ContentKind::Shaderpack, false),
+            (ContentKind::Datapack, false),
+        ] {
+            e.kind = kind;
+            assert_eq!(e.needs_approval(), needs, "{kind:?}");
+        }
+        e.kind = ContentKind::Mod;
+        e.source = ContentSource::Modrinth;
+        assert!(!e.needs_approval());
     }
 
     fn with_path(path: &str) -> Result<(), Invalid> {

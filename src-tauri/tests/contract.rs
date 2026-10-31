@@ -68,7 +68,7 @@ fn sample(command: &str, key: &str) -> Value {
         (_, "provider") => json!("discord"),
         (_, "kind") => json!("prism"),
         (_, "mode") => json!("optional"),
-        (_, "enabled" | "installed" | "accept") => json!(true),
+        (_, "enabled" | "installed" | "accept" | "autoUpdate") => json!(true),
         (_, "refs") => json!([{ "launcherKind": "prism", "launcherInstanceId": "Survival SMP" }]),
         (_, "installOptional") => json!(["AANobbMI"]),
         (_, "ids") => json!("all"),

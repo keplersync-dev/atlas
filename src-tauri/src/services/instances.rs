@@ -287,6 +287,9 @@ pub async fn update(
 ) -> AppResult<InstanceSummary> {
     row(state, id).await?;
     db::instances::update_prefs(&state.db, id, patch.is_favorite, patch.hide_activity).await?;
+    if let Some(on) = patch.auto_update {
+        db::instances::set_auto_update(&state.db, id, on).await?;
+    }
     if patch.hide_activity.is_some() && state.is_running(id) {
         super::presence::refresh(state).await;
     }

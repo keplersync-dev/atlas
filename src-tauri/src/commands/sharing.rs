@@ -33,6 +33,7 @@ pub async fn accept_invite<R: Runtime>(
     shared_instance_id: Id,
     launcher_id: Id,
     install_optional: Vec<String>,
+    auto_update: bool,
 ) -> AppResult<InstanceSummary> {
     accept::into_new(
         &state,
@@ -40,6 +41,7 @@ pub async fn accept_invite<R: Runtime>(
         &shared_instance_id,
         &launcher_id,
         install_optional,
+        auto_update,
     )
     .await
 }
@@ -52,6 +54,7 @@ pub async fn accept_invite_into<R: Runtime>(
     shared_instance_id: Id,
     instance_id: Id,
     install_optional: Vec<String>,
+    auto_update: bool,
 ) -> AppResult<InstanceSummary> {
     accept::into_existing(
         &state,
@@ -59,6 +62,7 @@ pub async fn accept_invite_into<R: Runtime>(
         &shared_instance_id,
         &instance_id,
         install_optional,
+        auto_update,
     )
     .await
 }

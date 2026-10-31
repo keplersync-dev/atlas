@@ -37,6 +37,8 @@ pub struct UpdateInstanceInput {
     pub is_favorite: Option<bool>,
     #[serde(default)]
     pub hide_activity: Option<bool>,
+    #[serde(default)]
+    pub auto_update: Option<bool>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]

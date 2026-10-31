@@ -230,8 +230,8 @@
         <b class="font-semibold text-(--warn)"
           >Unverified: not from Modrinth or CurseForge.</b
         >
-        {preview.unverified.join(", ")} were uploaded by a member. Mods are code:
-        only update if you trust whoever shared them.
+        {preview.unverified.join(", ")} were uploaded by a member. Only update if
+        you trust whoever shared them.
       </div>
     {/if}
 

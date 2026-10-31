@@ -268,10 +268,14 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     // Session, connection and friend events go to the UI; the saved session is checked
     // and the server socket opened in the background.
     {
-        let handle = handle.clone();
+        let (handle, events_state) = (handle.clone(), state.clone());
         state.cloud.on_event(move |e| {
-            if let AtlasEvent::ActivityNew { item } = &e {
-                desktop::notify_activity(&handle, item);
+            match &e {
+                AtlasEvent::ActivityNew { item } => desktop::notify_activity(&handle, item),
+                AtlasEvent::SharedChanged { shared_instance_id } => {
+                    services::auto_update::soon(&events_state, &handle, shared_instance_id)
+                }
+                _ => {}
             }
             events::emit(&handle, e)
         });
@@ -290,6 +294,7 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
             tracing::warn!(error = %e, "launcher detection failed");
         }
         services::instances::rescan_all(&state, &handle, std::time::Duration::ZERO).await;
+        services::auto_update::check_all(&state, &handle).await;
     });
     Ok(())
 }

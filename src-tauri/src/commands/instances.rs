@@ -43,12 +43,21 @@ pub async fn untrack_instance(state: State<'_, AppState>, id: Id) -> AppResult<(
 }
 
 #[tauri::command]
-pub async fn update_instance(
+pub async fn update_instance<R: Runtime>(
+    app: AppHandle<R>,
     state: State<'_, AppState>,
     id: Id,
     patch: UpdateInstanceInput,
 ) -> AppResult<InstanceSummary> {
-    instances::update(&state, &id, &patch).await
+    let summary = instances::update(&state, &id, &patch).await?;
+    // Switched on with a new version waiting: install it now, not at the next one.
+    if patch.auto_update == Some(true) {
+        let (state, id) = (state.inner().clone(), id.clone());
+        tauri::async_runtime::spawn(async move {
+            crate::services::auto_update::check(&state, &app, &id).await;
+        });
+    }
+    Ok(summary)
 }
 
 /// Re-read launcher metadata and the files now (the watcher also does this on its own).

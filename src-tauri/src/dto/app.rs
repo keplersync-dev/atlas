@@ -10,6 +10,10 @@ pub struct AppSettings {
     pub close_to_tray: bool,
     /// Atlas starts in the tray when you sign in to Windows.
     pub start_with_windows: bool,
+    /// Where the accept dialog's "Keep it up to date automatically" starts.
+    pub auto_update: bool,
+    /// The "start with Windows" screen after the first accepted pack has been shown.
+    pub start_with_windows_offered: bool,
 }
 
 /// Only the fields given change.
@@ -19,6 +23,8 @@ pub struct AppSettingsPatch {
     pub notifications: Option<bool>,
     pub close_to_tray: Option<bool>,
     pub start_with_windows: Option<bool>,
+    pub auto_update: Option<bool>,
+    pub start_with_windows_offered: Option<bool>,
 }
 
 /// A newer Atlas on the release page.

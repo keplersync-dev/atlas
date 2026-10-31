@@ -4,11 +4,32 @@
   import { confirmAction } from "$lib/confirm.svelte";
   import { resource } from "$lib/resource.svelte";
   import { social } from "$lib/stores";
-  import type { InstanceSyncInfo, MemberRole, SharedMember } from "$lib/types";
+  import type {
+    Id,
+    InstanceSyncInfo,
+    MemberRole,
+    SharedMember,
+  } from "$lib/types";
+  import { instances } from "$lib/stores";
   import Head from "../Head.svelte";
   import Icon from "../Icon.svelte";
+  import Switch from "../Switch.svelte";
 
-  let { sync }: { sync: InstanceSyncInfo } = $props();
+  let { instanceId, sync }: { instanceId: Id; sync: InstanceSyncInfo } =
+    $props();
+
+  let savingAutoUpdate = $state(false);
+  async function setAutoUpdate(on: boolean) {
+    savingAutoUpdate = true;
+    try {
+      await api.updateInstance(instanceId, { autoUpdate: on });
+      await instances.load();
+    } catch (e) {
+      showError((e as Error).message);
+    } finally {
+      savingAutoUpdate = false;
+    }
+  }
 
   // Reads only `sync.sharedInstanceId` before awaiting, so it refetches only when
   // that id changes — not on every progress tick of the instance.
@@ -69,6 +90,24 @@
     Shared with {shared.data.groups.map((g) => g.group.name).join(", ")}.
   {/if}
 </p>
+
+<div
+  class="mb-4 flex items-center gap-3 rounded-lg bg-(--bg-raise) px-3.5 py-3"
+>
+  <div class="min-w-0 flex-1">
+    <b class="block font-medium">Keep it up to date automatically</b>
+    <small class="block text-[12.5px] text-(--text-muted)">
+      New versions install before you next play. Atlas still asks when one would
+      undo your changes or adds a mod that isn't on Modrinth or CurseForge.
+    </small>
+  </div>
+  <Switch
+    checked={sync.autoUpdate}
+    label="Keep it up to date automatically"
+    disabled={savingAutoUpdate}
+    onchange={setAutoUpdate}
+  />
+</div>
 
 {#if isOwner}
   <!-- What the two roles mean, next to where they're changed. -->

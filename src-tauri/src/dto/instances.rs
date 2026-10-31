@@ -77,6 +77,8 @@ pub struct InstanceSyncInfo {
     /// Never `LocalOnly` here (that's `sync: null`).
     pub state: SyncState,
     pub local_change_count: u32,
+    /// New versions install by themselves, when nothing needs the player's say.
+    pub auto_update: bool,
 }
 
 /// `{ kind: LauncherKind; name: string }` in InstanceSummary.
