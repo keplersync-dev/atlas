@@ -11,6 +11,7 @@ pub mod mrpack;
 pub mod presence;
 pub mod publish;
 pub mod session;
+pub mod share_files;
 pub mod shared;
 pub mod sync;
 pub mod updates;

@@ -21,7 +21,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use super::backup::{self, FileAction, FileRecord};
 use super::fetch::{self, Route};
-use super::manifest::{Entry, Manifest, Override, PackBase};
+use super::manifest::{Entry, Keep, Manifest, Override, PackBase};
 use super::pack;
 use super::plan::{self, Action, Plan};
 use super::source::Source;
@@ -441,7 +441,27 @@ fn apply_actions(
         };
         let to = staging.join("files").join(path);
         std::fs::create_dir_all(to.parent().expect("relative path has a parent"))?;
-        std::fs::copy(&from, &to)?;
+        let mine = std::fs::read(game_dir.join(path)).ok();
+        match (a, mine) {
+            (
+                Action::WriteConfig {
+                    config:
+                        Override {
+                            keep: Some(Keep::MergeServers),
+                            ..
+                        },
+                    ..
+                },
+                Some(mine),
+            ) => {
+                // An unreadable list stays as the member has it.
+                let merged = super::servers::merge(&mine, &std::fs::read(&from)?).unwrap_or(mine);
+                std::fs::write(&to, merged)?;
+            }
+            _ => {
+                std::fs::copy(&from, &to)?;
+            }
+        }
     }
 
     let mut journal = Journal {

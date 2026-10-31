@@ -52,15 +52,31 @@ pub struct SyncPreview {
     pub unverified: Vec<String>,
 }
 
-/// A config folder directly under config/ (usually one per mod) or a loose config file.
+/// A file in the share dialog's tree: anything in the instance folder except mods and
+/// packs (listed apart) and what's never shared.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ConfigGroup {
-    /// "config/create/" (a folder) or "config/a.json" (a file).
-    pub key: String,
-    pub files: u32,
+pub struct ShareFile {
+    /// "config/create/server.toml"
+    pub path: String,
     pub size_bytes: u64,
-    pub shared: bool,
+    /// The modpack ships it: ticked by default, and not uploaded if unchanged.
+    pub from_pack: bool,
+    /// Why it can't be uploaded even when ticked. A file from the pack still goes out
+    /// as the pack has it.
+    pub refusal: Option<LeftOutReason>,
+}
+
+/// Which tree files are shared: paths ticked or unticked, a folder ending in '/' and ""
+/// for everything. The longest matching rule wins; with none, config and script folders
+/// and the pack's own files are shared. Saved with each share for the next one.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileRules {
+    pub include: Vec<String>,
+    pub exclude: Vec<String>,
+    /// Files members get once and then keep as their own (options.txt always is).
+    pub first_install: Vec<String>,
 }
 
 /// A config file that won't be shared as it is here, and why. Listed in the dialog
@@ -113,11 +129,13 @@ pub struct PublishPlan {
     /// Files Modrinth or CurseForge couldn't be asked about (unreachable). They count as
     /// uploads.
     pub unchecked: u32,
-    /// Config folders and loose config files, for choosing which are shared.
-    pub configs: Vec<ConfigGroup>,
+    /// Every other file in the folder, for the tree.
+    pub files: Vec<ShareFile>,
+    /// Which of them are shared now.
+    pub rules: FileRules,
     /// The modpack the instance is from, when its files can come from its download.
     pub pack: Option<PackInfo>,
-    /// Config files that won't be shared as they are here.
+    /// Ticked files that won't be shared as they are here.
     pub left_out: Vec<LeftOutFile>,
     /// The launcher runs other Minecraft or loader versions than the shared ones: `from`
     /// is shared now, `to` is what this version will say. `automatic` is unused here.

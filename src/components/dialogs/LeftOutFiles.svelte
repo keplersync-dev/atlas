@@ -7,6 +7,8 @@
   let { files }: { files: LeftOutFile[] } = $props();
 
   const REASONS: { id: LeftOutReason; label: string }[] = [
+    { id: "login", label: "Can hold your Minecraft login" },
+    { id: "program", label: "Programs" },
     { id: "file_type", label: "Not a file type Atlas shares" },
     { id: "too_big", label: "Over 8 MB" },
     { id: "folder", label: "Not in a folder Atlas shares" },

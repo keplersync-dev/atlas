@@ -3,12 +3,12 @@
   import { plural, workLabel } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
   import { instances, social } from "$lib/stores";
-  import type { Id, ShareMode } from "$lib/types";
+  import type { FileRules, Id, ShareMode } from "$lib/types";
   import Button from "../Button.svelte";
   import ContentIcon from "../ContentIcon.svelte";
   import Dialog from "../Dialog.svelte";
   import Head from "../Head.svelte";
-  import ConfigPicker from "./ConfigPicker.svelte";
+  import FileTree from "./FileTree.svelte";
   import RightsCheck from "./RightsCheck.svelte";
   import SharePicker, { uploadBytes, uploadsOf } from "./SharePicker.svelte";
 
@@ -50,7 +50,7 @@
   // Share setting per file the user changed here; everything else starts "required".
   let modes = $state<Record<Id, ShareMode>>({});
   let rights = $state(false);
-  let configExclude = $state<string[] | null>(null);
+  let fileRules = $state<FileRules | null>(null);
   let submitting = $state(false);
   let error = $state<string | null>(null);
 
@@ -105,7 +105,7 @@
           role,
           shareModes: modes,
           confirmedUploadRights: rights,
-          configExclude: configExclude ?? undefined,
+          files: fileRules ?? undefined,
         });
       } else if (sharedId) {
         await api.inviteToSharedInstance(sharedId, {
@@ -277,11 +277,12 @@
           unchecked={plan.data.unchecked}
           onrecheck={plan.reload}
         />
-        <ConfigPicker
-          configs={plan.data.configs}
+        <FileTree
+          files={plan.data.files}
+          saved={plan.data.rules}
           pack={plan.data.pack}
           leftOut={plan.data.leftOut}
-          bind:excluded={configExclude}
+          bind:rules={fileRules}
         />
       {/if}
     {/if}

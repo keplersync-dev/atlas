@@ -13,7 +13,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::manifest::{Entry, Manifest, Override};
+use super::manifest::{Entry, Keep, Manifest, Override};
 use crate::db::content::ContentRow;
 use crate::dto::{ConfigChoice, OptionalItem, RevisionChanges, UpdatedItem};
 
@@ -212,6 +212,31 @@ pub fn plan(input: &Input) -> Plan {
     let mut configs = Vec::new();
     for o in &input.target.overrides {
         let mine = (input.config_on_disk)(&o.path);
+        match o.keep {
+            // The member's own once they have one: their settings, never overwritten.
+            Some(Keep::FirstInstall) => {
+                if mine.is_none() {
+                    configs.push(Action::WriteConfig {
+                        config: o.clone(),
+                        replaces: false,
+                    });
+                }
+                continue;
+            }
+            // Merged into the member's file when the owner's changed (see servers.rs);
+            // the member's own changes never conflict.
+            Some(Keep::MergeServers) => {
+                let base_sha = base.get(&o.path.to_lowercase()).map(|b| b.sha256.as_str());
+                if mine.is_none() || base_sha != Some(o.sha256.as_str()) {
+                    configs.push(Action::WriteConfig {
+                        config: o.clone(),
+                        replaces: mine.is_some(),
+                    });
+                }
+                continue;
+            }
+            None => {}
+        }
         let base_sha = base.get(&o.path.to_lowercase()).map(|b| b.sha256.as_str());
         let Some(mine) = mine else {
             configs.push(Action::WriteConfig {
@@ -251,6 +276,7 @@ pub fn plan(input: &Input) -> Plan {
         .collect();
     for (path, b) in &base {
         if !target_configs.contains(path)
+            && b.keep.is_none()
             && (input.config_on_disk)(&b.path).as_deref() == Some(b.sha256.as_str())
         {
             configs.push(Action::RemoveConfig {
@@ -521,6 +547,7 @@ mod tests {
             sha256: sha.to_string().repeat(64),
             size_bytes: 1,
             in_pack: false,
+            keep: None,
         };
         let synced = manifest(
             vec![],
@@ -566,5 +593,59 @@ mod tests {
         let choices = HashMap::from([("config/c.json".to_string(), ConfigChoice::Mine)]);
         let p = run_with(Some(&synced), &target, &[], &[], &choices, &lookup);
         assert!(!paths(&p).contains(&"cfg config/c.json (replace)".to_string()));
+    }
+
+    #[test]
+    fn first_install_files_become_the_members_own() {
+        let o = |sha: char| Override {
+            path: "options.txt".into(),
+            sha256: sha.to_string().repeat(64),
+            size_bytes: 1,
+            in_pack: false,
+            keep: Some(Keep::FirstInstall),
+        };
+        let none = |_: &str| None;
+        let p = run_with(
+            None,
+            &manifest(vec![], vec![o('1')]),
+            &[],
+            &[],
+            &HashMap::new(),
+            &none,
+        );
+        assert_eq!(paths(&p), ["cfg options.txt"], "a first install gets it");
+
+        // Later versions never touch it, changed or dropped, edited here or not.
+        let theirs = |_: &str| Some("1".repeat(64));
+        let synced = manifest(vec![], vec![o('1')]);
+        let changed = manifest(vec![], vec![o('2')]);
+        let p = run_with(Some(&synced), &changed, &[], &[], &HashMap::new(), &theirs);
+        assert!(paths(&p).is_empty());
+        assert!(p.conflicts.is_empty());
+        let dropped = manifest(vec![], vec![]);
+        let p = run_with(Some(&synced), &dropped, &[], &[], &HashMap::new(), &theirs);
+        assert!(paths(&p).is_empty());
+    }
+
+    #[test]
+    fn server_lists_merge_when_the_owners_changes() {
+        let o = |sha: char| Override {
+            path: "servers.dat".into(),
+            sha256: sha.to_string().repeat(64),
+            size_bytes: 1,
+            in_pack: false,
+            keep: Some(Keep::MergeServers),
+        };
+        let synced = manifest(vec![], vec![o('1')]);
+        let mine = |_: &str| Some("9".repeat(64)); // the member added their own servers
+        let same = run_with(Some(&synced), &synced, &[], &[], &HashMap::new(), &mine);
+        assert!(paths(&same).is_empty(), "nothing new from the owner");
+        let changed = manifest(vec![], vec![o('2')]);
+        let p = run_with(Some(&synced), &changed, &[], &[], &HashMap::new(), &mine);
+        assert_eq!(paths(&p), ["cfg servers.dat (replace)"]);
+        assert!(
+            p.conflicts.is_empty(),
+            "the member's own servers never conflict"
+        );
     }
 }

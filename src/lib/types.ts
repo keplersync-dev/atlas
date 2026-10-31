@@ -509,7 +509,12 @@ export interface PackInfo {
 }
 
 export type LeftOutReason =
+  /** Mods and packs (listed apart), worlds, logs, launcher files. */
   | "folder"
+  /** It can hold a Minecraft login. */
+  | "login"
+  /** A program, native library or script Windows runs. */
+  | "program"
   | "file_type"
   | "too_big"
   | "over_limit"
@@ -532,11 +537,13 @@ export interface PublishPlan {
   storage: { usedBytes: number; quotaBytes: number; maxFileBytes: number };
   /** Files Modrinth or CurseForge couldn't be asked about (unreachable). They count as uploads. */
   unchecked: number;
-  /** Config folders and loose config files, for choosing which are shared. */
-  configs: ConfigGroup[];
+  /** Every other file in the folder, for the tree. */
+  files: ShareFile[];
+  /** Which of them are shared now. */
+  rules: FileRules;
   /** The modpack the instance is from: its own files come from its download, not uploads. */
   pack: PackInfo | null;
-  /** Config files that won't be shared as they are here. */
+  /** Ticked files that won't be shared as they are here. */
   leftOut: LeftOutFile[];
   /**
    * The launcher runs other Minecraft or loader versions than the shared ones: `from` is
@@ -675,8 +682,8 @@ export interface ShareInstanceInput {
   shareModes: Record<Id, ShareMode>;
   /** User ticked "I have the right to share these files". Required when any needsUpload item isn't "private". */
   confirmedUploadRights: boolean;
-  /** ConfigGroup keys not to share, saved for later publishes. Missing = keep the saved ones. */
-  configExclude?: string[];
+  /** The tree's ticks, saved for later publishes. Missing = keep the saved ones. */
+  files?: FileRules;
 }
 
 export interface PublishInput {
@@ -684,16 +691,33 @@ export interface PublishInput {
   /** Setting per PublishItem.contentId. Missing = keep the item's current shareMode. */
   shareModes: Record<Id, ShareMode>;
   confirmedUploadRights: boolean;
-  configExclude?: string[];
+  files?: FileRules;
 }
 
-/** A config folder directly under config/ (usually one per mod) or a loose config file. */
-export interface ConfigGroup {
-  /** "config/create/" (a folder) or "config/a.json" (a file). */
-  key: string;
-  files: number;
+/**
+ * A file in the share dialog's tree: anything in the instance folder except mods and
+ * packs (listed apart) and what's never shared.
+ */
+export interface ShareFile {
+  /** "config/create/server.toml" */
+  path: string;
   sizeBytes: number;
-  shared: boolean;
+  /** The modpack ships it: ticked by default, and not uploaded if unchanged. */
+  fromPack: boolean;
+  /** Why it can't be uploaded even when ticked (a file from the pack still goes out as the pack has it). */
+  refusal: LeftOutReason | null;
+}
+
+/**
+ * Which tree files are shared: paths ticked or unticked, a folder ending in "/" and ""
+ * for everything. The longest matching rule wins; with none, config and script folders
+ * and the pack's own files are shared. See $lib/fileRules.ts.
+ */
+export interface FileRules {
+  include: string[];
+  exclude: string[];
+  /** Files members get once and then keep as their own (options.txt always is). */
+  firstInstall: string[];
 }
 
 export interface CreateGroupInviteInput {

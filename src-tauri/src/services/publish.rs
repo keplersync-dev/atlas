@@ -3,8 +3,8 @@
 //! and their share settings, send it, then mark the files as published. Nothing changes
 //! locally until the server has accepted it.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -12,14 +12,15 @@ use reqwest::Method;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Runtime};
 
+use super::share_files;
 use super::work::Reporter;
 use crate::cloud::files::UploadFile;
 use crate::db::{self, content::ContentRow, instances::InstanceRow};
 use crate::dto::{
-    ConfigGroup, ContentKind, ContentSource, CreateRevision, CreateSharedInstance, InstanceSummary,
+    ContentKind, ContentSource, CreateRevision, CreateSharedInstance, FileRules, InstanceSummary,
     LeftOutFile, LeftOutReason, ManualDownload, MemberRole, PackInfo, PublishInput, PublishItem,
-    PublishPlan, RevisionSummary, ShareInstanceInput, ShareMode, SharedInstance, Side, Storage,
-    WorkStage, from_wire, to_wire,
+    PublishPlan, RevisionSummary, ShareFile, ShareInstanceInput, ShareMode, SharedInstance, Side,
+    Storage, WorkStage, from_wire, to_wire,
 };
 use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
@@ -29,7 +30,7 @@ use crate::sync::manifest::{
     self, Entry, MAX_ICON_BYTES, MAX_OVERRIDES, MAX_OVERRIDES_TOTAL, Manifest, MinecraftSpec,
     Override, PackBase, Refusal, SCHEMA_VERSION,
 };
-use crate::sync::pack::{self, PackIndex};
+use crate::sync::pack;
 
 async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
     db::instances::get(&state.db, id).await?.ok_or_else(|| {
@@ -128,7 +129,6 @@ pub async fn prepare<R: Runtime>(
         }
     }
     let configs = plan_configs(state, &row, &Reporter::new(app, id)).await?;
-    let exclude = config_exclude(state, id).await?;
     let storage = match state
         .cloud
         .call(Method::GET, "/me/storage", None::<&()>)
@@ -164,7 +164,8 @@ pub async fn prepare<R: Runtime>(
             files: configs.shared.iter().filter(|(o, _)| o.in_pack).count() as u32,
         }),
         left_out: configs.left_out,
-        configs: config_groups(&configs.candidates, &exclude),
+        files: configs.files,
+        rules: file_rules(state, id).await?,
         versions: row
             .synced_manifest()
             .and_then(|m| crate::sync::state::version_change(&row, &m)),
@@ -183,118 +184,78 @@ fn modes(rows: &[ContentRow], chosen: &HashMap<String, ShareMode>) -> HashMap<St
         .collect()
 }
 
-/// Folders whose files are shared besides `sync_include`: configs, and the scripts and
-/// assets packs keep next to them.
-const SHARED_DIRS: [&str; 4] = ["config", "defaultconfigs", "kubejs", "scripts"];
-
-/// The files a share may include, not hashed: `(path, file, size)`. Those under the
-/// shared folders and `sync_include`, and the modpack's own files that are here.
-async fn config_candidates(
-    state: &AppState,
-    row: &InstanceRow,
-    pack: Option<&PackIndex>,
-) -> AppResult<Vec<(String, PathBuf, u64)>> {
-    let include: Option<String> =
-        sqlx::query_scalar("SELECT sync_include FROM instance WHERE id = ?")
-            .bind(&row.id)
-            .fetch_optional(&state.db)
-            .await?;
-    let mut patterns: Vec<String> = include
-        .and_then(|json| serde_json::from_str(&json).ok())
-        .unwrap_or_default();
-    patterns.extend(SHARED_DIRS.iter().map(|d| format!("{d}/**")));
-    patterns.extend(pack.into_iter().flat_map(|p| p.keys().cloned()));
-    let game = PathBuf::from(&row.game_dir);
-    tokio::task::spawn_blocking(move || candidates_in(&game, &patterns))
-        .await
-        .map_err(AppError::from)
+/// The tree's ticks, as saved with the last share or publish.
+async fn file_rules(state: &AppState, id: &str) -> AppResult<FileRules> {
+    let saved: Option<(String, String, String)> = sqlx::query_as(
+        "SELECT sync_include, sync_exclude, sync_first_install FROM instance WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(&state.db)
+    .await?;
+    let (include, exclude, first) = saved.unwrap_or_default();
+    let list = |json: &str| serde_json::from_str::<Vec<String>>(json).unwrap_or_default();
+    Ok(share_files::from_saved(
+        list(&include),
+        list(&exclude),
+        list(&first),
+    ))
 }
 
-fn candidates_in(game: &Path, patterns: &[String]) -> Vec<(String, PathBuf, u64)> {
-    let mut files = Vec::new();
-    for pattern in patterns {
-        match pattern.strip_suffix("/**") {
-            Some(dir) => walk(&game.join(dir), dir, &mut files),
-            None => {
-                let file = game.join(pattern);
-                if file.is_file() {
-                    files.push((pattern.clone(), file));
-                }
-            }
-        }
-    }
-    files.sort();
-    files.dedup();
-    files
-        .into_iter()
-        .filter_map(|(rel, file)| {
-            let size = std::fs::metadata(&file).ok()?.len();
-            Some((rel, file, size))
-        })
-        .collect()
-}
-
-/// What the owner switches on and off: a top folder's subfolder ("config/create/",
-/// usually one per mod; "kubejs/assets/"), or the file itself when it's loose
-/// ("config/a.json", "options.txt").
-pub fn config_group(path: &str) -> String {
-    let mut parts = path.splitn(3, '/');
-    match (parts.next(), parts.next(), parts.next()) {
-        (Some(top), Some(sub), Some(_)) => format!("{top}/{sub}/"),
-        _ => path.to_owned(),
-    }
-}
-
-/// The config folders and files this instance doesn't share.
-async fn config_exclude(state: &AppState, id: &str) -> AppResult<Vec<String>> {
-    let json: Option<String> = sqlx::query_scalar("SELECT sync_exclude FROM instance WHERE id = ?")
-        .bind(id)
-        .fetch_optional(&state.db)
-        .await?;
-    Ok(json
-        .and_then(|j| serde_json::from_str(&j).ok())
-        .unwrap_or_default())
-}
-
-async fn save_config_exclude(state: &AppState, id: &str, exclude: &[String]) -> AppResult<()> {
-    sqlx::query("UPDATE instance SET sync_exclude = ? WHERE id = ?")
-        .bind(serde_json::to_string(exclude)?)
-        .bind(id)
-        .execute(&state.db)
-        .await?;
+async fn save_file_rules(state: &AppState, id: &str, rules: &FileRules) -> AppResult<()> {
+    sqlx::query(
+        "UPDATE instance SET sync_include = ?, sync_exclude = ?, sync_first_install = ? WHERE id = ?",
+    )
+    .bind(serde_json::to_string(&rules.include)?)
+    .bind(serde_json::to_string(&rules.exclude)?)
+    .bind(serde_json::to_string(&rules.first_install)?)
+    .bind(id)
+    .execute(&state.db)
+    .await?;
     Ok(())
 }
 
-/// The config files the owner shares (switched-off ones left out), not hashed and with no
-/// limit: for exporting a pack.
+/// The files the owner shares besides mods and packs (unticked ones left out), not
+/// hashed and with no limit: for exporting a pack.
 pub async fn shared_config_files(
     state: &AppState,
     row: &InstanceRow,
 ) -> AppResult<Vec<(String, PathBuf)>> {
-    let exclude = config_exclude(state, &row.id).await?;
-    Ok(config_candidates(state, row, None)
-        .await?
+    let rules = file_rules(state, &row.id).await?;
+    let game = PathBuf::from(&row.game_dir);
+    let listed = tokio::task::spawn_blocking(move || share_files::list(&game)).await?;
+    Ok(listed
         .into_iter()
         .filter(|(rel, _, size)| {
-            !exclude.contains(&config_group(rel)) && manifest::upload_refusal(rel, *size).is_none()
+            share_files::shared(&rules, rel, false)
+                && manifest::upload_refusal(rel, *size).is_none()
         })
         .map(|(rel, file, _)| (rel, file))
         .collect())
 }
 
-/// What sharing does with the config files.
+/// What sharing does with the files besides mods and packs.
 struct ConfigPlan {
     /// The modpack the instance is from, when its download could be read.
     base: Option<PackBase>,
     /// Shared, with the local file: `in_pack` ones come from the pack, the rest upload.
     shared: Vec<(Override, PathBuf)>,
-    /// Not shared, and why. Shown before anything uploads.
+    /// Ticked but not shared as they are here, and why. Shown before anything uploads.
     left_out: Vec<LeftOutFile>,
-    /// Every file that could be, for the dialog's groups: `(path, size)`.
-    candidates: Vec<(String, u64)>,
+    /// Every file in the tree.
+    files: Vec<ShareFile>,
 }
 
-/// Sort the config files: exactly as the modpack has them (referenced, not uploaded),
+fn left_out_reason(r: Refusal) -> LeftOutReason {
+    match r {
+        Refusal::Folder => LeftOutReason::Folder,
+        Refusal::Login => LeftOutReason::Login,
+        Refusal::Program => LeftOutReason::Program,
+        Refusal::FileType => LeftOutReason::FileType,
+        Refusal::TooBig => LeftOutReason::TooBig,
+    }
+}
+
+/// Sort the ticked files: exactly as the modpack has them (referenced, not uploaded),
 /// uploadable, or left out. A file the owner changed that can't be uploaded falls back
 /// to the pack's own copy, so friends at least get that.
 async fn plan_configs<R: Runtime>(
@@ -302,7 +263,7 @@ async fn plan_configs<R: Runtime>(
     row: &InstanceRow,
     work: &Reporter<R>,
 ) -> AppResult<ConfigPlan> {
-    let exclude = config_exclude(state, &row.id).await?;
+    let rules = file_rules(state, &row.id).await?;
     let mut base = pack::base_for(state, row).await;
     let mut index = None;
     if let Some(b) = &base {
@@ -324,11 +285,21 @@ async fn plan_configs<R: Runtime>(
             }
         }
     }
-    let candidates = config_candidates(state, row, index.as_ref()).await?;
-    let wanted: Vec<(String, PathBuf, u64)> = candidates
+    let in_pack = |rel: &str| index.as_ref().is_some_and(|i| i.contains_key(rel));
+    let game = PathBuf::from(&row.game_dir);
+    let listed = tokio::task::spawn_blocking(move || share_files::list(&game)).await?;
+    let files: Vec<ShareFile> = listed
         .iter()
-        .filter(|(rel, ..)| !exclude.contains(&config_group(rel)))
-        .cloned()
+        .map(|(rel, _, size)| ShareFile {
+            path: rel.clone(),
+            size_bytes: *size,
+            from_pack: in_pack(rel),
+            refusal: manifest::upload_refusal(rel, *size).map(left_out_reason),
+        })
+        .collect();
+    let wanted: Vec<(String, PathBuf, u64)> = listed
+        .into_iter()
+        .filter(|(rel, ..)| share_files::shared(&rules, rel, in_pack(rel)))
         .collect();
     let count = wanted.len() as u64;
     let done = Arc::new(AtomicU64::new(0));
@@ -356,10 +327,7 @@ async fn plan_configs<R: Runtime>(
         base: base.clone(),
         shared: Vec::new(),
         left_out: Vec::new(),
-        candidates: candidates
-            .into_iter()
-            .map(|(rel, _, size)| (rel, size))
-            .collect(),
+        files,
     };
     let mut uploaded = 0u64;
     let full =
@@ -381,11 +349,7 @@ async fn plan_configs<R: Runtime>(
             (false, Some(reason), None) => {
                 plan.left_out.push(LeftOutFile {
                     path: rel.clone(),
-                    reason: match reason {
-                        Refusal::Folder => LeftOutReason::Folder,
-                        Refusal::FileType => LeftOutReason::FileType,
-                        Refusal::TooBig => LeftOutReason::TooBig,
-                    },
+                    reason: left_out_reason(reason),
                 });
                 None
             }
@@ -411,6 +375,7 @@ async fn plan_configs<R: Runtime>(
         }
         plan.shared.push((
             Override {
+                keep: share_files::keep(&rules, &rel),
                 path: rel,
                 sha256,
                 size_bytes,
@@ -422,49 +387,10 @@ async fn plan_configs<R: Runtime>(
     if !plan.left_out.is_empty() {
         tracing::info!(
             files = plan.left_out.len(),
-            "config files not shared as they are"
+            "ticked files not shared as they are"
         );
     }
     Ok(plan)
-}
-
-/// The config folders and loose files the dialog lists, and whether each is shared.
-fn config_groups(candidates: &[(String, u64)], exclude: &[String]) -> Vec<ConfigGroup> {
-    let mut groups: BTreeMap<String, ConfigGroup> = BTreeMap::new();
-    for (rel, size) in candidates {
-        let key = config_group(rel);
-        let group = groups.entry(key.clone()).or_insert_with(|| ConfigGroup {
-            shared: !exclude.contains(&key),
-            key,
-            files: 0,
-            size_bytes: 0,
-        });
-        group.files += 1;
-        group.size_bytes += size;
-    }
-    groups.into_values().collect()
-}
-
-/// Every file under `dir`, with paths relative to the game folder ("config/a/b.json").
-/// Folder links (symlinks, junctions) aren't followed: one pointing back up would never end.
-fn walk(dir: &Path, rel: &str, out: &mut Vec<(String, PathBuf)>) {
-    let Ok(entries) = std::fs::read_dir(dir) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        let Ok(kind) = entry.file_type() else {
-            continue;
-        };
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let child = format!("{rel}/{name}");
-        if kind.is_symlink() {
-            continue;
-        } else if kind.is_dir() {
-            walk(&entry.path(), &child, out);
-        } else if kind.is_file() {
-            out.push((child, entry.path()));
-        }
-    }
 }
 
 /// Upload what the version needs that the server doesn't have yet: files on no mod site
@@ -774,8 +700,8 @@ async fn share_now<R: Runtime>(
     if row.shared_instance_id.is_some() {
         return Err(AppError::conflict("This instance is already shared"));
     }
-    if let Some(exclude) = &input.config_exclude {
-        save_config_exclude(state, id, exclude).await?;
+    if let Some(files) = &input.files {
+        save_file_rules(state, id, files).await?;
     }
     let rows = db::content::list(&state.db, id).await?;
     let modes = modes(&rows, &input.share_modes);
@@ -857,8 +783,8 @@ async fn publish_now<R: Runtime>(
         .synced_revision
         .ok_or_else(|| AppError::conflict("Update to the latest version first"))?
         .max(0) as u32;
-    if let Some(exclude) = &input.config_exclude {
-        save_config_exclude(state, id, exclude).await?;
+    if let Some(files) = &input.files {
+        save_file_rules(state, id, files).await?;
     }
     let rows = db::content::list(&state.db, id).await?;
     let modes = modes(&rows, &input.share_modes);
@@ -921,17 +847,4 @@ async fn publish_now<R: Runtime>(
         },
     );
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn configs_are_chosen_by_mod_folder_or_loose_file() {
-        assert_eq!(config_group("config/create/server.toml"), "config/create/");
-        assert_eq!(config_group("config/create/a/b.json"), "config/create/");
-        assert_eq!(config_group("config/sodium.json"), "config/sodium.json");
-        assert_eq!(config_group("options.txt"), "options.txt");
-    }
 }

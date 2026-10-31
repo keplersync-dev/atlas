@@ -10,7 +10,8 @@ use sha2::{Digest, Sha256};
 use crate::api::{RevisionChanges, UpdatedItem};
 use crate::enums::{ContentKind, ContentSource, Loader, Side};
 
-pub const SCHEMA_VERSION: u32 = 1;
+/// 2: `Override::keep`, files outside the config folders, more file types.
+pub const SCHEMA_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -136,10 +137,23 @@ pub struct Override {
     /// download, so it isn't uploaded.
     #[serde(default, skip_serializing_if = "is_false")]
     pub in_pack: bool,
+    /// How members' copies are kept, when not like every other file. Schema 2.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keep: Option<Keep>,
 }
 
 fn is_false(b: &bool) -> bool {
     !*b
+}
+
+/// Files that are partly the member's own: their settings, their server list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Keep {
+    /// Written only when the member has no such file; never replaced or removed after.
+    FirstInstall,
+    /// `servers.dat`: the owner's servers join the member's list, which keeps its own.
+    MergeServers,
 }
 
 /// A modpack file on CurseForge or Modrinth: a .zip or .mrpack whose `overrides/` folder
@@ -165,33 +179,52 @@ pub struct PackBase {
 // ── Validation ─────────────────────────────────────
 // A manifest decides where files are written on other people's PCs: treat it as hostile.
 
-pub const MAX_BYTES: usize = 4 * 1024 * 1024;
+pub const MAX_BYTES: usize = 8 * 1024 * 1024;
 const MAX_CONTENT: usize = 2000;
 /// Config files, scripts and the like, from the pack and uploaded together. A big pack
-/// (All the Mods) has a few thousand.
-pub const MAX_OVERRIDES: usize = 10_000;
+/// has a few thousand; SkyFactory 5 ships about 7,900.
+pub const MAX_OVERRIDES: usize = 20_000;
 /// The largest one uploaded file of those. Files from the pack have no limit of their own.
 pub const MAX_OVERRIDE_BYTES: u64 = 8 * 1024 * 1024;
 /// All uploaded ones together.
 pub const MAX_OVERRIDES_TOTAL: u64 = 150 * 1024 * 1024;
 /// The largest instance picture that can be shared.
 pub const MAX_ICON_BYTES: u64 = 1024 * 1024;
-const CONTENT_DIRS: [&str; 4] = ["mods/", "resourcepacks/", "shaderpacks/", "datapacks/"];
-/// Where uploaded files may go: configs, and the scripts and assets packs keep next to them.
-pub const OVERRIDE_DIRS: [&str; 4] = ["config/", "defaultconfigs/", "kubejs/", "scripts/"];
+pub const CONTENT_DIRS: [&str; 4] = ["mods/", "resourcepacks/", "shaderpacks/", "datapacks/"];
+/// Never uploaded: worlds and what the game or launcher writes about this PC.
+pub const NEVER_SHARED: [&str; 12] = [
+    "saves/",
+    "screenshots/",
+    "logs/",
+    "crash-reports/",
+    "backups/",
+    ".fabric/",
+    ".mixin.out/",
+    "essential/",
+    "minecraftinstance.json",
+    "instance.cfg",
+    "mmc-pack.json",
+    "profile.json",
+];
 /// What uploaded files may be: text, data and pictures, never programs.
-const OVERRIDE_EXTS: [&str; 22] = [
+const OVERRIDE_EXTS: [&str; 28] = [
     "json",
     "json5",
+    "jsonc",
+    "hjson",
     "toml",
     "cfg",
+    "config",
+    "ini",
     "properties",
     "txt",
     "yml",
     "yaml",
+    "xml",
     "snbt",
     "js",
     "zs",
+    "mcfunction",
     "conf",
     "lang",
     "mcmeta",
@@ -204,11 +237,14 @@ const OVERRIDE_EXTS: [&str; 22] = [
     "ogg",
     "ttf",
 ];
-/// Never written from a pack either: programs and scripts Windows runs.
-const RISKY_EXTS: [&str; 16] = [
-    "exe", "dll", "bat", "cmd", "com", "scr", "ps1", "psm1", "vbs", "vbe", "wsf", "msi", "lnk",
-    "reg", "jar", "sh",
+/// Never written from a pack either: programs, native libraries and scripts Windows runs.
+const RISKY_EXTS: [&str; 21] = [
+    "exe", "dll", "so", "dylib", "jnilib", "sys", "bat", "cmd", "com", "scr", "ps1", "psm1", "vbs",
+    "vbe", "wsf", "hta", "msi", "lnk", "reg", "jar", "sh",
 ];
+/// Files known to hold a Minecraft login (ReAuth keeps Microsoft tokens, readable when
+/// its encryption is off). Never uploaded, whatever the owner ticks.
+const LOGIN_FILES: [&str; 2] = [".reauth.cfg", "reauth.toml"];
 const DOWNLOAD_HOSTS: [&str; 3] = [
     "cdn.modrinth.com",
     "edge.forgecdn.net",
@@ -225,7 +261,7 @@ pub struct Invalid(pub String);
 /// Parse and validate a manifest from JSON bytes.
 pub fn parse(bytes: &[u8]) -> Result<Manifest, Invalid> {
     if bytes.len() > MAX_BYTES {
-        return Err(Invalid("The list of files is over 4 MB.".into()));
+        return Err(Invalid("The list of files is over 8 MB.".into()));
     }
     let m: Manifest = serde_json::from_slice(bytes)
         .map_err(|_| Invalid("The list of files is damaged.".into()))?;
@@ -235,12 +271,13 @@ pub fn parse(bytes: &[u8]) -> Result<Manifest, Invalid> {
 
 pub fn validate(m: &Manifest) -> Result<(), Invalid> {
     let bad = |s: String| Err(Invalid(s));
-    if m.schema_version != SCHEMA_VERSION {
+    // Older versions stay readable: History and Undo go back to them.
+    if m.schema_version == 0 || m.schema_version > SCHEMA_VERSION {
         return bad("It was made by a newer Atlas. Update Atlas.".into());
     }
     if m.content.len() > MAX_CONTENT || m.overrides.len() > MAX_OVERRIDES {
         return bad(format!(
-            "It has too many files: at most {MAX_CONTENT} mods and packs, and {MAX_OVERRIDES} config files."
+            "It has too many files: at most {MAX_CONTENT} mods and packs, and {MAX_OVERRIDES} other files."
         ));
     }
     if let Some(b) = &m.base {
@@ -308,17 +345,26 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
                 ));
             }
         } else {
-            check_path(&o.path, Some(&OVERRIDE_DIRS))?;
-            if !shareable_type(&o.path) {
-                return bad(format!("{} isn't a file type Atlas shares.", o.path));
-            }
-            if o.size_bytes > MAX_OVERRIDE_BYTES {
-                return bad(format!(
-                    "{} is over 8 MB. Leave it out under Config files.",
-                    o.path
-                ));
+            check_path(&o.path, None)?;
+            if let Some(why) = upload_refusal(&o.path, o.size_bytes) {
+                return bad(match why {
+                    Refusal::Folder => format!("{} is in a folder Atlas never shares.", o.path),
+                    Refusal::Login => {
+                        format!("{} can hold a login, so Atlas never shares it.", o.path)
+                    }
+                    Refusal::Program => {
+                        format!("{} is a program, so Atlas never shares it.", o.path)
+                    }
+                    Refusal::FileType => format!("{} isn't a file type Atlas shares.", o.path),
+                    Refusal::TooBig => {
+                        format!("{} is over 8 MB. Untick it to share the rest.", o.path)
+                    }
+                });
             }
             total += o.size_bytes;
+        }
+        if o.keep == Some(Keep::MergeServers) && o.path != "servers.dat" {
+            return bad(format!("{} can't be merged like a server list.", o.path));
         }
         if !is_hex(&o.sha256, 64) {
             return bad(format!("{} couldn't be read properly. Try again.", o.path));
@@ -329,18 +375,29 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
     }
     if total > MAX_OVERRIDES_TOTAL {
         return bad(
-            "The uploaded config files add up to more than 150 MB. Leave some out under Config files."
-                .into(),
+            "The uploaded files add up to more than 150 MB. Untick some to share the rest.".into(),
         );
     }
     Ok(())
 }
 
-/// Why a file can't be uploaded as a config override, if it can't: its folder, its type
-/// or its size. (The count and total limits apply to the whole set.)
+/// Why a file can't be uploaded, if it can't: where it is, what it is, or its size. (The
+/// count and total limits apply to the whole set.)
 pub fn upload_refusal(path: &str, size_bytes: u64) -> Option<Refusal> {
-    if check_path(path, Some(&OVERRIDE_DIRS)).is_err() {
+    let lower = path.to_ascii_lowercase();
+    let name = lower.rsplit('/').next().unwrap_or(&lower);
+    let ext = extension(path);
+    if check_path(path, None).is_err()
+        || CONTENT_DIRS
+            .iter()
+            .chain(&NEVER_SHARED)
+            .any(|p| lower.starts_with(p))
+    {
         Some(Refusal::Folder)
+    } else if LOGIN_FILES.contains(&name) {
+        Some(Refusal::Login)
+    } else if RISKY_EXTS.contains(&ext.as_str()) {
+        Some(Refusal::Program)
     } else if !shareable_type(path) {
         Some(Refusal::FileType)
     } else if size_bytes > MAX_OVERRIDE_BYTES {
@@ -353,7 +410,12 @@ pub fn upload_refusal(path: &str, size_bytes: u64) -> Option<Refusal> {
 /// Why a file can't be shared.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Refusal {
+    /// Mods and packs (shared as content), worlds, logs, launcher files.
     Folder,
+    /// It can hold a Minecraft login.
+    Login,
+    /// A program, a native library or a script Windows runs.
+    Program,
     FileType,
     TooBig,
 }
@@ -368,7 +430,7 @@ pub fn can_come_from_pack(path: &str) -> bool {
 }
 
 fn shareable_type(path: &str) -> bool {
-    OVERRIDE_EXTS.contains(&extension(path).as_str())
+    OVERRIDE_EXTS.contains(&extension(path).as_str()) || path == "servers.dat"
 }
 
 fn extension(path: &str) -> String {
@@ -665,7 +727,9 @@ mod tests {
 
         let mut m = parse(&example()).unwrap();
         m.schema_version = 2;
-        assert!(validate(&m).is_err());
+        assert!(validate(&m).is_ok(), "this version");
+        m.schema_version = 3;
+        assert!(validate(&m).is_err(), "a newer one");
 
         assert!(parse(b"{}").is_err());
         assert!(parse(&vec![b' '; MAX_BYTES + 1]).is_err());
@@ -682,9 +746,33 @@ mod tests {
         );
         assert_eq!(
             upload_refusal("config/native.dll", 100),
+            Some(Refusal::Program)
+        );
+        assert_eq!(
+            upload_refusal("libs/lwjgl.jar", 100),
+            Some(Refusal::Program)
+        );
+        assert_eq!(upload_refusal("config/extractinator.jsonc", 100), None);
+        assert_eq!(upload_refusal("config/sound.ini", 100), None);
+        assert_eq!(upload_refusal("options.txt", 100), None, "anywhere now");
+        assert_eq!(upload_refusal("global_packs/a/pack.mcmeta", 100), None);
+        assert_eq!(upload_refusal("servers.dat", 100), None);
+        assert_eq!(
+            upload_refusal("data/servers.dat", 100),
             Some(Refusal::FileType)
         );
-        assert_eq!(upload_refusal("options.txt", 100), Some(Refusal::Folder));
+        assert_eq!(
+            upload_refusal("config/.ReAuth.cfg", 100),
+            Some(Refusal::Login)
+        );
+        for never in [
+            "saves/World/level.dat",
+            "logs/latest.log",
+            "mods/extra.jar",
+            "minecraftinstance.json",
+        ] {
+            assert_eq!(upload_refusal(never, 100), Some(Refusal::Folder), "{never}");
+        }
         assert_eq!(
             upload_refusal("config/../options.txt", 100),
             Some(Refusal::Folder)

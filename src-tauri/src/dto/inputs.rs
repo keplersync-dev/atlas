@@ -10,7 +10,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 
 pub use atlas_protocol::api::{NewReport, UpdateProfileInput};
 
-use super::{ConfigChoice, Id, InviteRole, LauncherKind, ShareMode};
+use super::{ConfigChoice, FileRules, Id, InviteRole, LauncherKind, ShareMode};
 
 /// Lets `Option<Option<T>>` tell "field missing" (outer None) from "field is null" (Some(None)).
 fn double_option<'de, D, T>(d: D) -> Result<Option<Option<T>>, D::Error>
@@ -63,9 +63,9 @@ pub struct ShareInstanceInput {
     /// Setting per PublishItem.contentId. Missing = keep the item's current shareMode.
     pub share_modes: HashMap<Id, ShareMode>,
     pub confirmed_upload_rights: bool,
-    /// ConfigGroup keys not to share, saved for later publishes. Missing = keep the saved ones.
+    /// The tree's ticks, saved for later publishes. Missing = keep the saved ones.
     #[serde(default)]
-    pub config_exclude: Option<Vec<String>>,
+    pub files: Option<FileRules>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -76,7 +76,7 @@ pub struct PublishInput {
     pub confirmed_upload_rights: bool,
     /// As in ShareInstanceInput.
     #[serde(default)]
-    pub config_exclude: Option<Vec<String>>,
+    pub files: Option<FileRules>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

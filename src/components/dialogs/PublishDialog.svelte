@@ -3,11 +3,11 @@
   import { plural, versionLabel, workLabel } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
   import { instances } from "$lib/stores";
-  import type { Id, ShareMode } from "$lib/types";
+  import type { FileRules, Id, ShareMode } from "$lib/types";
   import ContentIcon from "../ContentIcon.svelte";
   import Button from "../Button.svelte";
   import Dialog from "../Dialog.svelte";
-  import ConfigPicker from "./ConfigPicker.svelte";
+  import FileTree from "./FileTree.svelte";
   import RightsCheck from "./RightsCheck.svelte";
   import SharePicker, {
     differences,
@@ -26,7 +26,7 @@
 
   let modes = $state<Record<Id, ShareMode>>({}); // only what the user changes here
   let rights = $state(false);
-  let configExclude = $state<string[] | null>(null);
+  let fileRules = $state<FileRules | null>(null);
   let changelog = $state("");
   let submitting = $state(false);
   let error = $state<string | null>(null);
@@ -76,7 +76,7 @@
         changelog: changelog.trim() || null,
         shareModes: modes,
         confirmedUploadRights: rights,
-        configExclude: configExclude ?? undefined,
+        files: fileRules ?? undefined,
       });
       await instances.load();
       onclose();
@@ -155,11 +155,12 @@
       unchecked={plan.data.unchecked}
       onrecheck={plan.reload}
     />
-    <ConfigPicker
-      configs={plan.data.configs}
+    <FileTree
+      files={plan.data.files}
+      saved={plan.data.rules}
       pack={plan.data.pack}
       leftOut={plan.data.leftOut}
-      bind:excluded={configExclude}
+      bind:rules={fileRules}
     />
 
     <h3 class="mt-4 mb-1.5 text-xs font-semibold text-(--text-muted)">
