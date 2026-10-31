@@ -45,7 +45,7 @@
   const shared = $derived(
     visible.filter((f) => isShared(current, f.path, f.fromPack)),
   );
-  const fromPack = $derived(shared.filter((f) => f.fromPack).length);
+  const fromPack = $derived(shared.some((f) => f.fromPack));
   const uploads = $derived(shared.filter((f) => !f.fromPack));
   const uploadBytes = $derived(uploads.reduce((n, f) => n + f.sizeBytes, 0));
   const overLimit = $derived(
@@ -66,15 +66,8 @@
   let asc = $state(true);
 
   const folder = $derived(folderAt(tree, at));
-  const crumbs = $derived(
-    at
-      .split("/")
-      .filter(Boolean)
-      .map((name, i, all) => ({
-        name,
-        path: all.slice(0, i + 1).join("/") + "/",
-      })),
-  );
+  /** "config/create/" → "config/", "config/" → "". */
+  const parent = $derived(at.replace(/[^/]+\/$/, ""));
 
   const key = (x: {
     name?: string;
@@ -189,9 +182,6 @@
     >
       <Icon name="folder" class="size-4.5 shrink-0 text-(--text-muted)" />
       <span class="truncate">{f.name}</span>
-      <span class="shrink-0 text-[13px] text-(--text-faint)"
-        >{c.shared} of {c.total}</span
-      >
     </button>
     <span class="text-[13px] text-(--text-muted)">{fileSize(f.sizeBytes)}</span>
     <span class="truncate text-[13px] text-(--text-muted)"
@@ -267,62 +257,52 @@
 
 {#if visible.length}
   <section class="mt-4 rounded-lg border border-(--line) bg-(--bg-raise)">
-    <header class="flex items-start gap-3 px-4 pt-3.5">
-      <div class="min-w-0 flex-1">
-        <h3 class="text-[14px] font-semibold">Other files</h3>
-        <p class="text-[13px] text-(--text-muted)">
-          Settings, scripts and anything else in the instance. Mods and packs
-          are chosen above.
-        </p>
-      </div>
-      {#if !isDefault}
-        <button
-          type="button"
-          onclick={() => (rules = DEFAULT_RULES)}
-          class="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
-        >
-          <Icon name="restore" class="size-3.5" />Reset
-        </button>
-      {/if}
+    <header class="px-4 pt-3.5">
+      <h3 class="text-[14px] font-semibold">Other files</h3>
+      <p class="text-[13px] text-(--text-muted)">
+        Ticked files go to your friends with the pack. Settings and scripts are
+        ticked for you; mods and packs are chosen above.
+      </p>
     </header>
 
-    <dl
-      class="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-2 px-4 pt-3"
-    >
-      <div class="rounded-md bg-(--bg) px-3 py-2">
-        <dt class="text-[12px] text-(--text-muted)">Shared</dt>
-        <dd class="text-[14px] font-semibold">
-          {shared.length}
-          <span class="font-normal text-(--text-muted)"
-            >of {plural(visible.length, "file")}</span
-          >
-        </dd>
-      </div>
+    <div class="flex flex-wrap gap-x-6 gap-y-2 px-4 pt-3">
       {#if pack && fromPack}
-        <div class="rounded-md bg-(--bg) px-3 py-2">
-          <dt class="truncate text-[12px] text-(--text-muted)">
-            From {pack.name}
-          </dt>
-          <dd class="text-[14px] font-semibold">
-            {plural(fromPack, "file")}
-            <span class="font-normal text-(--text-muted)">· not uploaded</span>
-          </dd>
+        <div class="flex min-w-0 items-center gap-2.5">
+          <span
+            class="grid size-8 shrink-0 place-items-center rounded-full bg-(--bg) text-(--text-muted)"
+          >
+            <Icon name="cube" class="size-4" />
+          </span>
+          <div class="min-w-0">
+            <b class="block truncate text-[13px] font-medium"
+              >From {pack.name}</b
+            >
+            <small class="block text-[13px] text-(--text-muted)"
+              >Friends get these with the modpack</small
+            >
+          </div>
         </div>
       {/if}
-      <div class="rounded-md bg-(--bg) px-3 py-2">
-        <dt class="text-[12px] text-(--text-muted)">You upload</dt>
-        <dd class="text-[14px] font-semibold">
-          {#if uploads.length}
-            {plural(uploads.length, "file")}
-            <span class="font-normal text-(--text-muted)"
-              >· {fileSize(uploadBytes)}</span
-            >
-          {:else}
-            Nothing
-          {/if}
-        </dd>
+      <div class="flex min-w-0 items-center gap-2.5">
+        <span
+          class="grid size-8 shrink-0 place-items-center rounded-full bg-(--bg) text-(--text-muted)"
+        >
+          <Icon name="upload" class="size-4" />
+        </span>
+        <div class="min-w-0">
+          <b class="block text-[13px] font-medium">Uploaded from your PC</b>
+          <small class="block text-[13px] text-(--text-muted)">
+            {#if uploads.length}
+              {plural(uploads.length, "file")} · {fileSize(uploadBytes)}
+            {:else if pack && fromPack}
+              Nothing, your files match the modpack
+            {:else}
+              Nothing
+            {/if}
+          </small>
+        </div>
       </div>
-    </dl>
+    </div>
     {#if overLimit}
       <p
         class="mx-4 mt-2 flex items-center gap-2 text-[13px] text-(--warn)"
@@ -334,31 +314,8 @@
       </p>
     {/if}
 
-    <div class="flex flex-wrap items-center gap-2 px-4 pt-3 pb-2">
-      <nav
-        aria-label="Folder"
-        class="flex min-w-0 flex-1 items-center gap-1 text-[13px]"
-      >
-        <button
-          type="button"
-          onclick={() => (at = "")}
-          class="rounded px-1 {at
-            ? 'text-(--text-muted) hover:text-(--text-primary)'
-            : 'font-medium'}">All files</button
-        >
-        {#each crumbs as c (c.path)}
-          <Icon name="chev" class="size-3 shrink-0 text-(--text-faint)" />
-          <button
-            type="button"
-            onclick={() => (at = c.path)}
-            class="truncate rounded px-1 {c.path === at
-              ? 'font-medium'
-              : 'text-(--text-muted) hover:text-(--text-primary)'}"
-            >{c.name}</button
-          >
-        {/each}
-      </nav>
-      <label class="relative block w-52 max-w-full">
+    <div class="flex items-center gap-2 px-4 pt-3 pb-2">
+      <label class="relative block min-w-0 flex-1">
         <span
           class="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2 text-(--text-faint)"
         >
@@ -371,6 +328,16 @@
           class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg) pr-2.5 pl-8 text-[13px] outline-none focus:border-(--accent)"
         />
       </label>
+      {#if !isDefault}
+        <button
+          type="button"
+          onclick={() => (rules = DEFAULT_RULES)}
+          title="Go back to what Atlas ticks for you"
+          class="flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-(--line-2) px-2.5 text-[13px] text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+        >
+          <Icon name="restore" class="size-3.5" />Reset
+        </button>
+      {/if}
     </div>
 
     <div role="table" aria-label="Files to share" class="text-[13.5px]">
@@ -393,6 +360,18 @@
         <span></span>
       </div>
       <div class="h-72 overflow-y-auto">
+        {#if at && !searching}
+          <button
+            type="button"
+            onclick={() => (at = parent)}
+            class="{ROW} w-full border-t border-(--line) py-2 text-left text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+          >
+            <span></span>
+            <span class="flex items-center gap-2.5">
+              <Icon name="parent" class="size-4.5 shrink-0" />Parent folder
+            </span>
+          </button>
+        {/if}
         {#each rowFolders as f (f.path)}
           {@render folderRow(f)}
         {/each}
