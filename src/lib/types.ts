@@ -705,6 +705,8 @@ export interface ShareFile {
   modified: IsoDate | null;
   /** The modpack ships it: ticked by default, and not uploaded if unchanged. */
   fromPack: boolean;
+  /** Ticked, from the pack, and set differently here: the owner's copy is uploaded. */
+  changed: boolean;
   /** Why it can't be uploaded even when ticked (a file from the pack still goes out as the pack has it). */
   refusal: LeftOutReason | null;
 }

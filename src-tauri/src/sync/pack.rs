@@ -28,6 +28,9 @@ pub struct PackFile {
     pub size_bytes: u64,
     /// Its name inside the pack: "overrides/config/a.json".
     entry: String,
+    /// Its settings, for configs a mod rewrote without changing them (`settings`).
+    #[serde(default)]
+    pub settings: Option<String>,
 }
 
 /// The pack's own files by where they go in the instance ("config/a.json").
@@ -103,7 +106,7 @@ fn index_file(paths: &AppPaths, base: &PackBase) -> PathBuf {
     paths
         .cache
         .join("packs")
-        .join(format!("{}.json", base.sha1))
+        .join(format!("{}.2.json", base.sha1))
 }
 
 /// Whether the pack still has to be downloaded (for the size an update shows).
@@ -197,6 +200,7 @@ fn read_index(pack: &Path, source: ContentSource) -> AppResult<PackIndex> {
                     sha256: hex::encode(Sha256::digest(&bytes)),
                     size_bytes: bytes.len() as u64,
                     entry: entry.clone(),
+                    settings: super::settings::fingerprint(rel, &bytes),
                 },
             );
         }

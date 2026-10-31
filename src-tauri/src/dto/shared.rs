@@ -65,6 +65,8 @@ pub struct ShareFile {
     pub modified: Option<IsoDate>,
     /// The modpack ships it: ticked by default, and not uploaded if unchanged.
     pub from_pack: bool,
+    /// Ticked, from the pack, and set differently here: the owner's copy is uploaded.
+    pub changed: bool,
     /// Why it can't be uploaded even when ticked. A file from the pack still goes out
     /// as the pack has it.
     pub refusal: Option<LeftOutReason>,

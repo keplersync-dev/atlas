@@ -30,7 +30,7 @@ use crate::sync::manifest::{
     self, Entry, MAX_ICON_BYTES, MAX_OVERRIDES, MAX_OVERRIDES_TOTAL, Manifest, MinecraftSpec,
     Override, PackBase, Refusal, SCHEMA_VERSION,
 };
-use crate::sync::pack;
+use crate::sync::{pack, settings};
 use crate::util::time::iso_from_millis;
 
 async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
@@ -296,13 +296,21 @@ async fn plan_configs<R: Runtime>(
             size_bytes: l.size,
             modified: l.modified.and_then(iso_from_millis),
             from_pack: in_pack(&l.path),
+            changed: false,
             refusal: manifest::upload_refusal(&l.path, l.size).map(left_out_reason),
         })
         .collect();
-    let wanted: Vec<(String, PathBuf, u64)> = listed
+    // With each file, the pack's copy's settings, to tell a rewritten file from a changed one.
+    let wanted: Vec<(String, PathBuf, u64, Option<String>)> = listed
         .into_iter()
         .filter(|l| share_files::shared(&rules, &l.path, in_pack(&l.path)))
-        .map(|l| (l.path, l.file, l.size))
+        .map(|l| {
+            let settings = index
+                .as_ref()
+                .and_then(|i| i.get(&l.path))
+                .and_then(|p| p.settings.clone());
+            (l.path, l.file, l.size, settings)
+        })
         .collect();
     let count = wanted.len() as u64;
     let done = Arc::new(AtomicU64::new(0));
@@ -310,10 +318,16 @@ async fn plan_configs<R: Runtime>(
     let hashing = tokio::task::spawn_blocking(move || {
         wanted
             .into_iter()
-            .map(|(rel, file, size)| {
+            .map(|(rel, file, size, pack_settings)| {
                 let hashes = crate::scan::hash::hash_file(&file);
+                let same_settings = pack_settings.is_some_and(|theirs| {
+                    std::fs::read(&file)
+                        .ok()
+                        .and_then(|b| settings::fingerprint(&rel, &b))
+                        .is_some_and(|mine| mine == theirs)
+                });
                 counter.fetch_add(1, Ordering::Relaxed);
-                hashes.map(|h| (rel, file, size, h.sha256))
+                hashes.map(|h| (rel, file, size, h.sha256, same_settings))
             })
             .collect::<std::io::Result<Vec<_>>>()
     });
@@ -333,18 +347,25 @@ async fn plan_configs<R: Runtime>(
         files,
     };
     let mut uploaded = 0u64;
+    let mut changed = HashSet::new();
     let full =
         |shared: usize, uploaded: u64| shared > MAX_OVERRIDES || uploaded > MAX_OVERRIDES_TOTAL;
-    for (rel, file, size, sha256) in hashed {
+    for (rel, file, size, sha256, same_settings) in hashed {
         let from_pack = index.as_ref().and_then(|i| i.get(&rel)).cloned();
-        let as_is = from_pack.as_ref().is_some_and(|p| p.sha256 == sha256);
+        // Set the same as the pack's copy: friends get that copy, nothing uploads.
+        let as_is = from_pack
+            .as_ref()
+            .is_some_and(|p| p.sha256 == sha256 || same_settings);
         let reason = if as_is {
             None
         } else {
             manifest::upload_refusal(&rel, size)
         };
+        if from_pack.is_some() && !as_is {
+            changed.insert(rel.clone());
+        }
         let shared = match (as_is, reason, from_pack) {
-            (true, ..) => Some((sha256, size, true, None)),
+            (true, _, p) => p.map(|p| (p.sha256, p.size_bytes, true, None)),
             // Changed here, but not a file that can be uploaded: the pack's own copy.
             (false, Some(_), Some(p)) => {
                 Some((p.sha256, p.size_bytes, true, Some(LeftOutReason::PackCopy)))
@@ -386,6 +407,9 @@ async fn plan_configs<R: Runtime>(
             },
             file,
         ));
+    }
+    for f in &mut plan.files {
+        f.changed = changed.contains(&f.path);
     }
     if !plan.left_out.is_empty() {
         tracing::info!(

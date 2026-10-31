@@ -9,6 +9,7 @@ pub mod plan;
 pub mod prism_versions;
 pub mod recovery;
 pub mod servers;
+pub mod settings;
 pub mod source;
 pub mod state;
 

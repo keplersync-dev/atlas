@@ -205,6 +205,13 @@
       <span class="truncate"
         >{searching ? f.path : f.path.split("/").pop()}</span
       >
+      {#if on && f.changed}
+        <span
+          class="shrink-0 rounded-full bg-(--bg-raise-2) px-2 text-[12px] text-(--text-muted)"
+          title="Set differently from the modpack's copy, so friends get yours. Mods often change their own settings when the game runs, so not every change is yours."
+          >Changed</span
+        >
+      {/if}
       {#if on && kept === "first_install"}
         <span
           class="shrink-0 rounded-full bg-(--accent)/12 px-2 text-[12px] text-(--accent)"
