@@ -1,8 +1,10 @@
-//! Atlas around its window on Windows: the tray icon, closing to it, notifications for
-//! new activity and for updates waiting on the player, and starting with Windows (in the
-//! tray, window closed).
+//! Atlas around its window on Windows: the tray icon, closing to it, notices when
+//! something needs the player, and starting with Windows (in the tray, window closed).
 
+use std::collections::HashMap;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 
 use sqlx::SqlitePool;
 use tauri::menu::{Menu, MenuItem};
@@ -12,39 +14,52 @@ use tauri_plugin_autostart::AutoLaunchManager;
 use tauri_plugin_notification::NotificationExt as _;
 
 use crate::db;
-use crate::dto::{ActivityItem, ActivityType, AppSettings, AppSettingsPatch, SyncStage};
+use crate::dto::{ActivityItem, ActivityType, AppSettings, AppSettingsPatch, Notice, NoticeTarget};
 use crate::error::{AppError, AppResult};
+use crate::events::{AtlasEvent, emit};
 use crate::state::AppState;
 
 /// What Windows passes Atlas when it starts it at sign-in: stay in the tray.
 pub const STARTED_BY_WINDOWS: &str = "--hidden";
 
 const NOTIFICATIONS: &str = "notifications";
+const NOTIFICATION_SOUND: &str = "notification_sound";
 const CLOSE_TO_TRAY: &str = "close_to_tray";
 /// Set once the player has been told that closing the window leaves Atlas in the tray.
 const TRAY_HINT_SHOWN: &str = "tray_hint_shown";
 const AUTO_UPDATE: &str = "auto_update";
 const START_WITH_WINDOWS_OFFERED: &str = "start_with_windows_offered";
 
+/// At most one notice about the same pack or person in this long.
+const NOTICE_GAP: Duration = Duration::from_secs(60 * 60);
+
 pub struct Prefs {
     pub notifications: AtomicBool,
+    notification_sound: AtomicBool,
     pub close_to_tray: AtomicBool,
     tray_hint_shown: AtomicBool,
     auto_update: AtomicBool,
     start_with_windows_offered: AtomicBool,
     /// Started with Windows: the window stays closed until the player opens it.
     pub started_hidden: bool,
+    /// Notices that came while a game ran, shown when it closes.
+    held: Mutex<Vec<Notice>>,
+    /// When each pack or person last got a notice.
+    last_notice: Mutex<HashMap<String, Instant>>,
 }
 
 impl Default for Prefs {
     fn default() -> Self {
         Self {
             notifications: AtomicBool::new(true),
+            notification_sound: AtomicBool::new(true),
             close_to_tray: AtomicBool::new(true),
             tray_hint_shown: AtomicBool::new(false),
             auto_update: AtomicBool::new(true),
             start_with_windows_offered: AtomicBool::new(false),
             started_hidden: std::env::args().any(|a| a == STARTED_BY_WINDOWS),
+            held: Mutex::default(),
+            last_notice: Mutex::default(),
         }
     }
 }
@@ -53,6 +68,8 @@ impl Prefs {
     /// The saved settings, read once at startup.
     pub async fn load(&self, db: &SqlitePool) -> AppResult<()> {
         let notifications: bool = db::settings::get_or(db, NOTIFICATIONS, true).await?;
+        let sound: bool = db::settings::get_or(db, NOTIFICATION_SOUND, true).await?;
+        self.notification_sound.store(sound, Ordering::Relaxed);
         let close_to_tray: bool = db::settings::get_or(db, CLOSE_TO_TRAY, true).await?;
         let hint_shown: bool = db::settings::get_or(db, TRAY_HINT_SHOWN, false).await?;
         let auto_update: bool = db::settings::get_or(db, AUTO_UPDATE, true).await?;
@@ -132,69 +149,192 @@ pub fn close_to_tray<R: Runtime>(window: &tauri::Window<R>) -> bool {
     true
 }
 
-/// New activity from a friend: a Windows notification, when they're on and Atlas isn't
-/// in front (its activity feed shows it then).
+/// A pack shared with the player, or a friend request: a notice. Other activity stays in
+/// the feed.
 pub fn notify_activity<R: Runtime>(app: &AppHandle<R>, item: &ActivityItem) {
-    let Some(state) = app.try_state::<AppState>() else {
-        return;
+    let (key, target) = match (item.kind, &item.shared_instance_id) {
+        (ActivityType::FriendRequest, _) => (
+            format!("friend {}", item.actor.as_ref().map_or(&item.id, |u| &u.id)),
+            NoticeTarget::Friends,
+        ),
+        (ActivityType::InstanceInvite | ActivityType::InstanceSharedToGroup, Some(id)) => (
+            id.clone(),
+            NoticeTarget::Invite {
+                shared_instance_id: id.clone(),
+            },
+        ),
+        _ => return,
     };
-    if !state.prefs.notifications.load(Ordering::Relaxed) {
-        return;
-    }
-    let in_front = app
-        .get_webview_window("main")
-        .is_some_and(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false));
-    if !in_front {
-        // Worded for the signed-in user ("You now own …"), whose id is in the saved session.
-        let (app, item) = (app.clone(), item.clone());
-        tauri::async_runtime::spawn(async move {
-            let me = match app.try_state::<AppState>() {
-                Some(state) => state.cloud.session().await.ok().and_then(|s| s.user),
-                None => None,
-            };
-            let (title, body) = describe(&item, me.as_ref().map(|m| m.user.id.as_str()));
-            notify(&app, &title, &body);
-        });
-    }
+    // Worded for the signed-in user, whose id is in the saved session.
+    let (app, item) = (app.clone(), item.clone());
+    tauri::async_runtime::spawn(async move {
+        let me = match app.try_state::<AppState>() {
+            Some(state) => state.cloud.session().await.ok().and_then(|s| s.user),
+            None => None,
+        };
+        let (title, body) = describe(&item, me.as_ref().map(|m| m.user.id.as_str()));
+        notice(
+            &app,
+            &key,
+            Notice {
+                title,
+                body,
+                target,
+            },
+        );
+    });
 }
 
-/// An update or install is waiting for the player (to close the game, or to download
-/// files by hand) while Atlas is in the background: a notification, and the taskbar
-/// button flashes, so they don't think it's done.
-pub fn notify_waiting<R: Runtime>(app: &AppHandle<R>, instance_id: &str, stage: SyncStage) {
-    let Some(window) = app.get_webview_window("main") else {
-        return;
-    };
-    if window.is_visible().unwrap_or(false) && window.is_focused().unwrap_or(false) {
-        return;
-    }
-    if let Err(e) = window.request_user_attention(Some(UserAttentionType::Informational)) {
+/// An update is waiting on files the player has to download by hand: a notice, and the
+/// taskbar button flashes, so they don't think it's done.
+pub fn notify_manual_downloads<R: Runtime>(app: &AppHandle<R>, instance_id: &str) {
+    if let Some(window) = app.get_webview_window("main")
+        && !window.is_focused().unwrap_or(false)
+        && let Err(e) = window.request_user_attention(Some(UserAttentionType::Informational))
+    {
         tracing::debug!(error = %e, "couldn't flash the taskbar button");
     }
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
-    if !state.prefs.notifications.load(Ordering::Relaxed) {
-        return;
-    }
     let (app, db, id) = (app.clone(), state.db.clone(), instance_id.to_owned());
     tauri::async_runtime::spawn(async move {
         let name = match db::instances::get(&db, &id).await {
             Ok(Some(row)) => row.name,
-            _ => "An instance".to_owned(),
+            _ => "A pack".to_owned(),
         };
-        let (title, body) = match stage {
-            SyncStage::WaitingForGameExit => (
-                "Close Minecraft to finish",
-                format!("{name} updates once the game is closed."),
-            ),
-            _ => (
-                "Some files need you",
-                format!("{name} has files to download yourself. Open Atlas to get them."),
-            ),
+        let notice_ = Notice {
+            title: "Some files need you".to_owned(),
+            body: format!("{name} has files to download yourself before it can finish updating."),
+            target: NoticeTarget::Pack {
+                instance_id: id.clone(),
+            },
         };
-        notify(&app, title, &body);
+        notice(&app, &id, notice_);
     });
+}
+
+/// A background job failed. Its pack's page shows it, so this is only for when Atlas
+/// isn't on screen.
+pub fn notify_failed<R: Runtime>(app: &AppHandle<R>, instance_id: &str, name: &str, why: &str) {
+    if window_visible(app) {
+        return;
+    }
+    let notice_ = Notice {
+        title: name.to_owned(),
+        body: why.to_owned(),
+        target: NoticeTarget::Pack {
+            instance_id: instance_id.to_owned(),
+        },
+    };
+    notice(app, instance_id, notice_);
+}
+
+/// Every notice goes out here: held while a game runs, at most one about the same pack
+/// or person (`key`) an hour, inside Atlas when its window is visible and as a Windows
+/// notification when it isn't, with the notice sound.
+pub fn notice<R: Runtime>(app: &AppHandle<R>, key: &str, notice: Notice) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let prefs = &state.prefs;
+    if !prefs.notifications.load(Ordering::Relaxed) {
+        return;
+    }
+    {
+        let mut last = prefs.last_notice.lock().unwrap_or_else(|e| e.into_inner());
+        let now = Instant::now();
+        if last
+            .get(key)
+            .is_some_and(|t| now.duration_since(*t) < NOTICE_GAP)
+        {
+            return;
+        }
+        last.insert(key.to_owned(), now);
+    }
+    if state.running.any() {
+        prefs
+            .held
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(notice);
+        return;
+    }
+    show(app, &state, notice);
+}
+
+/// The game closed: what waited for it, as one notice.
+pub fn release_held<R: Runtime>(app: &AppHandle<R>) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let held = std::mem::take(&mut *state.prefs.held.lock().unwrap_or_else(|e| e.into_inner()));
+    if let Some(notice) = summary(held) {
+        show(app, &state, notice);
+    }
+}
+
+fn summary(mut held: Vec<Notice>) -> Option<Notice> {
+    match held.len() {
+        0 => None,
+        1 => held.pop(),
+        n => Some(Notice {
+            title: format!("{n} things need you"),
+            body: held
+                .iter()
+                .map(|h| h.body.as_str())
+                .collect::<Vec<_>>()
+                .join(" · "),
+            target: NoticeTarget::Home,
+        }),
+    }
+}
+
+fn show<R: Runtime>(app: &AppHandle<R>, state: &AppState, notice: Notice) {
+    if window_visible(app) {
+        emit(app, AtlasEvent::Notice { notice });
+    } else {
+        notify(app, &notice.title, &notice.body);
+    }
+    if state.prefs.notification_sound.load(Ordering::Relaxed) {
+        play_sound();
+    }
+}
+
+/// On screen: shown and not minimised (in front or not).
+fn window_visible<R: Runtime>(app: &AppHandle<R>) -> bool {
+    app.get_webview_window("main")
+        .is_some_and(|w| w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false))
+}
+
+/// Windows plays a custom sound with a toast only for packaged apps, so Atlas's toasts
+/// are silent (no sound name) and Atlas plays this itself.
+#[cfg(windows)]
+static NOTICE_SOUND: &[u8] = include_bytes!("../sounds/notice.wav");
+
+fn play_sound() {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_MEMORY, SND_NODEFAULT};
+        use windows_sys::Win32::UI::Shell::{
+            QUNS_ACCEPTS_NOTIFICATIONS, SHQueryUserNotificationState,
+        };
+        let mut quiet = 0;
+        // SAFETY: writes one value into `quiet`.
+        let asked = unsafe { SHQueryUserNotificationState(&mut quiet) } == 0;
+        // Do not disturb, a full-screen game or a presentation: stay silent.
+        if !asked || quiet != QUNS_ACCEPTS_NOTIFICATIONS {
+            return;
+        }
+        // SAFETY: the sound is static, so it outlives the asynchronous playback.
+        unsafe {
+            PlaySoundW(
+                NOTICE_SOUND.as_ptr().cast(),
+                std::ptr::null_mut(),
+                SND_MEMORY | SND_ASYNC | SND_NODEFAULT,
+            )
+        };
+    }
 }
 
 fn notify<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
@@ -269,6 +409,7 @@ fn role_phrase(role: Option<crate::dto::MemberRole>) -> &'static str {
 pub fn settings<R: Runtime>(app: &AppHandle<R>, state: &AppState) -> AppSettings {
     AppSettings {
         notifications: state.prefs.notifications.load(Ordering::Relaxed),
+        notification_sound: state.prefs.notification_sound.load(Ordering::Relaxed),
         close_to_tray: state.prefs.close_to_tray.load(Ordering::Relaxed),
         start_with_windows: app
             .try_state::<AutoLaunchManager>()
@@ -289,6 +430,10 @@ pub async fn update_settings<R: Runtime>(
     if let Some(on) = patch.notifications {
         db::settings::set(&state.db, NOTIFICATIONS, &on).await?;
         state.prefs.notifications.store(on, Ordering::Relaxed);
+    }
+    if let Some(on) = patch.notification_sound {
+        db::settings::set(&state.db, NOTIFICATION_SOUND, &on).await?;
+        state.prefs.notification_sound.store(on, Ordering::Relaxed);
     }
     if let Some(on) = patch.close_to_tray {
         db::settings::set(&state.db, CLOSE_TO_TRAY, &on).await?;
@@ -385,6 +530,46 @@ mod tests {
         assert_eq!(
             describe(&role, None).1,
             "dakep made you an editor of SkyFactory 4 fixed"
+        );
+    }
+
+    fn shared_with_you(body: &str) -> Notice {
+        Notice {
+            title: "Shared with you".into(),
+            body: body.into(),
+            target: NoticeTarget::Invite {
+                shared_instance_id: "s1".into(),
+            },
+        }
+    }
+
+    #[test]
+    fn what_waited_for_the_game_is_one_notice() {
+        assert_eq!(summary(vec![]), None);
+        let one = shared_with_you("dakep shared Create SMP with you");
+        assert_eq!(summary(vec![one.clone()]), Some(one));
+        let two = summary(vec![
+            shared_with_you("dakep shared Create SMP with you"),
+            shared_with_you("Sam wants to be friends"),
+        ])
+        .unwrap();
+        assert_eq!(two.title, "2 things need you");
+        assert_eq!(
+            two.body,
+            "dakep shared Create SMP with you · Sam wants to be friends"
+        );
+        assert_eq!(two.target, NoticeTarget::Home);
+    }
+
+    #[test]
+    fn notice_targets_read_like_types_ts() {
+        assert_eq!(
+            serde_json::to_value(shared_with_you("x").target).unwrap(),
+            serde_json::json!({ "kind": "invite", "sharedInstanceId": "s1" })
+        );
+        assert_eq!(
+            serde_json::to_value(NoticeTarget::Friends).unwrap(),
+            serde_json::json!({ "kind": "friends" })
         );
     }
 }

@@ -26,6 +26,9 @@ impl Running {
     pub fn contains(&self, instance_id: &str) -> bool {
         self.0.read().unwrap().contains(instance_id)
     }
+    pub fn any(&self) -> bool {
+        !self.0.read().unwrap().is_empty()
+    }
     fn replace(&self, now: HashSet<String>) -> HashSet<String> {
         std::mem::replace(&mut *self.0.write().unwrap(), now)
     }
@@ -69,6 +72,9 @@ async fn update<R: Runtime>(state: &AppState, app: &AppHandle<R>, running_dirs: 
     let before = state.running.replace(now.clone());
     if now != before {
         crate::services::presence::refresh(state).await;
+    }
+    if now.is_empty() && !before.is_empty() {
+        crate::desktop::release_held(app);
     }
     for id in now.symmetric_difference(&before) {
         let is_running = now.contains(id);

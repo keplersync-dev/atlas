@@ -1,5 +1,6 @@
 import { api } from "$lib/api";
 import { openDialog } from "$lib/dialogs.svelte";
+import { showNotice } from "$lib/toasts.svelte";
 import { instances } from "./instances.svelte";
 import { social } from "./social.svelte";
 import { updates } from "./updates.svelte";
@@ -60,6 +61,9 @@ export function connectStores() {
         break;
       case "link.opened":
         showOpenedLink();
+        break;
+      case "notice":
+        showNotice(e.notice);
         break;
       case "friends.changed":
       case "groups.changed":

@@ -93,7 +93,12 @@
       {
         key: "notifications",
         title: "Notifications",
-        hint: "When Atlas isn't in front: friend requests, invites and new versions of shared instances.",
+        hint: "Only when something needs you: a pack shared with you, a friend request, or an update that needs your say. Held until you close the game.",
+      },
+      {
+        key: "notificationSound",
+        title: "Notification sound",
+        hint: "A quiet sound with each one. Silent while Windows is set to Do not disturb.",
       },
       {
         key: "closeToTray",

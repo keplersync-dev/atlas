@@ -156,8 +156,8 @@ impl<R: Runtime> Progress<R> {
         if !state.is_running(&self.instance_id) {
             return self.check();
         }
+        // No notice: the update finishes by itself when the game closes.
         self.stage(SyncStage::WaitingForGameExit);
-        crate::desktop::notify_waiting(&self.app, &self.instance_id, SyncStage::WaitingForGameExit);
         while state.is_running(&self.instance_id) {
             self.sleep(Duration::from_secs(2)).await?;
         }
@@ -191,7 +191,7 @@ impl<R: Runtime> Progress<R> {
     pub fn manual(&self, list: Vec<ManualDownload>) {
         let stage = SyncStage::WaitingForManualDownloads;
         if self.current.lock().unwrap().0.stage != stage {
-            crate::desktop::notify_waiting(&self.app, &self.instance_id, stage);
+            crate::desktop::notify_manual_downloads(&self.app, &self.instance_id);
         }
         self.update(true, |p| {
             p.stage = SyncStage::WaitingForManualDownloads;
@@ -289,7 +289,8 @@ async fn finish<R: Runtime>(
     report_failure: bool,
 ) {
     let was_cancelled = state.jobs.release(id);
-    let status = match db::instances::get(&state.db, id).await {
+    let row = db::instances::get(&state.db, id).await;
+    let status = match &row {
         Ok(Some(row)) if !Path::new(&row.game_dir).is_dir() => InstanceStatus::Missing,
         _ => InstanceStatus::Ready,
     };
@@ -297,6 +298,9 @@ async fn finish<R: Runtime>(
         tracing::warn!(instance = %id, error = %e.message, "job failed");
         // Cancelling isn't a failure to tell anyone about.
         if report_failure && !was_cancelled {
+            if let Ok(Some(row)) = &row {
+                crate::desktop::notify_failed(app, id, &row.name, &e.message);
+            }
             emit(
                 app,
                 AtlasEvent::InstanceJobFailed {

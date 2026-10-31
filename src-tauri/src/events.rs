@@ -7,7 +7,7 @@
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Runtime};
 
-use crate::dto::{ActivityItem, Id, InstanceStatus, Presence, SyncProgress, Work};
+use crate::dto::{ActivityItem, Id, InstanceStatus, Notice, Presence, SyncProgress, Work};
 
 pub const CHANNEL: &str = "atlas://event";
 
@@ -56,6 +56,9 @@ pub enum AtlasEvent {
     /// The server refused this version of Atlas as too old: it needs updating to sync.
     #[serde(rename = "update.required")]
     UpdateRequired {},
+    /// Something needs the player, shown inside Atlas because its window is visible.
+    #[serde(rename = "notice")]
+    Notice { notice: Notice },
 }
 
 /// Send an event to the UI. A closed window isn't an error worth handling.

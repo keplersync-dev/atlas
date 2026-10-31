@@ -78,8 +78,10 @@ export interface ReportInput {
 
 /** How Atlas behaves on this PC, outside any account. */
 export interface AppSettings {
-  /** A Windows notification for new activity while Atlas isn't in front. */
+  /** Notices when something needs the player (see Notice). */
   notifications: boolean;
+  /** The quiet sound that goes with a notice. */
+  notificationSound: boolean;
   /** The close button hides Atlas to the tray instead of quitting it. */
   closeToTray: boolean;
   /** Atlas starts in the tray when you sign in to Windows. */
@@ -611,7 +613,28 @@ export type AtlasEvent =
   /** Downloading an update; `total` is null when the size isn't known. */
   | { type: "update.progress"; downloaded: number; total: number | null }
   /** The server refused this version as too old: it needs updating to sync. */
-  | { type: "update.required" };
+  | { type: "update.required" }
+  /** Something needs the player, shown inside Atlas because its window is visible. */
+  | { type: "notice"; notice: Notice };
+
+/**
+ * Something that needs the player: a pack shared with them, a friend request, or an
+ * update that can't go ahead without them.
+ */
+export interface Notice {
+  title: string;
+  body: string;
+  /** Where its button goes. */
+  target: NoticeTarget;
+}
+
+export type NoticeTarget =
+  | { kind: "pack"; instanceId: Id }
+  | { kind: "review"; instanceId: Id }
+  | { kind: "invite"; sharedInstanceId: Id }
+  | { kind: "friends" }
+  /** Several notices held while a game ran. */
+  | { kind: "home" };
 
 // ── Inputs ─────────────────────────────────────────────────────────────
 

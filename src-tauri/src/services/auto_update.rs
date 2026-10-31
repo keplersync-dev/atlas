@@ -1,6 +1,6 @@
-//! Installing new versions of shared instances by themselves, for packs with "Keep it up
-//! to date automatically" on. Only when nothing needs the player's say: anything else
-//! stays an update they start themselves.
+//! New versions of shared instances: installed by themselves for packs with "Keep it up
+//! to date automatically" on, when nothing needs the player's say. When something does
+//! (approving an upload, undoing their changes), the player gets a notice instead.
 
 use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
@@ -9,7 +9,7 @@ use std::time::Duration;
 use tauri::{AppHandle, Runtime};
 
 use crate::db;
-use crate::dto::{SyncOptions, SyncPreview, SyncState};
+use crate::dto::{Notice, NoticeTarget, SyncOptions, SyncPreview, SyncState};
 use crate::error::AppResult;
 use crate::state::AppState;
 
@@ -69,8 +69,9 @@ pub async fn check_all<R: Runtime>(state: &AppState, app: &AppHandle<R>) {
     }
 }
 
-/// Install this instance's new version if it's on and safe. Never fails loudly: an
-/// update that can't start here is still there for the player to start.
+/// A new version of this instance: install it if that's on and safe, or tell the player
+/// when it needs them (whether auto-update is on or not). Never fails loudly: an update
+/// that can't start here is still there for the player to start.
 pub async fn check<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) {
     if let Err(e) = try_check(state, app, id).await {
         tracing::info!(instance = %id, error = %e, "couldn't update by itself");
@@ -78,7 +79,7 @@ pub async fn check<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) {
 }
 
 async fn try_check<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) -> AppResult<()> {
-    if state.jobs.is_busy(id) || !db::instances::auto_update(&state.db, id).await? {
+    if state.jobs.is_busy(id) {
         return Ok(());
     }
     let Some(row) = db::instances::get(&state.db, id).await? else {
@@ -87,27 +88,93 @@ async fn try_check<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) -
     let Some(info) = super::sync::info(state, &row).await? else {
         return Ok(());
     };
-    if info.state != SyncState::UpdateAvailable {
-        return Ok(());
+    let needs = match info.state {
+        SyncState::Conflict => Some(Needs::TheirChanges),
+        SyncState::UpdateAvailable => needs(&super::sync::preview(state, id).await?),
+        _ => return Ok(()),
+    };
+    match needs {
+        None if info.auto_update => {
+            tracing::info!(instance = %row.name, to = info.latest_revision, "updating by itself");
+            // The job waits for the game to close and backs up first. New optional mods
+            // aren't installed: they're the player's choice.
+            super::sync::sync(state, app, id, SyncOptions::default()).await
+        }
+        None => Ok(()),
+        Some(needs) => {
+            tracing::info!(instance = %row.name, ?needs, "this update needs the player");
+            if let Some(body) = message(&needs) {
+                tell(state, app, &row.id, &row.name, info.latest_revision, body).await;
+            }
+            Ok(())
+        }
     }
-    let preview = super::sync::preview(state, id).await?;
-    if !safe(&preview) {
-        tracing::info!(instance = %row.name, "this update needs the player");
-        return Ok(());
-    }
-    tracing::info!(instance = %row.name, to = preview.to_revision, "updating by itself");
-    // The job waits for the game to close and backs up first. New optional mods aren't
-    // installed: they're the player's choice.
-    super::sync::sync(state, app, id, SyncOptions::default()).await
 }
 
-/// Nothing to approve, none of the player's own changes undone, and the launcher's
-/// versions stay as they are.
-fn safe(p: &SyncPreview) -> bool {
-    p.unverified.is_empty()
-        && p.config_conflicts.is_empty()
-        && p.overwritten_local_changes.is_empty()
-        && p.launcher_change.is_none()
+/// Why an update can't install by itself.
+#[derive(Debug, PartialEq)]
+enum Needs {
+    /// Uploaded mods or resource packs, to approve.
+    Approval(Vec<String>),
+    /// It would undo the player's own changes.
+    TheirChanges,
+    /// It changes the launcher's Minecraft or loader version: left for the player to
+    /// start, without a notice.
+    Versions,
+}
+
+fn needs(p: &SyncPreview) -> Option<Needs> {
+    if !p.unverified.is_empty() {
+        Some(Needs::Approval(p.unverified.clone()))
+    } else if !p.config_conflicts.is_empty() || !p.overwritten_local_changes.is_empty() {
+        Some(Needs::TheirChanges)
+    } else if p.launcher_change.is_some() {
+        Some(Needs::Versions)
+    } else {
+        None
+    }
+}
+
+/// What the notice says, for the reasons that get one.
+fn message(needs: &Needs) -> Option<String> {
+    match needs {
+        Needs::Approval(names) => Some(format!(
+            "It adds {}, which {} from Modrinth or CurseForge. Review it before it installs.",
+            names.join(", "),
+            if names.len() == 1 { "isn't" } else { "aren't" }
+        )),
+        Needs::TheirChanges => {
+            Some("It would undo your own changes. Choose yours or the new version.".to_owned())
+        }
+        Needs::Versions => None,
+    }
+}
+
+/// Once per version, even across restarts.
+async fn tell<R: Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    id: &str,
+    name: &str,
+    revision: u32,
+    body: String,
+) {
+    let key = format!("update_noticed {id}");
+    let seen: Option<u32> = db::settings::get(&state.db, &key).await.ok().flatten();
+    if seen == Some(revision) {
+        return;
+    }
+    if let Err(e) = db::settings::set(&state.db, &key, &revision).await {
+        tracing::warn!(error = %e, "couldn't save that an update was noticed");
+    }
+    let notice = Notice {
+        title: format!("{name} has an update that needs you"),
+        body,
+        target: NoticeTarget::Review {
+            instance_id: id.to_owned(),
+        },
+    };
+    crate::desktop::notice(app, id, notice);
 }
 
 #[cfg(test)]
@@ -133,19 +200,37 @@ mod tests {
 
     #[test]
     fn installs_only_what_needs_no_say() {
-        assert!(safe(&preview()), "a running game only delays it");
+        assert_eq!(needs(&preview()), None, "a running game only delays it");
         let mut p = preview();
         p.unverified.push("custom-mod".into());
-        assert!(!safe(&p));
+        assert_eq!(needs(&p), Some(Needs::Approval(vec!["custom-mod".into()])));
         let mut p = preview();
         p.overwritten_local_changes.push("Sodium".into());
-        assert!(!safe(&p));
+        assert_eq!(needs(&p), Some(Needs::TheirChanges));
         let mut p = preview();
         p.config_conflicts.push(ConfigConflict {
             path: "options.txt".into(),
             mine: "a".into(),
             theirs: "b".into(),
         });
-        assert!(!safe(&p));
+        assert_eq!(needs(&p), Some(Needs::TheirChanges));
+    }
+
+    #[test]
+    fn notices_say_what_needs_the_player() {
+        assert_eq!(
+            message(&Needs::Approval(vec!["custom-mod".into()])).unwrap(),
+            "It adds custom-mod, which isn't from Modrinth or CurseForge. Review it before it installs."
+        );
+        assert!(
+            message(&Needs::Approval(vec!["a".into(), "b".into()]))
+                .unwrap()
+                .contains("a, b, which aren't")
+        );
+        assert_eq!(
+            message(&Needs::Versions),
+            None,
+            "no notice for a version change"
+        );
     }
 }
