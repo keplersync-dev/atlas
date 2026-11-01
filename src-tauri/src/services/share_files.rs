@@ -6,8 +6,13 @@
 //! wins. With none, the defaults decide: the config and script folders, and the files
 //! the modpack itself ships. A folder ticked once stays ticked for files added later.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
+use sha2::{Digest, Sha256};
+
+use crate::db::file_hashes::FileHash;
 use crate::dto::FileRules;
 use crate::sync::manifest::{CONTENT_DIRS, Keep, NEVER_SHARED};
 
@@ -47,6 +52,7 @@ fn listed(path: &str) -> bool {
 }
 
 /// A file the tree lists.
+#[derive(Debug, Clone)]
 pub struct Listed {
     /// "config/create/server.toml"
     pub path: String,
@@ -63,6 +69,40 @@ pub fn list(game: &Path) -> Vec<Listed> {
     walk(game, "", &mut out);
     out.sort_by(|a, b| a.path.cmp(&b.path));
     out
+}
+
+/// Each file's sha256 and settings, reusing `saved` ones whose size and modified time
+/// still match, so only changed files are read. `done` counts files, for progress.
+/// Blocking: call it from a blocking thread.
+pub fn hashes(
+    files: Vec<Listed>,
+    saved: &HashMap<String, FileHash>,
+    done: &AtomicU64,
+) -> std::io::Result<Vec<FileHash>> {
+    files
+        .into_iter()
+        .map(|l| {
+            let known = saved
+                .get(&l.path)
+                .filter(|h| l.modified == Some(h.modified_ms) && l.size == h.size_bytes);
+            let hash = match known {
+                Some(h) => h.clone(),
+                None => {
+                    let bytes = std::fs::read(&l.file)?;
+                    FileHash {
+                        sha256: hex::encode(Sha256::digest(&bytes)),
+                        settings: crate::sync::settings::fingerprint(&l.path, &bytes),
+                        size_bytes: bytes.len() as u64,
+                        // Unknown: never matches, so it's read again next time.
+                        modified_ms: l.modified.unwrap_or(-1),
+                        path: l.path,
+                    }
+                }
+            };
+            done.fetch_add(1, Ordering::Relaxed);
+            Ok(hash)
+        })
+        .collect()
 }
 
 /// Folder links (symlinks, junctions) aren't followed: one pointing back up would never end.
@@ -150,6 +190,63 @@ pub fn from_saved(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// How long Share's file work takes on a real instance. ATLAS_TEST_INSTANCE names the
+    /// folder. `cargo test --release --lib time_share_files -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn time_share_files() {
+        use std::time::Instant;
+        let game =
+            PathBuf::from(std::env::var("ATLAS_TEST_INSTANCE").expect("ATLAS_TEST_INSTANCE"));
+        let t = Instant::now();
+        let listed = list(&game);
+        println!("list: {} files in {:?}", listed.len(), t.elapsed());
+        let wanted: Vec<Listed> = listed
+            .into_iter()
+            .filter(|l| {
+                shared(
+                    &FileRules::default(),
+                    &l.path,
+                    l.path.starts_with("global_packs/"),
+                )
+            })
+            .collect();
+        let t = Instant::now();
+        let read = hashes(wanted.clone(), &HashMap::new(), &AtomicU64::new(0)).unwrap();
+        println!("read and hash {} files: {:?}", read.len(), t.elapsed());
+        let saved: HashMap<String, FileHash> =
+            read.into_iter().map(|h| (h.path.clone(), h)).collect();
+        let t = Instant::now();
+        hashes(wanted, &saved, &AtomicU64::new(0)).unwrap();
+        println!("again, from saved hashes: {:?}", t.elapsed());
+    }
+
+    #[test]
+    fn saved_hashes_are_reused_until_the_file_changes() {
+        let dir = std::env::temp_dir().join(format!("atlas-hashes-{}", crate::util::ids::new_id()));
+        std::fs::create_dir_all(dir.join("config")).unwrap();
+        std::fs::write(dir.join("config/a.toml"), "a = 1").unwrap();
+        let first = hashes(list(&dir), &HashMap::new(), &AtomicU64::new(0)).unwrap();
+        assert_eq!(first.len(), 1);
+        assert!(first[0].settings.is_some());
+        // Same size and date: the saved hash is used without reading the file.
+        let mut saved = first[0].clone();
+        saved.sha256 = "saved".into();
+        let saved = HashMap::from([(saved.path.clone(), saved)]);
+        assert_eq!(
+            hashes(list(&dir), &saved, &AtomicU64::new(0)).unwrap()[0].sha256,
+            "saved"
+        );
+        // Changed: read again.
+        std::fs::write(dir.join("config/a.toml"), "a = 22").unwrap();
+        assert_eq!(
+            hashes(list(&dir), &saved, &AtomicU64::new(0)).unwrap()[0]
+                .sha256
+                .len(),
+            64
+        );
+    }
 
     fn rules(include: &[&str], exclude: &[&str]) -> FileRules {
         FileRules {

@@ -73,7 +73,7 @@ export function formatCode(code: string): string {
 export function workLabel(w: InstanceWork): string {
   switch (w.stage) {
     case "reading":
-      return `Reading files… ${w.done} of ${w.total}`;
+      return `Reading files… ${w.done.toLocaleString()} of ${w.total.toLocaleString()}`;
     case "uploading":
       // Counted in bytes, so it moves within a big file too.
       return `Uploading ${fileSize(w.done)} of ${fileSize(w.total)}…`;

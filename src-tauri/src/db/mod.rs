@@ -6,6 +6,7 @@
 pub mod backups;
 pub mod cloud_cache;
 pub mod content;
+pub mod file_hashes;
 pub mod instances;
 pub mod launchers;
 pub mod settings;

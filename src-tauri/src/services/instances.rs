@@ -456,6 +456,7 @@ pub async fn rescan<R: Runtime>(
     }
     if row.status() == InstanceStatus::Ready {
         look_up_in_background(state, app, id);
+        super::publish::read_ahead_soon(state, id);
     }
     summary_of(state, &row).await
 }

@@ -7,9 +7,15 @@ use sha2::{Digest, Sha256};
 /// A hash of the settings in a config file, or None when its kind isn't understood or
 /// it doesn't parse (then only the bytes can be compared).
 pub fn fingerprint(path: &str, bytes: &[u8]) -> Option<String> {
+    let ext = path.rsplit_once('.')?.1.to_ascii_lowercase();
+    if !matches!(
+        ext.as_str(),
+        "json" | "jsonc" | "mcmeta" | "toml" | "properties" | "ini" | "cfg"
+    ) {
+        return None;
+    }
     let text = std::str::from_utf8(bytes).ok()?;
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
-    let ext = path.rsplit_once('.')?.1.to_ascii_lowercase();
     let canonical = match ext.as_str() {
         "json" | "jsonc" | "mcmeta" => {
             let value: serde_json::Value = serde_json::from_str(&strip_json(text)).ok()?;

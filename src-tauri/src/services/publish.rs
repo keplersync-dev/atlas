@@ -5,8 +5,8 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
 
 use reqwest::Method;
 use sha2::{Digest, Sha256};
@@ -15,6 +15,7 @@ use tauri::{AppHandle, Runtime};
 use super::share_files;
 use super::work::Reporter;
 use crate::cloud::files::UploadFile;
+use crate::db::file_hashes::FileHash;
 use crate::db::{self, content::ContentRow, instances::InstanceRow};
 use crate::dto::{
     ContentKind, ContentSource, CreateRevision, CreateSharedInstance, FileRules, InstanceSummary,
@@ -30,7 +31,7 @@ use crate::sync::manifest::{
     self, Entry, MAX_ICON_BYTES, MAX_OVERRIDES, MAX_OVERRIDES_TOTAL, Manifest, MinecraftSpec,
     Override, PackBase, Refusal, SCHEMA_VERSION,
 };
-use crate::sync::{pack, settings};
+use crate::sync::pack;
 use crate::util::time::iso_from_millis;
 
 async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
@@ -130,10 +131,16 @@ pub async fn prepare<R: Runtime>(
     }
     // Read the folder now, after any scan already running: a just-tracked instance may
     // not have been scanned yet, and the plan must match what's on disk.
+    let started = std::time::Instant::now();
+    let mut took = Vec::new();
+    let mut lap = |step: &'static str| took.push((step, started.elapsed().as_millis() as u64));
     super::instances::rescan(state, app, id).await?;
+    lap("rescan");
     // Files not looked up yet would all count as uploads.
     super::instances::look_up_now(state, app, id).await;
+    lap("look up");
     look_up_in_pack(state, app, &row).await;
+    lap("modpack list");
     let mut rows = db::content::list(&state.db, id).await?;
     if live(&rows).any(not_checked) {
         // Once more before telling the owner: the sites may only have hiccuped.
@@ -144,6 +151,7 @@ pub async fn prepare<R: Runtime>(
         .filter(|r| is_upload(r))
         .map(|r| r.sha256.clone())
         .collect();
+    lap("look up again");
     let stored: HashSet<String> = match state.cloud.stored(to_check).await {
         Ok(found) => found.into_iter().collect(),
         Err(e) => {
@@ -183,7 +191,10 @@ pub async fn prepare<R: Runtime>(
             }
         }
     }
+    lap("uploaded check");
     let configs = plan_configs(state, &row, &Reporter::new(app, id)).await?;
+    lap("other files");
+    tracing::info!(instance = %row.name, ?took, "prepared a share (ms since start)");
     let storage = match state
         .cloud
         .call(Method::GET, "/me/storage", None::<&()>)
@@ -340,8 +351,8 @@ async fn plan_configs<R: Runtime>(
         }
     }
     let in_pack = |rel: &str| index.as_ref().is_some_and(|i| i.contains_key(rel));
-    let game = PathBuf::from(&row.game_dir);
-    let listed = tokio::task::spawn_blocking(move || share_files::list(&game)).await?;
+    let progress = |done, total| work.report(WorkStage::Reading, done, total);
+    let (listed, hashed) = read_files(state, row, &rules, index.as_ref(), &progress).await?;
     let files: Vec<ShareFile> = listed
         .iter()
         .map(|l| ShareFile {
@@ -353,45 +364,7 @@ async fn plan_configs<R: Runtime>(
             refusal: manifest::upload_refusal(&l.path, l.size).map(left_out_reason),
         })
         .collect();
-    // With each file, the pack's copy's settings, to tell a rewritten file from a changed one.
-    let wanted: Vec<(String, PathBuf, u64, Option<String>)> = listed
-        .into_iter()
-        .filter(|l| share_files::shared(&rules, &l.path, in_pack(&l.path)))
-        .map(|l| {
-            let settings = index
-                .as_ref()
-                .and_then(|i| i.get(&l.path))
-                .and_then(|p| p.settings.clone());
-            (l.path, l.file, l.size, settings)
-        })
-        .collect();
-    let count = wanted.len() as u64;
-    let done = Arc::new(AtomicU64::new(0));
-    let counter = Arc::clone(&done);
-    let hashing = tokio::task::spawn_blocking(move || {
-        wanted
-            .into_iter()
-            .map(|(rel, file, size, pack_settings)| {
-                let hashes = crate::scan::hash::hash_file(&file);
-                let same_settings = pack_settings.is_some_and(|theirs| {
-                    std::fs::read(&file)
-                        .ok()
-                        .and_then(|b| settings::fingerprint(&rel, &b))
-                        .is_some_and(|mine| mine == theirs)
-                });
-                counter.fetch_add(1, Ordering::Relaxed);
-                hashes.map(|h| (rel, file, size, h.sha256, same_settings))
-            })
-            .collect::<std::io::Result<Vec<_>>>()
-    });
-    tokio::pin!(hashing);
-    let mut tick = tokio::time::interval(std::time::Duration::from_millis(200));
-    let hashed = loop {
-        tokio::select! {
-            hashed = &mut hashing => break hashed??,
-            _ = tick.tick() => work.report(WorkStage::Reading, done.load(Ordering::Relaxed), count),
-        }
-    };
+    let game = PathBuf::from(&row.game_dir);
 
     let mut plan = ConfigPlan {
         base: base.clone(),
@@ -403,12 +376,20 @@ async fn plan_configs<R: Runtime>(
     let mut changed = HashSet::new();
     let full =
         |shared: usize, uploaded: u64| shared > MAX_OVERRIDES || uploaded > MAX_OVERRIDES_TOTAL;
-    for (rel, file, size, sha256, same_settings) in hashed {
+    for FileHash {
+        path: rel,
+        size_bytes: size,
+        sha256,
+        settings: mine,
+        ..
+    } in hashed
+    {
+        let file = game.join(&rel);
         let from_pack = index.as_ref().and_then(|i| i.get(&rel)).cloned();
         // Set the same as the pack's copy: friends get that copy, nothing uploads.
         let as_is = from_pack
             .as_ref()
-            .is_some_and(|p| p.sha256 == sha256 || same_settings);
+            .is_some_and(|p| p.sha256 == sha256 || (mine.is_some() && p.settings == mine));
         let reason = if as_is {
             None
         } else {
@@ -471,6 +452,109 @@ async fn plan_configs<R: Runtime>(
         );
     }
     Ok(plan)
+}
+
+/// List the instance's files and hash the ticked ones, reusing the hashes saved last
+/// time for files whose size and date haven't changed, then save them for next time.
+/// `progress` gets (files read, files to read).
+async fn read_files(
+    state: &AppState,
+    row: &InstanceRow,
+    rules: &FileRules,
+    index: Option<&pack::PackIndex>,
+    progress: &(dyn Fn(u64, u64) + Sync),
+) -> AppResult<(Vec<share_files::Listed>, Vec<FileHash>)> {
+    let in_pack = |rel: &str| index.is_some_and(|i| i.contains_key(rel));
+    let game = PathBuf::from(&row.game_dir);
+    let listed = tokio::task::spawn_blocking(move || share_files::list(&game)).await?;
+    let wanted: Vec<share_files::Listed> = listed
+        .iter()
+        .filter(|l| share_files::shared(rules, &l.path, in_pack(&l.path)))
+        .cloned()
+        .collect();
+    let saved = Arc::new(db::file_hashes::list(&state.db, &row.id).await?);
+    let count = wanted.len() as u64;
+    let done = Arc::new(AtomicU64::new(0));
+    let (counter, known) = (Arc::clone(&done), Arc::clone(&saved));
+    let hashing =
+        tokio::task::spawn_blocking(move || share_files::hashes(wanted, &known, &counter));
+    tokio::pin!(hashing);
+    let mut tick = tokio::time::interval(std::time::Duration::from_millis(200));
+    let hashed = loop {
+        tokio::select! {
+            hashed = &mut hashing => break hashed??,
+            _ = tick.tick() => progress(done.load(Ordering::Relaxed), count),
+        }
+    };
+    let same = hashed.len() == saved.len() && hashed.iter().all(|h| saved.get(&h.path) == Some(h));
+    if !same {
+        db::file_hashes::replace(&state.db, &row.id, &hashed).await?;
+    }
+    Ok((listed, hashed))
+}
+
+/// The latest rescan per instance: a read ahead waits for rescans to stop.
+static READ_AHEAD: LazyLock<Mutex<HashMap<String, u64>>> = LazyLock::new(Default::default);
+
+/// `read_ahead` once the instance has been quiet for a while: rescans come in bursts,
+/// and Share's own rescan shouldn't race Share's own read.
+pub fn read_ahead_soon(state: &AppState, id: &str) {
+    let seen = {
+        let mut latest = READ_AHEAD.lock().unwrap_or_else(|e| e.into_inner());
+        let n = latest.entry(id.to_owned()).or_default();
+        *n += 1;
+        *n
+    };
+    let (state, id) = (state.clone(), id.to_owned());
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+        let current = READ_AHEAD
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&id)
+            .copied();
+        if current == Some(seen) {
+            read_ahead(&state, &id).await;
+        }
+    });
+}
+
+/// Read an instance's shared files ahead of Share, so the dialog opens on saved hashes.
+/// Skipped while a game runs (it's busy writing them), for instances the user can't
+/// publish, and when the modpack isn't read yet (Share downloads it first).
+pub async fn read_ahead(state: &AppState, id: &str) {
+    if state.running.any() {
+        return;
+    }
+    let Ok(row) = row(state, id).await else {
+        return;
+    };
+    if row.shared_instance_id.is_some() && row.role() != Some(MemberRole::Owner) {
+        return;
+    }
+    let index = match pack::base_for(state, &row).await {
+        Some(base) => match pack::saved_index(&state.paths, &base) {
+            Some(index) => Some(index),
+            None => return,
+        },
+        None => None,
+    };
+    let started = std::time::Instant::now();
+    let rules = match file_rules(state, id).await {
+        Ok(rules) => rules,
+        Err(e) => return tracing::debug!(error = %e, "couldn't read share rules"),
+    };
+    match read_files(state, &row, &rules, index.as_ref(), &|_, _| {}).await {
+        Ok((_, hashed)) => tracing::debug!(
+            instance = %row.name,
+            files = hashed.len(),
+            ms = started.elapsed().as_millis() as u64,
+            "read shared files ahead"
+        ),
+        Err(e) => {
+            tracing::debug!(instance = %row.name, error = %e, "couldn't read shared files ahead")
+        }
+    }
 }
 
 /// Upload what the version needs that the server doesn't have yet: files on no mod site

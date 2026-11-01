@@ -141,19 +141,22 @@ async fn download(
     Ok(file)
 }
 
+/// What the pack's overrides hold, if it was read before (nothing is downloaded).
+pub fn saved_index(paths: &AppPaths, base: &PackBase) -> Option<PackIndex> {
+    let bytes = std::fs::read(index_file(paths, base)).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
 /// What the pack's overrides hold, downloading the pack first if needed.
 pub async fn index(
     state: &AppState,
     base: &PackBase,
     on_bytes: &mut (dyn FnMut(u64) + Send),
 ) -> AppResult<PackIndex> {
-    let saved = index_file(&state.paths, base);
-    if let Some(index) = std::fs::read(&saved)
-        .ok()
-        .and_then(|b| serde_json::from_slice(&b).ok())
-    {
+    if let Some(index) = saved_index(&state.paths, base) {
         return Ok(index);
     }
+    let saved = index_file(&state.paths, base);
     let pack = download(state, base, on_bytes).await?;
     let source = base.source;
     let index = tokio::task::spawn_blocking(move || read_index(&pack, source)).await??;
