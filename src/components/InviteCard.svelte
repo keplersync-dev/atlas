@@ -24,7 +24,9 @@
   }
 </script>
 
-<article class="flex items-center gap-3.5 rounded-xl bg-(--bg-raise) p-3.5">
+<article
+  class="flex items-center gap-3.5 rounded-xl border border-(--accent)/40 bg-(--bg-raise) p-3.5 shadow-[0_8px_24px_#0000004d]"
+>
   <ContentIcon src={invite.icon} seed={invite.id} class="size-12 rounded-lg" />
   <div class="min-w-0 flex-1">
     <b class="block truncate text-[14px] font-semibold">{invite.name}</b>

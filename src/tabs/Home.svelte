@@ -123,6 +123,19 @@
         >
       </div>
     {:else if instances.list.length === 0}
+      <!-- A new friend's first visit: the invite that brought them comes first. -->
+      {#if social.invites.length}
+        <section class="mb-4">
+          {@render heading("Shared with you", social.invites.length)}
+          <div
+            class="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3"
+          >
+            {#each social.invites as invite (invite.id)}
+              <InviteCard {invite} />
+            {/each}
+          </div>
+        </section>
+      {/if}
       <div class="max-w-2xl pt-10">
         <h1
           class="font-(family-name:--font-display) text-3xl font-semibold tracking-tight"
