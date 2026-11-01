@@ -118,8 +118,10 @@
         />
         <span class="min-w-0 flex-1">
           <b class="block truncate text-[13px] font-medium">{inst.name}</b>
+          <!-- What needs the player is said in words, not only by the dot. -->
           <small
-            class="block truncate text-[13px] {inst.status === 'missing'
+            class="block truncate text-[13px] {inst.status === 'missing' ||
+            needsYou(inst)
               ? 'text-(--warn)'
               : 'text-(--text-faint)'}"
           >
@@ -127,21 +129,24 @@
               ? "Folder missing"
               : inst.status === "syncing"
                 ? "Updating…"
-                : inst.launcher.name}
+                : inst.sync?.state === "update_available" ||
+                    inst.sync?.state === "conflict"
+                  ? "Update ready"
+                  : needsYou(inst)
+                    ? "Changes not sent"
+                    : inst.launcher.name}
           </small>
         </span>
         {#if needsYou(inst)}
           <span
             class="size-1.75 shrink-0 rounded-full bg-(--warn)"
-            title="Needs your attention"
+            aria-hidden="true"
           ></span>
         {/if}
       </button>
     {:else}
       {#if instances.loaded}
-        <p class="px-2.5 py-1.5 text-[13px] text-(--text-faint)">
-          Nothing tracked yet.
-        </p>
+        <p class="px-2.5 py-1.5 text-[13px] text-(--text-faint)">None yet.</p>
       {/if}
     {/each}
   </div>
@@ -179,6 +184,9 @@
     <p class="px-5 pt-3 pb-1 text-center text-[13px] text-(--text-faint)">
       Friends and sharing aren't available in this copy of Atlas.
     </p>
+    {@render settingsRow()}
+  {:else if social.loaded && !social.signingIn && (isActive( { page: "shared" } ) || isActive( { page: "friends" } ))}
+    <!-- These pages ask to sign in themselves; one set of buttons is enough. -->
     {@render settingsRow()}
   {:else if social.loaded}
     <div class="border-t border-(--line) px-3.5 pt-3 pb-3">

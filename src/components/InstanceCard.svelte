@@ -97,13 +97,16 @@
       return {
         tone: "warn",
         text: "Folder missing",
-        action: { label: "Fix", variant: "default", run: open },
+        action: { label: "Open", variant: "default", run: open },
       };
     if (i.isRunning) return { tone: "online", text: "Playing now" };
     if (s?.state === "update_available")
       return {
         tone: "warn",
-        text: `${s.owner?.displayName ?? "The owner"} published an update`,
+        text:
+          s.role === "owner"
+            ? "An editor sent an update"
+            : `${s.owner?.displayName ?? "The owner"} sent an update`,
         action: {
           label: "Update",
           variant: "warn",
@@ -123,9 +126,9 @@
     if (s?.state === "local_changes" && s.role !== "viewer")
       return {
         tone: "accent",
-        text: `${plural(s.localChangeCount, "change")} not shared yet`,
+        text: `${plural(s.localChangeCount, "change")} not sent yet`,
         action: {
-          label: "Publish",
+          label: "Send",
           variant: "primary",
           run: () => openDialog({ kind: "publish", instanceId: i.id }),
         },
@@ -136,7 +139,7 @@
         text: `${plural(s.localChangeCount, "local change")} on this PC only`,
       };
     if (s?.state === "frozen")
-      return { tone: "muted", text: "Frozen · the owner left" };
+      return { tone: "muted", text: "No longer updated · the owner left" };
     if (s) {
       const shared = social.shared.find((x) => x.id === s.sharedInstanceId);
       const others = shared
@@ -148,7 +151,9 @@
         tone: "shared",
         text:
           s.role === "owner"
-            ? `Shared with ${plural(others, "person", "people")} · up to date`
+            ? others
+              ? `Shared with ${plural(others, "person", "people")} · up to date`
+              : "Shared · nobody has joined yet"
             : `From ${s.owner?.displayName ?? "a friend"} · up to date`,
       };
     }

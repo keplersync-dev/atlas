@@ -12,6 +12,17 @@
   let { items, label = "More actions" }: { items: MenuItem[]; label?: string } =
     $props();
 
+  // Dividers only between items: none first, last or twice, whatever was left out.
+  const shown = $derived(
+    items.filter(
+      (item, i) =>
+        item !== "divider" ||
+        (items.slice(0, i).some((x) => x !== "divider") &&
+          items.slice(i + 1).some((x) => x !== "divider") &&
+          items[i + 1] !== "divider"),
+    ),
+  );
+
   let open = $state(false);
   // bind:this gives us the actual DOM element, so we can tell
   // whether a click happened inside the menu or somewhere else.
@@ -49,7 +60,7 @@
       role="menu"
       class="absolute top-full right-0 z-30 mt-1.5 min-w-52 rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-[0_16px_40px_#0009]"
     >
-      {#each items as item, i (i)}
+      {#each shown as item, i (i)}
         {#if item === "divider"}
           <hr class="my-1 border-(--line)" />
         {:else}

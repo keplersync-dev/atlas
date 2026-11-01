@@ -17,10 +17,13 @@ export function resource<T>(fetcher: () => Promise<T>) {
     data: T | undefined;
     loading: boolean;
     error: string | null;
+    /** The ApiError code, so a page can tell "gone" from "failed". */
+    code: string | null;
   }>({
     data: undefined,
     loading: true,
     error: null,
+    code: null,
   });
   let version = 0;
 
@@ -28,13 +31,17 @@ export function resource<T>(fetcher: () => Promise<T>) {
     const v = ++version;
     state.loading = true;
     state.error = null;
+    state.code = null;
     if (!keepData) state.data = undefined;
     fetcher()
       .then((data) => {
         if (v === version) state.data = data;
       })
       .catch((e) => {
-        if (v === version) state.error = (e as Error).message;
+        if (v === version) {
+          state.error = (e as Error).message;
+          state.code = (e as { code?: string }).code ?? null;
+        }
       })
       .finally(() => {
         if (v === version) state.loading = false;
@@ -53,6 +60,9 @@ export function resource<T>(fetcher: () => Promise<T>) {
     },
     get error() {
       return state.error;
+    },
+    get code() {
+      return state.code;
     },
     /** Fetch again after a change you made, keeping current data on screen meanwhile. */
     reload: () => run(true),

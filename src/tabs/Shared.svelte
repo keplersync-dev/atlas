@@ -141,7 +141,7 @@
     {
       key: "mine",
       title: "Shared by you",
-      blurb: "Instances you own. Friends get your changes when you publish.",
+      blurb: "Instances you own. Friends get every update you send.",
       icon: "share",
       items: mine,
       empty:
@@ -241,7 +241,7 @@
   <div class="py-12 text-center text-(--text-muted)">
     <b class="block text-sm text-(--text-primary)">Sign in to share instances</b
     >
-    Your tracked instances keep working without an account.
+    Everything on this PC keeps working without an account.
     <SignInButtons />
   </div>
 {:else}
@@ -250,11 +250,12 @@
     class="grid grid-cols-[minmax(0,1fr)_320px] items-start gap-8 max-[1150px]:grid-cols-1"
   >
     <div>
-      <div class="mb-5 flex flex-wrap items-center gap-x-4 gap-y-3">
+      <!-- Search and the main action on one row, filters under them: the same at every width. -->
+      <div class="mb-3 flex items-center gap-3">
         {@render search()}
-        {@render chips()}
-        <ShareButton class="ml-auto" />
+        <ShareButton class="ml-auto shrink-0" />
       </div>
+      <div class="mb-5">{@render chips()}</div>
       {#if updatable.length > 1 || updating || updateNote}
         <div
           class="mb-5 flex items-center gap-3 rounded-xl bg-(--warn)/10 px-4 py-2.5"

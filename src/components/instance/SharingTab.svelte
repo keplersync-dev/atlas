@@ -43,7 +43,7 @@
       return { text: "Invited", cls: "text-(--text-faint)" };
     if (m.lastSyncedRevision === sync.latestRevision)
       return { text: "Up to date", cls: "text-(--online)" };
-    return { text: `On v${m.lastSyncedRevision}`, cls: "text-(--warn)" };
+    return { text: "Not updated yet", cls: "text-(--warn)" };
   }
 
   async function change(action: () => Promise<unknown>) {
@@ -60,9 +60,9 @@
     {
       id: "editor",
       label: "Editor",
-      hint: "Can publish changes and invite friends",
+      hint: "Can send updates and invite friends",
     },
-    { id: "viewer", label: "Viewer", hint: "Gets updates when you publish" },
+    { id: "viewer", label: "Viewer", hint: "Gets your updates" },
   ];
 
   /** Shown at once, then saved; put back if the server says no. */
@@ -82,10 +82,10 @@
 
 <p class="mt-4 mb-2 text-[13px] text-(--text-muted)">
   {sync.role === "owner"
-    ? "You own this instance."
+    ? "You share this. Everyone below gets the updates you send."
     : sync.role === "editor"
-      ? "You can publish changes and invite friends."
-      : "You get updates when the owner publishes."}
+      ? "You can send updates and invite friends."
+      : `${sync.owner?.displayName ?? "The owner"} sends you updates.`}
   {#if shared.data?.groups.length}
     Shared with {shared.data.groups.map((g) => g.group.name).join(", ")}.
   {/if}
@@ -127,8 +127,17 @@
 {:else if !social.signedIn}
   <!-- Not an error: members just need the account. -->
   <p class="py-6 text-(--text-muted)">Sign in to see who has it.</p>
+{:else if shared.code === "not_found"}
+  <!-- Stopped sharing from another PC, or shared from another account. -->
+  <p class="py-6 text-(--text-muted)">
+    This isn't shared anymore, or it was shared from another account. Your files
+    here are fine.
+  </p>
 {:else if shared.error}
-  <p class="py-6 text-(--danger)">{shared.error}</p>
+  <p class="py-6 text-(--danger)">
+    Couldn't load who has it: {shared.error}
+    <button class="ml-1 underline" onclick={shared.reload}>Try again</button>
+  </p>
 {:else if shared.data}
   {#each shared.data.members as m (m.user.id)}
     {@const status = memberStatus(m)}

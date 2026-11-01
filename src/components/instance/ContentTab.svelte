@@ -212,7 +212,7 @@
 
 {#if canSetModes}
   <p class="mb-1 text-[13px] text-(--text-faint)">
-    Choose how each file is shared. Changes reach friends when you publish.
+    Choose how each file is shared. Friends get changes with your next update.
   </p>
 {/if}
 {#if lockedReason}
@@ -282,8 +282,8 @@
             title={!pending(item)
               ? undefined
               : item.enabled
-                ? "Not published yet"
-                : "Disabled: removed for everyone when you publish"}
+                ? "Not sent yet"
+                : "Turned off: removed for everyone with your next update"}
           ></i>
           <ShareModeSelect
             value={item.shareMode}

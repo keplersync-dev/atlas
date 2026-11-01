@@ -2,7 +2,8 @@
   import { api } from "$lib/api";
   import { plural, versionLabel, workLabel } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
-  import { instances } from "$lib/stores";
+  import { instances, social } from "$lib/stores";
+  import { showDone } from "$lib/toasts.svelte";
   import type { FileRules, Id, ShareMode } from "$lib/types";
   import ContentIcon from "../ContentIcon.svelte";
   import Button from "../Button.svelte";
@@ -70,7 +71,21 @@
       !overQuota &&
       !tooBig,
   );
-  const nextVersion = $derived((instance?.sync?.latestRevision ?? 0) + 1);
+  // Who gets it, by name when it's one person.
+  const who = $derived.by(() => {
+    const shared = social.shared.find(
+      (x) => x.id === instance?.sync?.sharedInstanceId,
+    );
+    const me = social.session?.user?.id;
+    const others = (shared?.members ?? []).filter(
+      (m) => m.status === "active" && m.user.id !== me,
+    );
+    return others.length === 1
+      ? others[0].user.displayName
+      : others.length
+        ? plural(others.length, "person", "people")
+        : null;
+  });
 
   async function submit(e: SubmitEvent) {
     e.preventDefault();
@@ -85,6 +100,11 @@
         files: fileRules ?? undefined,
       });
       await instances.load();
+      showDone(
+        who
+          ? `Sent the update to ${who}.`
+          : "Update saved. Whoever joins gets it.",
+      );
       onclose();
     } catch (err) {
       // e.g. "Someone published a newer version. Update first."
@@ -96,8 +116,10 @@
 </script>
 
 <Dialog
-  title="Publish v{nextVersion}"
-  description="Everyone with this instance will be asked to update."
+  title="Send an update"
+  description={who
+    ? `Goes to ${who}. Changed files are backed up on their PC first.`
+    : "Nobody has joined yet. Whoever joins gets this version."}
   wide
   {onclose}
   onsubmit={submit}
@@ -112,9 +134,7 @@
 
   {#if plan.loading}
     <p class="py-4 text-[13px] text-(--text-muted) tabular-nums">
-      {work
-        ? workLabel(work)
-        : `Comparing your folder with v${nextVersion - 1}…`}
+      {work ? workLabel(work) : "Comparing your folder with the last update…"}
     </p>
   {:else if plan.error}
     <p class="py-4 text-[13px] text-(--danger)">{plan.error}</p>
@@ -125,8 +145,8 @@
     >
       {#if total === 0}
         <span class="text-(--text-muted)"
-          >Nothing to publish yet. Change a setting below, or change files in
-          your launcher.</span
+          >Nothing to send yet. Change a setting below, or change files in your
+          launcher.</span
         >
       {:else}
         {#if diff.added.length}<span
@@ -153,6 +173,19 @@
       {/if}
     </div>
 
+    <h3 class="mb-1.5 text-[13px] font-semibold text-(--text-muted)">
+      What changed? <span class="font-normal text-(--text-faint)"
+        >(optional)</span
+      >
+    </h3>
+    <textarea
+      bind:value={changelog}
+      maxlength="2000"
+      rows="2"
+      placeholder="Friends see this when they update"
+      class="mb-3 w-full resize-none rounded-md border border-(--line-2) bg-(--bg) px-3 py-2 leading-snug outline-none focus:border-(--accent)"
+    ></textarea>
+
     <SharePicker
       items={plan.data.items}
       storage={plan.data.storage}
@@ -166,19 +199,6 @@
       leftOut={plan.data.leftOut}
       bind:rules={fileRules}
     />
-
-    <h3 class="mt-4 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
-      What changed? <span class="font-normal text-(--text-faint)"
-        >(optional)</span
-      >
-    </h3>
-    <textarea
-      bind:value={changelog}
-      maxlength="2000"
-      rows="2"
-      placeholder="Shown to members when they update"
-      class="w-full resize-none rounded-md border border-(--line-2) bg-(--bg) px-3 py-2 leading-snug outline-none focus:border-(--accent)"
-    ></textarea>
   {/if}
 
   {#snippet footer()}
@@ -198,14 +218,10 @@
       <span class="mr-auto text-[13px] text-(--danger)" role="alert"
         >{error}</span
       >
-    {:else if plan.data && total}
-      <span class="mr-auto text-[13px] text-(--text-faint)"
-        >{plural(total, "change")}</span
-      >
     {/if}
     <Button variant="ghost" onclick={onclose}>Cancel</Button>
     <Button type="submit" variant="primary" disabled={!canSubmit}>
-      {submitting ? "Publishing…" : `Publish v${nextVersion}`}
+      {submitting ? "Sending…" : "Send update"}
     </Button>
   {/snippet}
 </Dialog>

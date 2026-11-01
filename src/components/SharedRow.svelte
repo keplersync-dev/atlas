@@ -24,6 +24,17 @@
     run: () => openDialog({ kind: "accept", sharedInstanceId: s.id }),
   });
 
+  /** The copy on this PC lost its folder: its page offers to set it up again. */
+  const missing = (local: InstanceSummary): RowState => ({
+    tone: "warn",
+    text: "Folder missing",
+    action: {
+      label: "Open",
+      variant: "warn",
+      run: () => go({ page: "instance", id: local.id }),
+    },
+  });
+
   /** One plain-language line per instance, plus a button only when there's something to do. */
   export function rowState(s: SharedInstance): RowState {
     const local = localFor(s);
@@ -32,9 +43,9 @@
       if (sync?.state === "local_changes")
         return {
           tone: "accent",
-          text: `${plural(sync.localChangeCount, "change")} not shared yet`,
+          text: `${plural(sync.localChangeCount, "change")} not sent yet`,
           action: {
-            label: "Publish",
+            label: "Send",
             variant: "primary",
             run: () => openDialog({ kind: "publish", instanceId: local!.id }),
           },
@@ -56,6 +67,7 @@
       if (invited) parts.push(`${invited} invited`);
       if (!local)
         return { tone: "muted", text: "Not on this PC", action: add(s) };
+      if (local.status === "missing") return missing(local);
       return { tone: "muted", text: parts.join(" · ") };
     }
     if (s.myStatus === "invited")
@@ -68,11 +80,12 @@
     if (s.frozen)
       return {
         tone: "muted",
-        text: "Frozen · the owner left, no more updates",
+        text: "No longer updated · the owner left",
         action: local ? undefined : add(s),
       };
     if (!local)
       return { tone: "muted", text: "Not on this PC", action: add(s) };
+    if (local.status === "missing") return missing(local);
     if (local.isRunning) return { tone: "online", text: "Playing now" };
     if (local.sync?.state === "update_available")
       return {
@@ -99,7 +112,7 @@
     if (local.sync?.state === "local_changes")
       return {
         tone: "muted",
-        text: `${plural(local.sync.localChangeCount, "local change")} · ${local.launcher.name}`,
+        text: `${plural(local.sync.localChangeCount, "change")} on this PC only · ${local.launcher.name}`,
       };
     return { tone: "muted", text: `Up to date · ${local.launcher.name}` };
   }

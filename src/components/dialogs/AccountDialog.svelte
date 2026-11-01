@@ -9,6 +9,7 @@
   import Dialog from "../Dialog.svelte";
   import Head from "../Head.svelte";
   import ProviderIcon from "../ProviderIcon.svelte";
+  import SignInButtons from "../SignInButtons.svelte";
   import Switch from "../Switch.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
@@ -103,7 +104,7 @@
       {
         key: "closeToTray",
         title: "Keep running in the tray",
-        hint: "Closing the window leaves Atlas in the tray, so it keeps your instances up to date.",
+        hint: "Closing the window leaves Atlas in the tray, so it keeps your packs up to date.",
       },
       {
         key: "startWithWindows",
@@ -251,7 +252,13 @@
   {/snippet}
 
   {#if !me}
-    <p class="py-4 text-[13px] text-(--text-muted)">You're signed out.</p>
+    <div class="pt-2 pb-5">
+      <p class="text-[13px] text-(--text-muted)">
+        You're signed out. Sign in to share packs and add friends. Your packs on
+        this PC keep working either way.
+      </p>
+      <SignInButtons start />
+    </div>
     {@render thisPc()}
   {:else}
     <!-- ── Profile (its own form with its own Save button) ── -->
@@ -487,7 +494,7 @@
 
   <p class="mt-6 text-center text-[13px] text-(--text-faint)">
     {#each [{ page: "terms", label: "Terms of Service" }, { page: "privacy", label: "Privacy Policy" }] as const as l, i (l.page)}
-      {#if i}<span aria-hidden="true"> · </span>{/if}
+      {#if i}<span aria-hidden="true">{" · "}</span>{/if}
       <button
         type="button"
         class="hover:text-(--text-primary) hover:underline"

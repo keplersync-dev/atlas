@@ -142,7 +142,9 @@
         >
           Keep your friends on the same mods.
         </h1>
-        <ol class="mt-7 grid gap-3 sm:grid-cols-3">
+        <ol
+          class="mt-7 grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-3"
+        >
           {#each STEPS as step, i (step.title)}
             <li
               class="rounded-xl border border-(--line) bg-(--bg-raise) px-4 py-3.5 shadow-[0_8px_24px_#0000004d]"
@@ -178,11 +180,23 @@
         >
           Choose instances
         </Button>
+        <!-- The other way in: a friend sent them here. -->
+        <p
+          class="mt-8 flex items-start gap-2.5 border-t border-(--line) pt-5 text-[13px] text-(--text-muted)"
+        >
+          <Icon
+            name="inbox"
+            class="mt-0.5 size-4 shrink-0 text-(--text-faint)"
+          />
+          {social.signedIn
+            ? "Joining a friend? When they share a pack with you, it shows up here."
+            : "Joining a friend? Sign in on the left, and the pack they shared shows up here."}
+        </p>
       </div>
     {:else}
-      <div class="mb-7 flex flex-wrap items-center gap-x-3 gap-y-3">
-        <!-- The search box gives up width first, so the row fits beside the friends column. -->
-        <label class="relative block max-w-64 min-w-36 flex-1">
+      <!-- Search and actions on one row, filters under them: the same at every width. -->
+      <div class="mb-3 flex items-center gap-2">
+        <label class="relative block max-w-72 min-w-36 flex-1">
           <span
             class="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2 text-(--text-faint)"
           >
@@ -194,6 +208,26 @@
             class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg-raise) pr-2.5 pl-8 text-[13px] placeholder:text-(--text-faint) focus:border-(--accent) focus:outline-none"
           />
         </label>
+        <div class="ml-auto flex shrink-0 items-center gap-2">
+          <Select
+            bind:value={sort}
+            label="Sort"
+            options={[
+              { value: "played", label: "Last played" },
+              { value: "name", label: "Name" },
+              { value: "added", label: "Recently added" },
+            ]}
+          />
+          <Button
+            variant="primary"
+            class="gap-1.5"
+            onclick={() => openDialog({ kind: "track" })}
+          >
+            <Icon name="plus" class="size-3.5" />Track instances
+          </Button>
+        </div>
+      </div>
+      <div class="mb-7">
         <div
           class="flex flex-wrap gap-1.5"
           role="radiogroup"
@@ -214,24 +248,6 @@
                 >{/if}
             </button>
           {/each}
-        </div>
-        <div class="ml-auto flex items-center gap-2">
-          <Select
-            bind:value={sort}
-            label="Sort"
-            options={[
-              { value: "played", label: "Last played" },
-              { value: "name", label: "Name" },
-              { value: "added", label: "Recently added" },
-            ]}
-          />
-          <Button
-            variant="primary"
-            class="gap-1.5"
-            onclick={() => openDialog({ kind: "track" })}
-          >
-            <Icon name="plus" class="size-3.5" />Track instances
-          </Button>
         </div>
       </div>
 
@@ -265,7 +281,7 @@
 
       <section>
         <!-- Only needed to tell them apart from the sections above. -->
-        {#if invites.length || attention.length}
+        {#if (invites.length || attention.length) && rest.length}
           {@render heading("Your instances", rest.length)}
         {/if}
         <!-- auto-fill: as many 240px+ columns as fit, so wide windows get more columns -->

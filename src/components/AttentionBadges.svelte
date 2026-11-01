@@ -19,5 +19,5 @@
   >{/if}
 {#if need.changes}<span
     class="rounded-full bg-(--accent)/15 px-2 py-0.5 text-[13px] font-semibold text-(--accent)"
-    >{plural(need.changes, "to publish", "to publish")}</span
+    >{plural(need.changes, "not sent", "not sent")}</span
   >{/if}

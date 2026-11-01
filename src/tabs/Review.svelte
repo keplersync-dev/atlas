@@ -128,7 +128,7 @@
       <b class="block text-sm text-(--text-primary)"
         >You're on the latest version</b
       >
-      {summary.name} is on v{summary.sync?.syncedRevision}. Nothing to update.
+      {summary.name} has every update. Nothing to install.
       <div>
         <Button class="mt-4" onclick={() => go({ page: "instance", id })}
           >Back to {summary.name}</Button
@@ -155,11 +155,12 @@
         <h1
           class="font-(family-name:--font-display) text-[22px] font-semibold tracking-tight"
         >
-          Update to v{preview.toRevision}
+          {latest?.createdBy
+            ? `${latest.createdBy.displayName} sent an update`
+            : "An update to install"}
         </h1>
         <p class="mt-1 text-(--text-muted)">
-          {summary.name} · you're on v{preview.fromRevision} · {summary.launcher
-            .name}
+          {summary.name} · {summary.launcher.name}
         </p>
       </div>
     </div>
@@ -287,9 +288,11 @@
           >{symbol}</span
         >
         <span>{name}</span>
+        <!-- Version numbers line up in mono; words ("Required → Optional") read as words. -->
         <span
-          class="font-(family-name:--font-mono) text-[13px] text-(--text-muted)"
-          >{version}</span
+          class="text-[13px] text-(--text-muted) {/\d/.test(version)
+            ? 'font-(family-name:--font-mono)'
+            : ''}">{version}</span
         >
       </div>
     {/snippet}
@@ -397,7 +400,7 @@
             >Not now</Button
           >
           <Button variant="warn" size="lg" disabled={started} onclick={apply}
-            >Update to v{preview.toRevision}</Button
+            >Update now</Button
           >
         </div>
       {/if}

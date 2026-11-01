@@ -15,12 +15,15 @@
     onupdate,
     onrevert,
     onuntrack,
+    onsetup,
   }: {
     instance: InstanceSummary;
     busy?: boolean;
     onupdate: () => void;
     onrevert: () => void;
     onuntrack: () => void;
+    /** Shared packs only: add a fresh copy in place of the missing one. */
+    onsetup?: () => void;
   } = $props();
 
   const STAGES: Record<SyncProgress["stage"], string> = {
@@ -81,9 +84,14 @@
         >Review update</Button
       >
     {:else if instance.status === "missing"}
-      <Button onclick={onuntrack}>Stop tracking</Button>
+      {#if onsetup}
+        <Button variant="ghost" onclick={onuntrack}>Stop tracking</Button>
+        <Button variant="primary" onclick={onsetup}>Set it up again</Button>
+      {:else}
+        <Button onclick={onuntrack}>Stop tracking</Button>
+      {/if}
     {:else if s?.state === "local_changes" && s.role === "viewer"}
-      <Button disabled={busy} onclick={onrevert}>Revert</Button>
+      <Button disabled={busy} onclick={onrevert}>Undo changes</Button>
     {/if}
   </div>
 {/snippet}
@@ -93,7 +101,9 @@
     "warn",
     "warn",
     "Atlas can't find this folder",
-    `It may have been deleted or moved in ${instance.launcher.name}. Expected at ${instance.gameDir}`,
+    s
+      ? `It may have been deleted or moved in ${instance.launcher.name}. Set it up again to get a fresh copy of ${s.role === "owner" ? "what you shared" : `${s.owner?.displayName ?? "the owner"}'s pack`}. Expected at ${instance.gameDir}`
+      : `It may have been deleted or moved in ${instance.launcher.name}. Expected at ${instance.gameDir}`,
   )}
 {:else if instance.status === "syncing" && instance.progress}
   <div class="mt-5 rounded-lg bg-(--bg-raise) px-4 py-3">
@@ -153,25 +163,27 @@
   {@render bar(
     "warn",
     "download",
-    `v${s.latestRevision} is available`,
+    s.role === "owner"
+      ? "There's an update from an editor"
+      : `${s.owner?.displayName ?? "The owner"} sent an update`,
     s.state === "conflict"
-      ? `You're on v${s.syncedRevision}. Updating will undo ${plural(s.localChangeCount, "local change")}.`
-      : `You're on v${s.syncedRevision}. Changed files are backed up first.`,
+      ? `Updating undoes ${plural(s.localChangeCount, "change")} you made on this PC. Changed files are backed up first.`
+      : "Changed files are backed up first.",
   )}
 {:else if s?.state === "local_changes"}
   {@render bar(
     "plain",
     "refresh",
-    `${plural(s.localChangeCount, "local change")} not published yet`,
+    `${plural(s.localChangeCount, "change")} on this PC only`,
     s.role === "viewer"
-      ? `These only exist on this PC. Revert to match v${s.syncedRevision} again.`
-      : "Publish them so everyone gets the same mods.",
+      ? `Friends don't get ${s.localChangeCount === 1 ? "it" : "them"}. Undo to match ${s.owner?.displayName ?? "the owner"}'s pack again.`
+      : "Send an update so everyone has the same mods.",
   )}
 {:else if s?.state === "frozen"}
   {@render bar(
     "plain",
     "shield",
-    "This instance is frozen",
-    "Its owner left and nobody could take over. Your copy keeps working, but there won't be updates.",
+    "No longer updated",
+    "Its owner left and nobody took over. Your copy keeps working, but there won't be updates.",
   )}
 {/if}

@@ -4,6 +4,9 @@
   import Button from "./Button.svelte";
   import ProviderIcon from "./ProviderIcon.svelte";
 
+  /** Left-aligned, for use inside a dialog's text; centred on empty pages. */
+  let { start = false }: { start?: boolean } = $props();
+
   const label = (provider: AuthProvider, name: string) =>
     social.signingIn === provider ? "Start again" : `Sign in with ${name}`;
 </script>
@@ -13,7 +16,7 @@
     Friends and sharing aren't available in this copy of Atlas.
   </p>
 {:else}
-  <div class="mt-4 flex justify-center gap-2">
+  <div class="mt-4 flex gap-2 {start ? '' : 'justify-center'}">
     <Button
       variant="primary"
       class="gap-2"

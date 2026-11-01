@@ -119,7 +119,7 @@
       choice = await chooseAction({
         ...stopTracking,
         title: `Stop tracking ${summary.name}?`,
-        message: `${forget} It stays shared${people ? ` with ${plural(people, "person", "people")}` : ""}, and you can add it back from Shared to publish again.`,
+        message: `${forget} It stays shared${people ? ` with ${plural(people, "person", "people")}` : ""}, and you can add it back from Shared to send updates again.`,
         alternativeLabel: "Stop sharing too",
       });
       if (
@@ -158,6 +158,22 @@
     // This page no longer exists: remove it from history and leave without remembering it.
     forgetInstance(id);
     go({ page: "home" }, { replace: true });
+  }
+
+  /** A shared pack whose folder is gone: forget this copy and add a fresh one. */
+  async function setUpAgain() {
+    if (!summary?.sync) return;
+    const shared = summary.sync.sharedInstanceId;
+    try {
+      await api.untrackInstance(id);
+    } catch (e) {
+      error = (e as Error).message;
+      return;
+    }
+    await Promise.all([social.load(), instances.load()]);
+    forgetInstance(id);
+    go({ page: "home" }, { replace: true });
+    openDialog({ kind: "accept", sharedInstanceId: shared });
   }
 
   const menuItems = $derived.by((): MenuItem[] => {
@@ -297,68 +313,73 @@
         : ''}"
     />
 
-    <div class="min-w-0 flex-1 pt-1">
-      <h1
-        class="mb-2 truncate font-(family-name:--font-display) text-2xl font-semibold tracking-tight"
-      >
-        {summary.name}
-      </h1>
-      <div
-        class="flex flex-wrap gap-x-4 gap-y-1.5 text-[13px] text-(--text-muted)"
-      >
-        <span>{versionLabel(summary.loader, summary.minecraftVersion)}</span>
-        <span>{summary.launcher.name}</span>
-        {#if summary.sync}
-          <span>
-            {summary.sync.role === "owner"
-              ? "Shared by you"
-              : `From ${summary.sync.owner?.displayName ?? "a deleted user"}`}
-            · v{summary.sync.syncedRevision}
-          </span>
-        {:else}
-          <span>Not shared</span>
+    <div
+      class="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-5 gap-y-3"
+    >
+      <div class="min-w-60 flex-1 pt-1">
+        <h1
+          class="mb-2 truncate font-(family-name:--font-display) text-2xl font-semibold tracking-tight"
+        >
+          {summary.name}
+        </h1>
+        <div
+          class="flex flex-wrap gap-x-4 gap-y-1.5 text-[13px] text-(--text-muted)"
+        >
+          <span>{versionLabel(summary.loader, summary.minecraftVersion)}</span>
+          <span>{summary.launcher.name}</span>
+          {#if summary.sync}
+            <span>
+              {summary.sync.role === "owner"
+                ? "Shared by you"
+                : `From ${summary.sync.owner?.displayName ?? "a deleted user"}`}
+            </span>
+          {:else}
+            <span>Not shared</span>
+          {/if}
+          {#if summary.totalPlaytimeSeconds}
+            <span
+              >{plural(Math.round(summary.totalPlaytimeSeconds / 3600), "hour")} played</span
+            >
+          {/if}
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 pt-1.5">
+        {#if summary.status !== "missing" && summary.launcher.kind !== "folder"}
+          <Button
+            variant="ghost"
+            disabled={busy}
+            onclick={() => run(() => api.openInLauncher(id))}
+          >
+            <Icon name="external" class="size-3.5" />{openLabel(
+              summary.launcher,
+            )}
+          </Button>
         {/if}
-        {#if summary.totalPlaytimeSeconds}
-          <span
-            >{plural(Math.round(summary.totalPlaytimeSeconds / 3600), "hour")} played</span
+
+        <!-- The main action depends on the sync state. -->
+        {#if !summary.sync}
+          <Button
+            variant="primary"
+            disabled={summary.status !== "ready"}
+            onclick={() => openDialog({ kind: "share", instanceId: id })}
+          >
+            <Icon name="share" class="size-3.5" />Share
+          </Button>
+        {:else if summary.sync.state === "local_changes" && summary.sync.role !== "viewer"}
+          <Button
+            variant="primary"
+            onclick={() => openDialog({ kind: "publish", instanceId: id })}
+            >Send update</Button
+          >
+        {:else if summary.sync.role !== "viewer" && summary.sync.state !== "frozen"}
+          <Button onclick={() => openDialog({ kind: "invite", instanceId: id })}
+            ><Icon name="users" class="size-3.5" />Invite</Button
           >
         {/if}
+
+        <Menu items={menuItems} />
       </div>
-    </div>
-
-    <div class="flex items-center gap-2 pt-1.5">
-      {#if summary.status !== "missing" && summary.launcher.kind !== "folder"}
-        <Button
-          variant="ghost"
-          disabled={busy}
-          onclick={() => run(() => api.openInLauncher(id))}
-        >
-          <Icon name="external" class="size-3.5" />{openLabel(summary.launcher)}
-        </Button>
-      {/if}
-
-      <!-- The main action depends on the sync state. -->
-      {#if !summary.sync}
-        <Button
-          variant="primary"
-          disabled={summary.status !== "ready"}
-          onclick={() => openDialog({ kind: "share", instanceId: id })}
-        >
-          <Icon name="share" class="size-3.5" />Share
-        </Button>
-      {:else if summary.sync.state === "local_changes" && summary.sync.role !== "viewer"}
-        <Button
-          variant="primary"
-          onclick={() => openDialog({ kind: "publish", instanceId: id })}
-          >Publish v{summary.sync.latestRevision + 1}</Button
-        >
-      {:else if summary.sync.role !== "viewer" && summary.sync.state !== "frozen"}
-        <Button onclick={() => openDialog({ kind: "invite", instanceId: id })}
-          ><Icon name="users" class="size-3.5" />Invite</Button
-        >
-      {/if}
-
-      <Menu items={menuItems} />
     </div>
   </div>
 
@@ -368,14 +389,15 @@
     onupdate={() => go({ page: "review", id })}
     onrevert={async () => {
       const ok = await confirmAction({
-        title: "Revert your changes?",
+        title: "Undo your changes?",
         message:
           "Files you added, removed or changed go back to the shared version. Atlas backs up the current files first, so you can restore them from History.",
-        confirmLabel: "Revert",
+        confirmLabel: "Undo changes",
       });
       if (ok) run(() => api.revertLocalChanges(id));
     }}
     onuntrack={untrack}
+    onsetup={sharedId ? setUpAgain : undefined}
   />
 
   {#if error}

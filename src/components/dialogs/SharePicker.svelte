@@ -259,7 +259,7 @@
 {/if}
 
 <div class="mb-1.5 flex flex-wrap items-center gap-2">
-  {#if !firstShare}
+  {#if !firstShare && newItems.length}
     <div
       class="inline-flex gap-0.5 rounded-md bg-(--bg) p-0.5"
       role="group"
@@ -325,7 +325,9 @@
         >
         <small class="block truncate text-[13px] text-(--text-faint)">
           {KIND[item.kind]}
-          {#if item.isNew}· <span class="text-(--accent)">new</span>{/if}
+          {#if item.isNew && !firstShare}· <span class="text-(--accent)"
+              >new</span
+            >{/if}
           {#if was && was !== "private" && mode !== was}· was {SHARE_MODES.find(
               (m) => m.id === was,
             )?.label}{/if}
@@ -352,7 +354,7 @@
       {#if query}
         Nothing matches “{query}”.
       {:else if filter === "new"}
-        Nothing new since your last publish. Switch to <b>All</b> to change how existing
+        Nothing new since your last update. Switch to <b>All</b> to change how existing
         files are shared.
       {:else}
         No files in this instance.

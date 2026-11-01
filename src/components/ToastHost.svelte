@@ -42,6 +42,9 @@
       {#if t.kind === "error"}
         <Icon name="warn" class="mt-0.5 size-4 shrink-0 text-(--danger)" />
         <p class="min-w-0 flex-1">{t.text}</p>
+      {:else if t.kind === "done"}
+        <Icon name="check" class="mt-0.5 size-4 shrink-0 text-(--online)" />
+        <p class="min-w-0 flex-1">{t.text}</p>
       {:else}
         <Icon name="inbox" class="mt-0.5 size-4 shrink-0 text-(--accent)" />
         <div class="min-w-0 flex-1">

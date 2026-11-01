@@ -30,7 +30,7 @@
       case "instance_updated":
         return {
           who,
-          verb: a.revision ? `published v${a.revision} of` : "updated",
+          verb: "sent an update to",
           what,
           tail: "",
         };
@@ -56,7 +56,7 @@
           who: null,
           verb: "",
           what,
-          tail: " was frozen: the owner left",
+          tail: " is no longer updated: the owner left",
         };
       case "role_changed":
         return {
@@ -80,7 +80,17 @@
   import Icon from "../Icon.svelte";
 
   // Recent events about shared instances, one per line.
-  let { items }: { items: ActivityItem[] } = $props();
+  let { items: all }: { items: ActivityItem[] } = $props();
+  // The same event twice in a row (invited again after leaving) reads as a glitch: once.
+  const items = $derived(
+    all.filter(
+      (a, i) =>
+        !i ||
+        a.type !== all[i - 1].type ||
+        a.actor?.id !== all[i - 1].actor?.id ||
+        a.sharedInstanceId !== all[i - 1].sharedInstanceId,
+    ),
+  );
 
   /** Where clicking an event takes you: the instance if it's on this PC, the invite if it's new. */
   function target(a: ActivityItem): (() => void) | null {

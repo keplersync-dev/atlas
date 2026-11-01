@@ -58,7 +58,7 @@
         : "";
     if (b.reason === "before_update") return `Before updating${versions}`;
     if (b.reason === "before_restore") return "Before a restore";
-    return "Before reverting local changes";
+    return "Before undoing your changes";
   }
 
   async function restore(b: Backup) {
@@ -88,8 +88,15 @@
     <p class="text-(--text-muted)">Loading history…</p>
   {:else if !social.signedIn}
     <p class="text-(--text-muted)">Sign in to see the versions.</p>
+  {:else if shared.code === "not_found"}
+    <p class="text-(--text-muted)">
+      This isn't shared anymore, or it was shared from another account.
+    </p>
   {:else if shared.error}
-    <p class="text-(--danger)">{shared.error}</p>
+    <p class="text-(--danger)">
+      Couldn't load the versions: {shared.error}
+      <button class="ml-1 underline" onclick={shared.reload}>Try again</button>
+    </p>
   {:else if shared.data}
     <ol>
       {#each shared.data.revisions as rev, i (rev.revision)}
@@ -111,11 +118,14 @@
             v{rev.revision}
           </span>
           <div>
-            <b class="font-semibold">{rev.changelog ?? "No description"}</b>
+            <b class="font-semibold"
+              >{rev.changelog ??
+                (rev.revision === 1 ? "First version" : "Update")}</b
+            >
             <span class="ml-2 text-[13px] text-(--text-faint)">
               {rev.createdBy?.displayName ?? "Deleted user"} · {timeAgo(
                 rev.createdAt,
-              )}{current ? " · your copy" : ""}
+              )}{current ? " · you have this" : ""}
             </span>
             <div
               class="mt-1.5 flex flex-wrap gap-1.5 text-[13px] text-(--text-muted)"
@@ -157,14 +167,16 @@
     <div class="min-w-0 flex-1">
       <b class="font-medium">{backupLabel(b)}</b>
       <small class="block text-[13px] text-(--text-faint)">
-        {timeAgo(b.createdAt)} · {plural(b.fileCount, "file")} · {fileSize(
+        <!-- New files have nothing to copy, so the size can be tiny. -->
+        {timeAgo(b.createdAt)} · {plural(b.fileCount, "file")} changed · {fileSize(
           b.sizeBytes,
-        )}
+        )} copied
       </small>
     </div>
     <Button
       size="sm"
       disabled={!!lockedReason || restoring !== null}
+      title={lockedReason ?? undefined}
       onclick={() => restore(b)}
     >
       {restoring === b.id ? "Restoring…" : "Restore"}

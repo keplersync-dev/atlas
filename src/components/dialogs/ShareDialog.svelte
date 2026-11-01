@@ -2,6 +2,7 @@
   import { api } from "$lib/api";
   import { plural, workLabel } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
+  import { showDone } from "$lib/toasts.svelte";
   import { instances, social } from "$lib/stores";
   import type { FileRules, Id, ShareMode } from "$lib/types";
   import Button from "../Button.svelte";
@@ -44,7 +45,7 @@
 
   const ROLES = [
     { id: "viewer", label: "Get updates" },
-    { id: "editor", label: "Publish changes too" },
+    { id: "editor", label: "Send updates too" },
   ] as const;
 
   // ── Form state ──
@@ -103,6 +104,28 @@
         : friendIds.length + groupIds.length > 0),
   );
 
+  // Who's picked, in words, for the button and the confirmation.
+  const picked = $derived.by(() => {
+    const names = [
+      ...social.friends
+        .filter((f) => friendIds.includes(f.user.id))
+        .map((f) => f.user.displayName),
+      ...(groups.data ?? [])
+        .filter((g) => groupIds.includes(g.id))
+        .map((g) => g.name),
+    ];
+    return names.length === 1
+      ? names[0]
+      : names.length
+        ? plural(names.length, "person", "people")
+        : null;
+  });
+  // Invite mode with everyone already in: nothing to pick.
+  const pickable = $derived(
+    social.friends.filter((f) => !memberStatus.get(f.user.id)).length +
+      (groups.data?.filter((g) => !linkedGroupIds.has(g.id)).length ?? 0),
+  );
+
   async function submit(e: SubmitEvent) {
     e.preventDefault(); // stop the browser's default "reload the page" form submit
     if (!canSubmit) return;
@@ -127,6 +150,14 @@
         });
       }
       await Promise.all([instances.load(), social.load()]);
+      const name = instance?.name ?? "It";
+      showDone(
+        mode === "invite"
+          ? `Invited ${picked} to ${name}.`
+          : picked
+            ? `${name} is shared with ${picked}.`
+            : `${name} is shared. Invite friends from its page.`,
+      );
       onclose();
     } catch (err) {
       error = (err as Error).message;
@@ -141,7 +172,7 @@
     ? `Share ${instance?.name ?? "instance"}`
     : `Invite to ${instance?.name ?? "instance"}`}
   description={mode === "share"
-    ? "They'll get the same mods and every version you publish."
+    ? "They get the same mods and every update you send."
     : "New members get the current version and every update after it."}
   wide
   {onclose}
@@ -178,7 +209,7 @@
           disabled={member}
           class="size-3.75 accent-(--accent)"
         />
-        <Head user={f.user} size={28} ring="#15181d" />
+        <Head user={f.user} size={28} ring="var(--bg-raise)" />
         <span class="min-w-0 flex-1">
           <b class="block font-medium">{f.user.displayName}</b>
           <small class="block text-[13px] text-(--text-faint)"
@@ -233,28 +264,35 @@
       {/each}
     {/if}
 
-    <h3 class="mt-4 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
-      They can
-    </h3>
-    <div
-      class="inline-flex gap-0.5 rounded-md bg-(--bg) p-0.75"
-      role="group"
-      aria-label="Role"
-    >
-      {#each ROLES as option (option.id)}
-        <!-- type="button" so these don't submit the form -->
-        <button
-          type="button"
-          aria-pressed={role === option.id}
-          onclick={() => (role = option.id)}
-          class="rounded px-3 py-1 text-[13px] font-medium {role === option.id
-            ? 'bg-(--bg-raise-2) text-(--text-primary)'
-            : 'text-(--text-muted)'}"
-        >
-          {option.label}
-        </button>
-      {/each}
-    </div>
+    {#if mode === "invite" && social.friends.length && !pickable}
+      <p class="mt-3 text-[13px] text-(--text-muted)">
+        Everyone on your friends list already has it. Add friends on the Friends
+        page to invite more.
+      </p>
+    {:else}
+      <h3 class="mt-4 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
+        They can
+      </h3>
+      <div
+        class="inline-flex gap-0.5 rounded-md bg-(--bg) p-0.75"
+        role="group"
+        aria-label="Role"
+      >
+        {#each ROLES as option (option.id)}
+          <!-- type="button" so these don't submit the form -->
+          <button
+            type="button"
+            aria-pressed={role === option.id}
+            onclick={() => (role = option.id)}
+            class="rounded px-3 py-1 text-[13px] font-medium {role === option.id
+              ? 'bg-(--bg-raise-2) text-(--text-primary)'
+              : 'text-(--text-muted)'}"
+          >
+            {option.label}
+          </button>
+        {/each}
+      </div>
+    {/if}
 
     {#if mode === "share"}
       <h3 class="mt-4 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
@@ -313,10 +351,23 @@
       >{:else if error}<span
         class="mr-auto text-[13px] text-(--danger)"
         role="alert">{error}</span
+      >{:else if mode === "share" && social.signedIn && !picked}<span
+        class="mr-auto text-[13px] text-(--text-muted)"
+        >Nobody picked yet. You can invite friends later.</span
       >{/if}
-    <Button variant="ghost" onclick={onclose}>Cancel</Button>
-    <Button type="submit" variant="primary" disabled={!canSubmit}>
-      {submitting ? "Sharing…" : mode === "share" ? "Share" : "Send invites"}
-    </Button>
+    {#if mode === "invite" && social.friends.length && !pickable}
+      <Button onclick={onclose}>Close</Button>
+    {:else}
+      <Button variant="ghost" onclick={onclose}>Cancel</Button>
+      <Button type="submit" variant="primary" disabled={!canSubmit}>
+        {submitting
+          ? "Sharing…"
+          : mode === "invite"
+            ? "Send invites"
+            : picked
+              ? `Share with ${picked}`
+              : "Share"}
+      </Button>
+    {/if}
   {/snippet}
 </Dialog>

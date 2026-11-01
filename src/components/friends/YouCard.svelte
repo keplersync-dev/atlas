@@ -197,15 +197,22 @@
           Copy link
         </Button>
       </div>
+    </div>
 
-      <!-- Their code -->
+    <!-- Their code: its own row, so it reads as the second thing you can do here. -->
+    <div class="mt-3.5 flex items-center gap-3 border-t border-(--line) pt-3.5">
+      <label
+        for="friend-code"
+        class="shrink-0 text-[13px] font-medium text-(--text-muted)"
+        >Add a friend</label
+      >
       <input
+        id="friend-code"
         bind:value={input}
         oninput={() => (sentTo = null)}
-        placeholder="Add a friend: paste their code"
-        aria-label="Friend code"
+        placeholder="Paste their friend code"
         autocomplete="off"
-        class="ml-auto h-8.5 w-64 rounded-md border border-(--line-2) bg-(--bg) px-3 font-mono tracking-wider uppercase outline-none
+        class="h-8.5 max-w-80 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 font-mono tracking-wider uppercase outline-none
           placeholder:font-(family-name:--font) placeholder:tracking-normal placeholder:normal-case focus:border-(--accent)"
       />
     </div>

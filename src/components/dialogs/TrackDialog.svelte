@@ -170,7 +170,7 @@
         >
           {allNewSelected
             ? "Select none"
-            : `Select all ${untracked.length} new`}
+            : `Select all ${untracked.length}`}
         </button>
       </div>
     {/if}

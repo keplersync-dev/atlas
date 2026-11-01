@@ -4,6 +4,7 @@
   import { openDialog } from "$lib/dialogs.svelte";
   import { go } from "$lib/nav.svelte";
   import { resource } from "$lib/resource.svelte";
+  import { showDone } from "$lib/toasts.svelte";
   import { instances, social } from "$lib/stores";
   import type { Id, InstanceSummary, Launcher } from "$lib/types";
   import Button from "../Button.svelte";
@@ -127,6 +128,9 @@
       : `It's on ${versionLabel(i.loader, i.minecraftVersion)}; this needs ${versionLabel(invite.loader, invite.minecraftVersion)}`;
   }
 
+  // Instances already on the right versions; the rest can't take it, so aren't offered.
+  const usable = $derived(spare.filter((i) => !mismatch(i)));
+
   async function submit(e: SubmitEvent) {
     e.preventDefault();
     if (!canSubmit || !target) return;
@@ -148,6 +152,13 @@
               autoUpdate,
             );
       await Promise.all([instances.load(), social.load()]);
+      const where =
+        target.kind === "launcher"
+          ? (pickedLauncher?.name ?? "your launcher")
+          : (pickedInstance?.name ?? "your instance");
+      showDone(
+        `Adding ${invite?.name ?? "it"} to ${where}. Then you're on the same mods as ${invite?.owner?.displayName ?? "the owner"}.`,
+      );
       onclose();
       // Open the new instance: its sync bar shows the files arriving.
       go({ page: "instance", id: created.id });
@@ -318,7 +329,10 @@
       <h3 class="mt-1 mb-2 text-[14px] font-semibold">Where should it go?</h3>
 
       {#if creatable.length}
-        <p class="mb-1.5 text-[13px] font-medium text-(--text-faint)">New</p>
+        <!-- Only needed to tell them apart from instances you already have. -->
+        {#if usable.length}
+          <p class="mb-1.5 text-[13px] font-medium text-(--text-faint)">New</p>
+        {/if}
         <div class="flex flex-col gap-1.5">
           {#each creatable as l (l.id)}
             {@render choice(
@@ -332,7 +346,7 @@
         </div>
       {/if}
 
-      {#if spare.length}
+      {#if usable.length}
         <p
           class="mb-1.5 text-[13px] font-medium text-(--text-faint) {creatable.length
             ? 'mt-4'
@@ -341,15 +355,13 @@
           An instance you already have
         </p>
         <div class="flex flex-col gap-1.5">
-          {#each spare as i (i.id)}
-            {@const note = mismatch(i)}
+          {#each usable as i (i.id)}
             {@render choice(
               "instance",
               i.id,
               i.name,
-              note ?? `${i.launcher.name} · your own files there stay`,
+              `${i.launcher.name} · your own files there stay`,
               i,
-              !!note,
             )}
           {/each}
         </div>
@@ -378,10 +390,15 @@
     {#if invite.uploadedFiles?.length}
       <div class="mt-3 rounded-lg bg-(--warn)/10 px-4 py-3 text-[13px]">
         <b class="font-semibold text-(--warn)"
-          >Unverified: not from Modrinth or CurseForge.</b
+          >Not from Modrinth or CurseForge:</b
         >
-        {invite.uploadedFiles.join(", ")} were uploaded by a member. Only accept if
-        you trust whoever shared them.
+        {invite.uploadedFiles.join(", ")}. {invite.owner?.displayName ??
+          "The owner"}'s pack includes
+        {invite.uploadedFiles.length === 1 ? "this file" : "these files"} from their
+        own PC, so Atlas can't check {invite.uploadedFiles.length === 1
+          ? "it"
+          : "them"}. Only add the pack if you trust {invite.owner
+          ?.displayName ?? "them"}.
       </div>
     {/if}
   {/if}

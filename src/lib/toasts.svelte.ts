@@ -6,7 +6,8 @@ import type { Notice } from "$lib/types";
 
 type Toast =
   | { id: number; kind: "error"; text: string }
-  | { id: number; kind: "notice"; notice: Notice };
+  | { id: number; kind: "notice"; notice: Notice }
+  | { id: number; kind: "done"; text: string };
 
 /** How long an error stays up. */
 const SHOW_MS = 8000;
@@ -38,6 +39,13 @@ export function showNotice(notice: Notice) {
     -3,
   );
   setTimeout(() => dismissToast(id), NOTICE_MS);
+}
+
+/** Says what an action did, once it's done (shared, sent, added). */
+export function showDone(text: string) {
+  const id = ++next;
+  state.items = [...state.items, { id, kind: "done" as const, text }].slice(-3);
+  setTimeout(() => dismissToast(id), SHOW_MS);
 }
 
 export function dismissToast(id: number) {
