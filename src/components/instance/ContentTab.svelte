@@ -1,5 +1,6 @@
 <script lang="ts">
   import { fuzzyFilter } from "$lib/fuzzy";
+  import { plural } from "$lib/format";
   import { showError } from "$lib/toasts.svelte";
   import { api } from "$lib/api";
   import { openDialog } from "$lib/dialogs.svelte";
@@ -12,6 +13,7 @@
   } from "$lib/types";
   import ContentIcon from "../ContentIcon.svelte";
   import Icon from "../Icon.svelte";
+  import Menu from "../Menu.svelte";
   import ShareModeSelect from "../ShareModeSelect.svelte";
   import Switch from "../Switch.svelte";
 
@@ -195,60 +197,66 @@
   }
 </script>
 
-<div class="mt-4 mb-1.5 flex flex-wrap items-center gap-2.5">
-  <div class="flex flex-wrap gap-1">
-    {#each [{ id: "all" as const, label: "All", count: instance.content.length }, ...chips] as chip (chip.id)}
-      <button
-        aria-pressed={kind === chip.id}
-        onclick={() => (kind = chip.id)}
-        class="h-7 rounded-full px-2.75 text-[13px] font-medium transition-colors
-          {kind === chip.id
-          ? 'bg-(--bg-raise-2) text-(--text-primary)'
-          : 'text-(--text-muted) hover:bg-(--bg-hover)'}"
-      >
-        {chip.label}
-        <span class="ml-0.5 font-normal opacity-70">{chip.count}</span>
-      </button>
-    {/each}
-  </div>
+<!-- One row: kinds (when there's more than one), what the choices do, then bulk
+     setting and search on the right. -->
+<div class="mt-4 mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-2">
+  {#if chips.length > 1}
+    <div class="flex flex-wrap gap-1">
+      {#each [{ id: "all" as const, label: "All", count: instance.content.length }, ...chips] as chip (chip.id)}
+        <button
+          aria-pressed={kind === chip.id}
+          onclick={() => (kind = chip.id)}
+          class="h-7 rounded-full px-2.75 text-[13px] font-medium transition-colors
+            {kind === chip.id
+            ? 'bg-(--bg-raise-2) text-(--text-primary)'
+            : 'text-(--text-muted) hover:bg-(--bg-hover)'}"
+        >
+          {chip.label}
+          <span class="ml-0.5 font-normal opacity-70">{chip.count}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
+  {#if canSetModes}
+    <span class="min-w-0 truncate text-[13px] text-(--text-faint)"
+      >Friends get changes with your next update.</span
+    >
+  {/if}
 
-  <label
-    class="ml-auto flex h-7.5 w-56 max-w-full items-center gap-2 rounded-md bg-(--bg-raise) px-2.5 text-(--text-faint)"
-  >
-    <Icon name="search" class="size-3.5" />
-    <!-- bind:value keeps `query` and the input in sync both ways -->
-    <input
-      bind:value={query}
-      placeholder="Search"
-      class="w-full bg-transparent text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-faint)"
-    />
-  </label>
+  <div class="ml-auto flex items-center gap-1.5">
+    {#if canSetModes && visible.length > 1 && !lockedReason}
+      <Menu
+        label="Set every file shown"
+        items={[
+          { id: "required", label: "Required" },
+          { id: "optional", label: "Optional" },
+          { id: "private", label: "Only me" },
+        ].map((m) => ({
+          label: m.label,
+          onselect: () => setAllShown(m.id as ShareMode),
+        }))}
+        triggerClass="inline-flex h-7.5 items-center gap-1 rounded-md px-2.5 text-[13px] font-medium text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary) aria-expanded:bg-(--bg-hover)"
+      >
+        {#snippet trigger()}
+          {settingAll ? "Setting…" : "Set all shown"}
+          <Icon name="chev" class="size-3 rotate-90" />
+        {/snippet}
+      </Menu>
+    {/if}
+    <label
+      class="flex h-7.5 w-56 max-w-full items-center gap-2 rounded-md bg-(--bg-raise) px-2.5 text-(--text-faint)"
+    >
+      <Icon name="search" class="size-3.5" />
+      <!-- bind:value keeps `query` and the input in sync both ways -->
+      <input
+        bind:value={query}
+        placeholder="Search {plural(instance.content.length, 'file')}"
+        class="w-full bg-transparent text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-faint)"
+      />
+    </label>
+  </div>
 </div>
 
-{#if canSetModes}
-  <div
-    class="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-(--text-faint)"
-  >
-    <span class="mr-auto"
-      >Choose how each file is shared. Friends get changes with your next
-      update.</span
-    >
-    {#if visible.length > 1}
-      <span class="flex items-center gap-1">
-        Set all shown:
-        {#each [{ id: "required", label: "Required" }, { id: "optional", label: "Optional" }, { id: "private", label: "Only me" }] as const as m (m.id)}
-          <button
-            type="button"
-            disabled={settingAll || !!lockedReason}
-            onclick={() => setAllShown(m.id)}
-            class="rounded px-1.5 py-0.5 text-(--accent) hover:bg-(--bg-hover) disabled:opacity-40"
-            >{m.label}</button
-          >
-        {/each}
-      </span>
-    {/if}
-  </div>
-{/if}
 {#if lockedReason}
   <p class="mb-1 text-[13px] text-(--text-faint)">{lockedReason}</p>
 {/if}

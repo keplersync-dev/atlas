@@ -3,7 +3,7 @@
   import { back, forgetInstance, go, nav } from "$lib/nav.svelte";
   import { confirmAction } from "$lib/confirm.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
-  import { openLabel, plural, versionLabel } from "$lib/format";
+  import { openLabel, plural, timeAgo, versionLabel } from "$lib/format";
   import { instanceItems, removeFromAtlas } from "$lib/instanceMenu";
   import { canPlay, play, unfinished } from "$lib/play";
   import { resource } from "$lib/resource.svelte";
@@ -162,53 +162,70 @@
   {/if}
 
   <!-- ── Header ─────────────────────────────────────────────────────── -->
-  <div class="flex items-start gap-5">
+  <div class="flex items-center gap-4">
     <ContentIcon
       src={summary.icon}
       seed={summary.id}
-      class="size-22 rounded-xl {summary.status === 'missing'
+      class="size-16 shrink-0 rounded-xl {summary.status === 'missing'
         ? 'opacity-40 grayscale'
         : ''}"
     />
 
-    <div
-      class="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-x-5 gap-y-3"
-    >
-      <div class="min-w-60 flex-1 pt-1">
+    <div class="flex min-w-0 flex-1 flex-wrap items-center gap-x-5 gap-y-3">
+      <div class="min-w-60 flex-1">
         <h1
-          class="mb-2 truncate font-(family-name:--font-display) text-2xl font-semibold tracking-tight"
+          class="truncate font-(family-name:--font-display) text-2xl leading-tight font-semibold tracking-tight"
           title={summary.name}
         >
           {summary.name}
         </h1>
+        <!-- What it is, where it lives, who it's shared with, then how much it's played. -->
         <div
-          class="flex flex-wrap gap-x-4 gap-y-1.5 text-[13px] text-(--text-muted)"
+          class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-(--text-muted)"
         >
           <span>{versionLabel(summary.loader, summary.minecraftVersion)}</span>
+          <span class="text-(--text-faint)" aria-hidden="true">·</span>
           <span>{summary.launcher.name}</span>
-          {#if summary.sync}
-            <span>
+          <span
+            class="ml-1.5 inline-flex h-5.5 items-center gap-1.5 rounded-full px-2.25 font-medium
+              {summary.sync
+              ? 'bg-(--accent)/12 text-(--accent)'
+              : 'bg-(--bg-raise-2) text-(--text-muted)'}"
+          >
+            <Icon name={summary.sync ? "share" : "cube"} class="size-3" />
+            {#if summary.sync}
               {summary.sync.role === "owner"
                 ? "Shared by you"
                 : `From ${summary.sync.owner?.displayName ?? "a deleted user"}`}
-            </span>
-          {:else if summary.sharedElsewhere}
-            <span>Shared on another account</span>
-          {:else}
-            <span>Not shared</span>
-          {/if}
-          {#if (summary.totalPlaytimeSeconds ?? 0) >= 1800}
+            {:else if summary.sharedElsewhere}
+              Shared on another account
+            {:else}
+              Not shared
+            {/if}
+          </span>
+          {#if summary.lastPlayedAt || (summary.totalPlaytimeSeconds ?? 0) >= 1800}
             <span
-              >{plural(
-                Math.round((summary.totalPlaytimeSeconds ?? 0) / 3600),
-                "hour",
-              )} played</span
+              class="ml-1.5 inline-flex items-center gap-1.5 text-(--text-faint)"
             >
+              <Icon name="clock" class="size-3" />
+              {#if (summary.totalPlaytimeSeconds ?? 0) >= 1800}
+                {plural(
+                  Math.round((summary.totalPlaytimeSeconds ?? 0) / 3600),
+                  "hour",
+                )} played{summary.lastPlayedAt ? "," : ""}
+              {/if}
+              {#if summary.lastPlayedAt}
+                {(summary.totalPlaytimeSeconds ?? 0) >= 1800
+                  ? "last"
+                  : "Played"}
+                {timeAgo(summary.lastPlayedAt)}
+              {/if}
+            </span>
           {/if}
         </div>
       </div>
 
-      <div class="flex items-center gap-2 pt-1.5">
+      <div class="flex items-center gap-2">
         <!-- Only Prism and MultiMC start the game; elsewhere Play opens the launcher, so a
              separate Open button would do the same thing. -->
         {#if summary.status !== "missing" && (summary.launcher.kind === "prism" || summary.launcher.kind === "multimc")}
@@ -257,8 +274,10 @@
             >Send update</Button
           >
         {:else if summary.sync.role !== "viewer" && summary.sync.state !== "frozen"}
-          <Button onclick={() => openDialog({ kind: "invite", instanceId: id })}
-            ><Icon name="users" class="size-3.5" />Invite</Button
+          <Button
+            icon="users"
+            onclick={() => openDialog({ kind: "invite", instanceId: id })}
+            >Invite</Button
           >
         {/if}
 
@@ -289,7 +308,7 @@
   {/if}
 
   <!-- ── Tabs ───────────────────────────────────────────────────────── -->
-  <div class="mt-6.5">
+  <div class="mt-5">
     <Tabs
       bind:value={tab}
       tabs={[

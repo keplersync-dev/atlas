@@ -1,3 +1,21 @@
+<script lang="ts" module>
+  // Whether the last input was the mouse (or touch, or a pen), and whether Tab was
+  // pressed since: the signs someone is using the keyboard.
+  let byPointer = false;
+  let tabbed = false;
+  if (typeof window !== "undefined") {
+    addEventListener("pointerdown", () => (byPointer = true), true);
+    addEventListener(
+      "keydown",
+      (e) => {
+        byPointer = false;
+        if (e.key === "Tab") tabbed = true;
+      },
+      true,
+    );
+  }
+</script>
+
 <script lang="ts">
   import { onMount, type Snippet } from "svelte";
   import Icon from "./Icon.svelte";
@@ -31,8 +49,35 @@
 
   let el: HTMLDialogElement;
 
+  // What had focus before, and whether the mouse opened the dialog.
+  let opener: Element | null = null;
+  let openedByPointer = false;
+
   // showModal() is a DOM call, so it has to wait until the element exists.
-  onMount(() => el.showModal());
+  onMount(() => {
+    opener = document.activeElement;
+    openedByPointer = byPointer;
+    tabbed = false;
+    el.showModal();
+  });
+
+  // The browser puts focus back on the button that opened the dialog, with a focus
+  // ring when it was closed with Escape. Opened with the mouse and never tabbed
+  // through, nobody's using the keyboard: keep the focus (Tab carries on from there)
+  // without the ring.
+  function closed() {
+    if (
+      openedByPointer &&
+      !tabbed &&
+      opener instanceof HTMLElement &&
+      opener.isConnected
+    ) {
+      // The browser has already focused it, ring and all: focusing again does nothing.
+      opener.blur();
+      opener.focus({ focusVisible: false } as FocusOptions);
+    }
+    onclose();
+  }
 
   // A click whose target is the <dialog> itself landed on the backdrop
   // (clicks inside hit the content div instead).
@@ -56,7 +101,7 @@
 <dialog
   bind:this={el}
   {onclick}
-  {onclose}
+  onclose={closed}
   aria-labelledby="dialog-title"
   class="m-auto max-h-[calc(100vh-80px)] w-full overflow-hidden rounded-xl border border-(--line) bg-(--bg-raise) p-0 text-(--text-primary) shadow-[0_30px_80px_#000a]
     backdrop:bg-[#05070acc] {wide ? 'max-w-155' : 'max-w-130'}"
