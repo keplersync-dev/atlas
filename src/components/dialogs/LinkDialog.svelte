@@ -113,7 +113,7 @@
     <p class="mt-2.5 text-[13px] text-(--text-muted)">
       {group.data.alreadyMember
         ? "You're already in this group."
-        : "Instances shared with the group will show up for you to add."}
+        : "Packs shared with the group will show up for you to add."}
     </p>
   {/if}
 

@@ -188,7 +188,7 @@
 
   {#if !social.signedIn}
     <p class="py-4 text-[13px] text-(--text-muted)">
-      Sign in to share instances with friends.
+      Sign in to share packs with friends.
     </p>
   {:else}
     <h3 class="mt-1 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
@@ -320,7 +320,7 @@
       <input
         bind:value={description}
         maxlength="500"
-        placeholder="What's this instance for?"
+        placeholder="What's this pack for?"
         class="h-8.5 w-full rounded-md border border-(--line-2) bg-(--bg) px-3 outline-none focus:border-(--accent)"
       />
 

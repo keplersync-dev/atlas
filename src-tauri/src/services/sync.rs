@@ -178,7 +178,9 @@ pub async fn sync<R: Runtime>(
     let row = row(state, id).await?;
     let src = linked(state, &row).await?;
     if src.is_frozen() {
-        return Err(AppError::conflict("This instance is frozen"));
+        return Err(AppError::conflict(
+            "This pack is no longer updated: the owner left",
+        ));
     }
     if !Path::new(&row.game_dir).is_dir() {
         return Err(AppError::conflict(

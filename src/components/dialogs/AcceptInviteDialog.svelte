@@ -232,7 +232,7 @@
 {/snippet}
 
 <Dialog
-  title={invite ? `Add ${invite.name}` : "Shared instance"}
+  title={invite ? `Add ${invite.name}` : "Shared pack"}
   description={invite
     ? `${invite.owner && invite.owner.id !== social.session?.user?.id ? `From ${invite.owner.displayName} · ` : ""}${versionLabel(invite.loader, invite.minecraftVersion)} · ${plural(invite.contentCount, "item")} · ${fileSize(invite.sizeBytes)}`
     : undefined}
@@ -249,7 +249,7 @@
 
   {#if !invite}
     <p class="py-4 text-[13px] text-(--text-muted)">
-      This shared instance isn't available anymore.
+      This pack isn't available anymore.
     </p>
   {:else if submitting}
     <!-- While it works: say what's happening and what, if anything, to do. -->

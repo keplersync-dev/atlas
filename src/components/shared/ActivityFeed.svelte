@@ -25,7 +25,7 @@
     tail: string;
   } {
     const who = a.actor?.displayName ?? null;
-    const what = a.sharedInstanceName ?? "an instance";
+    const what = a.sharedInstanceName ?? "a pack";
     switch (a.type) {
       case "instance_updated":
         return {

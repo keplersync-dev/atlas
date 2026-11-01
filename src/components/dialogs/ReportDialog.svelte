@@ -31,7 +31,7 @@
   };
   const WHAT: Record<ReportAbout["kind"], string> = {
     file: "file",
-    shared_instance: "shared instance",
+    shared_instance: "pack",
     user: "person",
   };
 

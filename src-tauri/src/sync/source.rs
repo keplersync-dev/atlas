@@ -73,7 +73,7 @@ pub async fn forget(db: &SqlitePool, shared_instance_id: &str) -> AppResult<()> 
 
 fn refused(revision: u32, e: manifest::Invalid) -> AppError {
     tracing::warn!(revision, error = %e, "refused manifest");
-    AppError::invalid_input("This shared instance contains files Atlas won't install")
+    AppError::invalid_input("This pack contains files Atlas won't install")
 }
 
 impl Source {

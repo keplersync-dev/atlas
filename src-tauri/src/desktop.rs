@@ -137,7 +137,7 @@ pub fn close_to_tray<R: Runtime>(window: &tauri::Window<R>) -> bool {
         notify(
             window.app_handle(),
             "Atlas is still running",
-            "It keeps your shared instances up to date. Quit it from the tray icon.",
+            "It keeps your packs up to date. Quit it from the tray icon.",
         );
         let db = state.db.clone();
         tauri::async_runtime::spawn(async move {
@@ -363,17 +363,14 @@ fn describe(a: &ActivityItem, me: Option<&str>) -> (String, String) {
         }
         ActivityType::InstanceUpdated => (
             "Update available",
-            match a.revision {
-                Some(n) => format!("{who} published v{n} of {what}"),
-                None => format!("{who} updated {what}"),
-            },
+            format!("{who} sent an update to {what}"),
         ),
         ActivityType::InstanceSharedToGroup => (
             "Shared with a group",
             format!("{who} shared {what} with {group}"),
         ),
-        ActivityType::MemberJoined => ("Instance added", format!("{who} added {what}")),
-        ActivityType::MemberLeft => ("Instance left", format!("{who} left {what}")),
+        ActivityType::MemberJoined => ("Pack added", format!("{who} added {what}")),
+        ActivityType::MemberLeft => ("Pack left", format!("{who} left {what}")),
         ActivityType::OwnershipTransferred => (
             "New owner",
             if a.actor.as_ref().map(|u| u.id.as_str()) == me && me.is_some() {
@@ -383,8 +380,8 @@ fn describe(a: &ActivityItem, me: Option<&str>) -> (String, String) {
             },
         ),
         ActivityType::InstanceFrozen => (
-            "Instance frozen",
-            format!("{what} was frozen: the owner left"),
+            "No longer updated",
+            format!("{what} is no longer updated: the owner left"),
         ),
         ActivityType::GroupJoined => ("New group member", format!("{who} joined {group}")),
         ActivityType::RoleChanged => (
@@ -502,7 +499,7 @@ mod tests {
             describe(&item(ActivityType::InstanceUpdated), None),
             (
                 "Update available".to_owned(),
-                "dakep published v4 of SkyFactory 4 fixed".to_owned()
+                "dakep sent an update to SkyFactory 4 fixed".to_owned()
             )
         );
         assert_eq!(
@@ -513,7 +510,7 @@ mod tests {
         frozen.actor = None;
         assert_eq!(
             describe(&frozen, None).1,
-            "SkyFactory 4 fixed was frozen: the owner left"
+            "SkyFactory 4 fixed is no longer updated: the owner left"
         );
         let owner = item(ActivityType::OwnershipTransferred);
         assert_eq!(

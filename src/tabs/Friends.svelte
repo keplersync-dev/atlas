@@ -99,7 +99,7 @@
 {#if !social.signedIn}
   <div class="py-12 text-center text-(--text-muted)">
     <b class="block text-sm text-(--text-primary)">Sign in to add friends</b>
-    Friends can see what you're playing and share instances with you.
+    Friends can see what you're playing and share packs with you.
     <SignInButtons />
   </div>
 {:else}
@@ -210,7 +210,7 @@
                   {#if theirs.length}
                     <AttentionBadges items={theirs} />
                     <span class="text-[13px] text-(--text-muted)"
-                      >{plural(theirs.length, "shared instance")}</span
+                      >{plural(theirs.length, "shared pack")}</span
                     >
                     <span
                       class="text-(--text-faint) transition-transform {open

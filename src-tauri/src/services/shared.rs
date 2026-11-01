@@ -454,6 +454,6 @@ pub fn segment(id: &str) -> AppResult<&str> {
     if !id.is_empty() && id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
         Ok(id)
     } else {
-        Err(AppError::not_found("That shared instance isn't available"))
+        Err(AppError::not_found("That pack isn't available"))
     }
 }

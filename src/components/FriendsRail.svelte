@@ -83,7 +83,7 @@
 
 {#if !social.signedIn}
   <p class="text-[13px] text-(--text-muted)">
-    Sign in to see what your friends are playing and share instances with them.
+    Sign in to see what your friends are playing and share packs with them.
   </p>
 {:else}
   {#if social.incomingRequests.length}

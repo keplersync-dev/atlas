@@ -481,7 +481,7 @@
         <b class="block text-sm text-(--text-primary)"
           >Only you have this instance</b
         >
-        Share it and friends get the same mods, plus every update you publish.
+        Share it and friends get the same mods, plus every update you send.
       </div>
     {/if}
   {:else}

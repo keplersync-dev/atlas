@@ -5,7 +5,7 @@
     {
       id: "required",
       label: "Required",
-      hint: "Everyone who has this instance gets it",
+      hint: "Everyone who has this pack gets it",
     },
     {
       id: "optional",

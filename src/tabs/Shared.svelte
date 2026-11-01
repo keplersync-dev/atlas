@@ -66,8 +66,8 @@
       : {
           all: "",
           needs: "Nothing needs you right now.",
-          local: "None of your shared instances are on this PC.",
-          not_added: "Every shared instance is on this PC.",
+          local: "None of your packs are on this PC.",
+          not_added: "Every pack is on this PC.",
         }[filter],
   );
 
@@ -118,7 +118,7 @@
     }
     updating = false;
     const parts = [
-      done && `Updating ${plural(done, "instance")}`,
+      done && `Updating ${plural(done, "pack")}`,
       asks.length &&
         `${asks.join(", ")} need${asks.length === 1 ? "s" : ""} a look first`,
       failed && `${plural(failed, "update")} didn't start`,
@@ -143,7 +143,7 @@
     {
       key: "mine",
       title: "Shared by you",
-      blurb: "Instances you own. Friends get every update you send.",
+      blurb: "Packs you share. Friends get every update you send.",
       icon: "share",
       items: mine,
       empty:
@@ -157,7 +157,7 @@
       icon: "download",
       items: withMe,
       empty:
-        "When a friend shares an instance with you or a group you're in, it shows up here.",
+        "When a friend shares a pack with you or a group you're in, it shows up here.",
       showOwner: true,
     },
   ]);
@@ -174,7 +174,7 @@
     </span>
     <input
       bind:value={query}
-      placeholder="Search shared instances"
+      placeholder="Search packs"
       class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg-raise) pr-2.5 pl-8 text-[13px] placeholder:text-(--text-faint) focus:border-(--accent) focus:outline-none"
     />
   </label>
@@ -241,8 +241,7 @@
 
 {#if !social.signedIn}
   <div class="py-12 text-center text-(--text-muted)">
-    <b class="block text-sm text-(--text-primary)">Sign in to share instances</b
-    >
+    <b class="block text-sm text-(--text-primary)">Sign in to share packs</b>
     Everything on this PC keeps working without an account.
     <SignInButtons />
   </div>

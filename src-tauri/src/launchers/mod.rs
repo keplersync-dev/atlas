@@ -146,7 +146,7 @@ impl NewInstance {
             (Loader::Vanilla, _) => Ok(None),
             (_, Some(v)) if !v.is_empty() => Ok(Some(v)),
             _ => Err(ReadError::Format(
-                "the shared instance doesn't say which loader version".into(),
+                "the pack doesn't say which loader version".into(),
             )),
         }
     }
