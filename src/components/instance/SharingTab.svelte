@@ -36,6 +36,14 @@
   const shared = resource(() => api.getSharedInstance(sync.sharedInstanceId));
 
   const isOwner = $derived(sync.role === "owner");
+  // Updates reach the owner's copy only when an editor sends one: with no editors,
+  // there's nothing for the owner to install.
+  const othersSend = $derived(
+    !isOwner ||
+      !!shared.data?.members.some(
+        (m) => m.role === "editor" && m.status === "active",
+      ),
+  );
   const myId = $derived(social.session?.user?.id);
 
   function memberStatus(m: SharedMember) {
@@ -91,23 +99,32 @@
   {/if}
 </p>
 
-<div
-  class="mb-4 flex items-center gap-3 rounded-lg bg-(--bg-raise) px-3.5 py-3"
->
-  <div class="min-w-0 flex-1">
-    <b class="block font-medium">Keep it up to date automatically</b>
-    <small class="block text-[13px] text-(--text-muted)">
-      New versions install before you next play. Atlas still asks when one would
-      undo your changes or adds a mod that isn't on Modrinth or CurseForge.
-    </small>
+{#if othersSend}
+  <div
+    class="mb-4 flex items-center gap-3 rounded-lg bg-(--bg-raise) px-3.5 py-3"
+  >
+    <div class="min-w-0 flex-1">
+      <b class="block font-medium"
+        >{isOwner
+          ? "Install editors' updates automatically"
+          : "Keep it up to date automatically"}</b
+      >
+      <small class="block text-[13px] text-(--text-muted)">
+        New versions install before you next play. Atlas still asks when one
+        would undo your changes or adds a mod that isn't on Modrinth or
+        CurseForge.
+      </small>
+    </div>
+    <Switch
+      checked={sync.autoUpdate}
+      label={isOwner
+        ? "Install editors' updates automatically"
+        : "Keep it up to date automatically"}
+      disabled={savingAutoUpdate}
+      onchange={setAutoUpdate}
+    />
   </div>
-  <Switch
-    checked={sync.autoUpdate}
-    label="Keep it up to date automatically"
-    disabled={savingAutoUpdate}
-    onchange={setAutoUpdate}
-  />
-</div>
+{/if}
 
 {#if isOwner}
   <!-- What the two roles mean, next to where they're changed. -->
