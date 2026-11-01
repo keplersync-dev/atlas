@@ -744,3 +744,8 @@ export interface MyUpload {
   /** Taken down: it stays listed so the same file can't be uploaded again. */
   blocked: boolean;
 }
+
+export interface RemovedUploads {
+  count: number;
+  sizeBytes: number;
+}

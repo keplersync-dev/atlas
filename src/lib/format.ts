@@ -53,6 +53,8 @@ export function plural(
 
 /** "640 MB", "1.2 GB" */
 export function fileSize(bytes: number): string {
+  // A few bytes still show as 1 KB; nothing at all is 0 KB.
+  if (bytes <= 0) return "0 KB";
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   if (bytes < 1024 ** 3) return `${Math.round(bytes / 1024 ** 2)} MB`;
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;

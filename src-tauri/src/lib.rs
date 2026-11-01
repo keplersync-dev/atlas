@@ -61,6 +61,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::session::export_my_data,
         commands::session::list_my_uploads,
         commands::session::remove_my_upload,
+        commands::session::remove_unused_uploads,
         commands::app::get_app_settings,
         commands::app::update_app_settings,
         commands::app::window_ready,

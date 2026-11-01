@@ -134,6 +134,7 @@ export const tauriApi: AtlasApi = {
   exportMyData: () => call("export_my_data"),
   listMyUploads: () => call("list_my_uploads"),
   removeMyUpload: (sha256) => call("remove_my_upload", { sha256 }),
+  removeUnusedUploads: () => call("remove_unused_uploads"),
 
   getAppSettings: () => call("get_app_settings"),
   updateAppSettings: (patch) => call("update_app_settings", { patch }),

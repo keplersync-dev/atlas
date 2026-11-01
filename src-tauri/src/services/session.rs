@@ -156,6 +156,14 @@ pub async fn uploads(state: &AppState) -> AppResult<Vec<crate::dto::MyUpload>> {
         .await
 }
 
+/// Remove every upload no pack uses, in one request.
+pub async fn remove_unused_uploads(state: &AppState) -> AppResult<crate::dto::RemovedUploads> {
+    state
+        .cloud
+        .call(Method::POST, "/me/uploads/remove-unused", None::<&()>)
+        .await
+}
+
 /// Remove an upload no pack uses, freeing its space now.
 pub async fn remove_upload(state: &AppState, sha256: &str) -> AppResult<()> {
     if sha256.len() != 64 || !sha256.bytes().all(|b| b.is_ascii_hexdigit()) {

@@ -12,7 +12,8 @@
   import Icon from "../Icon.svelte";
 
   // What fills your upload space: every file you uploaded, what still uses it, and a way
-  // to free the space a file nothing uses takes now (the server also does it after a day).
+  // to free the space files nothing uses take now, one or all at once (the server also
+  // does it after a day).
   let { onclose }: { onclose: () => void } = $props();
 
   const uploads = resource(() => api.listMyUploads());
@@ -36,19 +37,51 @@
     }
   }
 
+  const isUnused = (f: MyUpload) => !f.blocked && !f.usedIn.length;
+  const unused = $derived((uploads.data ?? []).filter(isUnused));
+  const unusedBytes = $derived(unused.reduce((n, f) => n + f.sizeBytes, 0));
+
+  // Unused files first whatever the sort: they're the ones you came to clear out.
   const rows = $derived.by(() => {
     const list = uploads.data ?? [];
     if (query.trim()) return fuzzyFilter(list, query, (f) => [f.fileName]);
     const dir = asc ? 1 : -1;
-    return list.toSorted(
+    const sorted = list.toSorted(
       (a, b) =>
         (sortBy === "size"
           ? a.sizeBytes - b.sizeBytes
           : baseName(a.fileName).localeCompare(baseName(b.fileName))) * dir,
     );
+    return [...sorted.filter(isUnused), ...sorted.filter((f) => !isUnused(f))];
   });
 
+  // A file's sha256 while it's removed, or "all".
   let removing = $state<string | null>(null);
+
+  async function removeAll() {
+    const n = unused.length;
+    const ok = await confirmAction({
+      title: `Remove ${plural(n, "unused file")}?`,
+      message: `No pack uses them, so nobody loses anything. It frees ${fileSize(unusedBytes)}.`,
+      confirmLabel: `Remove ${plural(n, "file")}`,
+      danger: true,
+    });
+    if (!ok) return;
+    removing = "all";
+    try {
+      const done = await api.removeUnusedUploads();
+      uploads.reload();
+      await social.load();
+      showDone(
+        `Removed ${plural(done.count, "file")}, freeing ${fileSize(done.sizeBytes)}.`,
+      );
+    } catch (e) {
+      showError((e as Error).message);
+    } finally {
+      removing = null;
+    }
+  }
+
   async function remove(f: MyUpload) {
     const ok = await confirmAction({
       title: `Remove ${baseName(f.fileName)}?`,
@@ -73,7 +106,7 @@
   // Name (with its folder and date under it), size, what uses it, and Remove on its own
   // at the right edge so the buttons line up.
   const COLS =
-    "grid grid-cols-[minmax(0,1fr)_64px_minmax(140px,0.8fr)_80px] items-center gap-3 px-3";
+    "grid grid-cols-[minmax(0,1fr)_64px_minmax(136px,0.55fr)_80px] items-center gap-3 px-3";
   // Sorted and shown by the file's own name; its folder sits under it.
   const baseName = (path: string) => path.split("/").pop() ?? path;
   const folderOf = (path: string) =>
@@ -140,6 +173,26 @@
       />
     </label>
 
+    {#if unused.length > 1}
+      <div
+        class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg bg-(--warn)/10 px-3 py-2"
+      >
+        <span class="size-2 shrink-0 rounded-full bg-(--warn)"></span>
+        <span class="min-w-0 flex-1 text-[13px]">
+          <b class="font-semibold">{plural(unused.length, "file")}</b>
+          no pack uses anymore
+          <span class="text-(--text-muted)">· {fileSize(unusedBytes)}</span>
+        </span>
+        <Button
+          size="sm"
+          variant="warn"
+          disabled={removing !== null}
+          onclick={removeAll}
+          >{removing === "all" ? "Removing…" : "Remove all unused"}</Button
+        >
+      </div>
+    {/if}
+
     <div
       role="table"
       aria-label="Your uploads"
@@ -166,9 +219,8 @@
               >
               <small class="block truncate text-[13px] text-(--text-faint)"
                 >{folderOf(f.fileName)
-                  ? `${folderOf(f.fileName)} · `
-                  : ""}uploaded
-                {timeAgo(f.uploadedAt)}</small
+                  ? `${folderOf(f.fileName)} · ${timeAgo(f.uploadedAt)}`
+                  : `Uploaded ${timeAgo(f.uploadedAt)}`}</small
               >
             </span>
             <span class="text-(--text-muted) tabular-nums"

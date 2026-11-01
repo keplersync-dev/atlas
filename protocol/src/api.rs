@@ -62,6 +62,14 @@ pub struct MyUpload {
     pub blocked: bool,
 }
 
+/// `POST /me/uploads/remove-unused`: what removing every unused upload freed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemovedUploads {
+    pub count: u32,
+    pub size_bytes: u64,
+}
+
 /// The signed-in user, with private fields. `extends PublicUser` in types.ts.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

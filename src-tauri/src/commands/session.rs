@@ -106,6 +106,13 @@ pub async fn list_my_uploads(state: State<'_, AppState>) -> AppResult<Vec<crate:
 }
 
 #[tauri::command]
+pub async fn remove_unused_uploads(
+    state: State<'_, AppState>,
+) -> AppResult<crate::dto::RemovedUploads> {
+    session::remove_unused_uploads(&state).await
+}
+
+#[tauri::command]
 pub async fn remove_my_upload(state: State<'_, AppState>, sha256: String) -> AppResult<()> {
     session::remove_upload(&state, &sha256).await
 }

@@ -1,5 +1,6 @@
 import type {
   MyUpload,
+  RemovedUploads,
   ActivityItem,
   AppSettings,
   AvailableUpdate,
@@ -228,6 +229,8 @@ export interface AtlasApi {
   listMyUploads(): Promise<MyUpload[]>;
   /** Removes an upload no pack uses; refused ("conflict") while one does. */
   removeMyUpload(sha256: string): Promise<void>;
+  /** Removes every upload no pack uses; says how many and how much. */
+  removeUnusedUploads(): Promise<RemovedUploads>;
 
   // ── This PC ──────────────────────────────────────────────────────────
   getAppSettings(): Promise<AppSettings>;
