@@ -290,28 +290,31 @@
         </span>
       </p>
     {:else}
-      <!-- What happens, as a picture: where it goes, then it follows the owner. -->
-      <ol
-        class="mb-4 grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2"
-        aria-label="What happens"
-      >
-        {#each steps as step, i (i)}
-          {#if i}
-            <li aria-hidden="true" class="text-(--text-faint)">
-              <Icon name="chev" class="size-4" />
-            </li>
-          {/if}
-          <li
-            class="h-full rounded-lg bg-(--bg-raise-2) px-2 py-2.5 text-center text-[13px] text-(--text-muted)"
-          >
-            {step.what}
-            <b
-              class="mt-0.5 block text-[14px] font-semibold text-(--text-primary)"
-              >{step.result}</b
+      <!-- What happens, as a picture: where it goes, then it follows the owner. Not for
+           your own pack: you're the one who changes it. -->
+      {#if invite.owner?.id !== social.session?.user?.id}
+        <ol
+          class="mb-4 grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2"
+          aria-label="What happens"
+        >
+          {#each steps as step, i (i)}
+            {#if i}
+              <li aria-hidden="true" class="text-(--text-faint)">
+                <Icon name="chev" class="size-4" />
+              </li>
+            {/if}
+            <li
+              class="h-full rounded-lg bg-(--bg-raise-2) px-2 py-2.5 text-center text-[13px] text-(--text-muted)"
             >
-          </li>
-        {/each}
-      </ol>
+              {step.what}
+              <b
+                class="mt-0.5 block text-[14px] font-semibold text-(--text-primary)"
+                >{step.result}</b
+              >
+            </li>
+          {/each}
+        </ol>
+      {/if}
       <h3 class="mt-1 mb-2 text-[14px] font-semibold">Where should it go?</h3>
 
       {#if creatable.length}

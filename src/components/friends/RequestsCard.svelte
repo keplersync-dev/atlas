@@ -22,7 +22,7 @@
 </script>
 
 {#if social.requests.length}
-  <div class="rounded-xl bg-(--bg-raise) p-4.5">
+  <div class="rounded-xl border border-(--line) bg-(--bg-raise) p-4.5">
     <h2 class="mb-1 font-semibold">Requests</h2>
     <div class="divide-y divide-(--line)">
       {#each social.incomingRequests as r (r.user.id)}

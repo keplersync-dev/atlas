@@ -201,13 +201,15 @@
   <div class="grid grid-cols-1 items-start gap-10">
     {#if narrowed && sections.every((sec) => !sec.items.length)}
       <p
-        class="rounded-xl bg-(--bg-raise) px-4 py-6 text-[13px] text-(--text-muted)"
+        class="rounded-xl border border-(--line) bg-(--bg-raise) px-4 py-6 text-[13px] text-(--text-muted)"
       >
         {noMatches}
       </p>
     {/if}
     {#each sections.filter((sec) => !narrowed || sec.items.length) as sec (sec.key)}
-      <section class="overflow-hidden rounded-xl bg-(--bg-raise)">
+      <section
+        class="overflow-hidden rounded-xl border border-(--line) bg-(--bg-raise)"
+      >
         <header
           class="flex items-center gap-3 border-b border-(--line) px-4 py-3.5"
         >
@@ -292,11 +294,11 @@
       {@render cards()}
     </div>
     <aside class="flex flex-col gap-4">
-      <section class="rounded-xl bg-(--bg-raise) p-4">
+      <section class="rounded-xl border border-(--line) bg-(--bg-raise) p-4">
         <h2 class="mb-1.5 font-semibold">Recent activity</h2>
         <ActivityFeed items={activity.slice(0, 7)} />
       </section>
-      <section class="rounded-xl bg-(--bg-raise) p-4">
+      <section class="rounded-xl border border-(--line) bg-(--bg-raise) p-4">
         <StorageMeter />
       </section>
     </aside>

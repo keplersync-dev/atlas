@@ -107,7 +107,9 @@
 />
 
 {#if me}
-  <section class="rounded-xl bg-(--bg-raise) px-4 py-3.5">
+  <section
+    class="rounded-xl border border-(--line) bg-(--bg-raise) px-4 py-3.5"
+  >
     <div class="flex flex-wrap items-center gap-x-4 gap-y-3">
       <!-- You, and how friends see you -->
       <div class="flex items-center gap-3">

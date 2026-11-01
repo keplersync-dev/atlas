@@ -58,7 +58,7 @@
   {onclick}
   {onclose}
   aria-labelledby="dialog-title"
-  class="m-auto max-h-[calc(100vh-80px)] w-full rounded-xl border border-(--line) bg-(--bg-raise) p-0 text-(--text-primary) shadow-[0_30px_80px_#000a]
+  class="m-auto max-h-[calc(100vh-80px)] w-full overflow-hidden rounded-xl border border-(--line) bg-(--bg-raise) p-0 text-(--text-primary) shadow-[0_30px_80px_#000a]
     backdrop:bg-[#05070acc] {wide ? 'max-w-155' : 'max-w-130'}"
 >
   <div class="flex max-h-[calc(100vh-82px)] flex-col">

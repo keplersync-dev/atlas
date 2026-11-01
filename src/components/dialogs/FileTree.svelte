@@ -188,6 +188,10 @@
 {#snippet fileRow(f: ShareFile)}
   {@const on = isShared(current, f.path, f.fromPack)}
   {@const kept = keptAs(current, f.path)}
+  {@const folder =
+    searching && f.path.includes("/")
+      ? f.path.slice(0, f.path.lastIndexOf("/"))
+      : ""}
   <div class="group {ROW} border-t border-(--line) py-2 hover:bg-(--bg-hover)">
     <input
       type="checkbox"
@@ -198,16 +202,20 @@
     />
     <span class="flex min-w-0 items-center gap-2.5">
       <Icon name="file" class="size-4.5 shrink-0 text-(--text-faint)" />
-      <span class="truncate"
-        >{searching ? f.path : f.path.split("/").pop()}</span
-      >
-      {#if on && f.changed}
-        <span
-          class="shrink-0 rounded-full bg-(--bg-raise-2) px-2 text-[13px] text-(--text-muted)"
-          title="Set differently from the modpack's copy, so friends get yours. Mods often change their own settings when the game runs, so not every change is yours."
-          >Changed</span
-        >
-      {/if}
+      <!-- The name first; under it, "Changed" and (searching) its folder, so a
+           long path cut at the end never hides the name. -->
+      <span class="min-w-0">
+        <span class="block truncate">{f.path.split("/").pop()}</span>
+        {#if (on && f.changed) || folder}
+          <small class="block truncate text-[13px] text-(--text-faint)">
+            {#if on && f.changed}<span
+                class="font-medium text-(--accent)"
+                title="Set differently from the modpack's copy, so friends get yours. Mods often change their own settings when the game runs, so not every change is yours."
+                >Changed</span
+              >{#if folder}{" · "}{/if}{/if}{folder}
+          </small>
+        {/if}
+      </span>
     </span>
     <span class="text-[13px] text-(--text-muted)">{fileSize(f.sizeBytes)}</span>
     <span class="truncate text-[13px] text-(--text-muted)"

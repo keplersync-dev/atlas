@@ -78,7 +78,7 @@
   }
 </script>
 
-<div class="rounded-xl bg-(--bg-raise) p-4.5">
+<div class="rounded-xl border border-(--line) bg-(--bg-raise) p-4.5">
   <div class="flex items-center justify-between">
     <h2 class="font-semibold">Groups</h2>
     <div class="flex gap-1.5">
