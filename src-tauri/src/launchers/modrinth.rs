@@ -94,6 +94,25 @@ pub async fn list(root: &Path) -> ReadResult<Vec<FoundInstance>> {
         .collect())
 }
 
+#[derive(FromRow)]
+struct IdRow {
+    id: String,
+    path: String,
+}
+
+/// The app's own id for the instance in this folder ("legacy:Create SMP", "local:<uuid>"),
+/// which its launch link takes. Before the app's instance rework the folder was the id.
+pub async fn instance_id(root: &Path, path: &str) -> Option<String> {
+    let rows: Vec<IdRow> = rows(
+        root,
+        "SELECT id, path FROM instances",
+        "SELECT path AS id, path FROM profiles",
+    )
+    .await
+    .ok()?;
+    rows.into_iter().find(|r| r.path == path).map(|r| r.id)
+}
+
 /// Rows from the app's database: `current` on today's schema, `legacy` on the old one.
 async fn rows<T>(root: &Path, current: &'static str, legacy: &'static str) -> ReadResult<Vec<T>>
 where
@@ -442,6 +461,17 @@ async fn find_new(root: &Path, before: &HashSet<String>, name: &str) -> ReadResu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Prints the Modrinth App's id for each instance on this PC. Opt-in:
+    /// `cargo test --lib modrinth_ids -- --ignored --nocapture`
+    #[tokio::test]
+    #[ignore]
+    async fn modrinth_ids_on_this_pc() {
+        let root = crate::launchers::util::env_dir("APPDATA").unwrap().join("ModrinthApp");
+        for path in ["PPTools", "not there"] {
+            println!("{path} -> {:?}", instance_id(&root, path).await);
+        }
+    }
 
     /// A Modrinth root with the real table definitions (only the columns Atlas reads
     /// plus the NOT NULL ones) and two instances.

@@ -97,7 +97,7 @@
     backup: "Backing up files…",
     download: "Downloading…",
     waiting_for_manual_downloads: "Waiting for you to download files",
-    apply: "Applying changes…",
+    apply: "Putting files in place…",
   };
 
   async function apply() {

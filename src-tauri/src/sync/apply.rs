@@ -10,6 +10,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime};
 
@@ -236,9 +237,20 @@ pub async fn run<R: Runtime>(
             game_dir.clone(),
             backup_dir,
         );
-        tokio::task::spawn_blocking(move || apply_actions(&paths, &game, &actions, backup_dir2))
-            .await
-            .map_err(AppError::from)??;
+        // Big packs have thousands of files: say how far along it is, not 0% for minutes.
+        let total = apply_steps(&actions);
+        let done = Arc::new(AtomicU64::new(0));
+        let counter = Arc::clone(&done);
+        let mut applying = tokio::task::spawn_blocking(move || {
+            apply_actions(&paths, &game, &actions, backup_dir2, &counter)
+        });
+        let mut tick = tokio::time::interval(Duration::from_millis(250));
+        loop {
+            tokio::select! {
+                applied = &mut applying => break applied.map_err(AppError::from)??,
+                _ = tick.tick() => progress.bytes(done.load(Ordering::Relaxed), total),
+            }
+        }
     }
 
     // 5. The launcher's own settings, where Atlas can edit them (Prism).
@@ -448,11 +460,21 @@ async fn wait_for_manual_downloads<R: Runtime>(
 }
 
 /// Stage every file, then make the changes, journaling each one. Blocking.
+/// How many steps `apply_actions` counts: a copy per file it places, then one per action.
+fn apply_steps(actions: &[Action]) -> u64 {
+    let copies = actions
+        .iter()
+        .filter(|a| matches!(a, Action::Place { .. } | Action::WriteConfig { .. }))
+        .count();
+    (copies + actions.len()) as u64
+}
+
 fn apply_actions(
     paths: &crate::state::AppPaths,
     game_dir: &Path,
     actions: &[Action],
     backup_dir: PathBuf,
+    done: &AtomicU64,
 ) -> AppResult<()> {
     let staging = game_dir.join(STAGING).join(new_id());
     std::fs::create_dir_all(&staging)?;
@@ -490,6 +512,7 @@ fn apply_actions(
                 std::fs::copy(&from, &to)?;
             }
         }
+        done.fetch_add(1, Ordering::Relaxed);
     }
 
     let mut journal = Journal {
@@ -500,6 +523,7 @@ fn apply_actions(
     // Each step is journaled before it's made, so a crash in between is still undone.
     let result = (|| -> AppResult<()> {
         for a in actions {
+            done.fetch_add(1, Ordering::Relaxed);
             match a {
                 Action::Remove { path } | Action::RemoveConfig { path } => {
                     journal.record(&staging, path, FileAction::Removed)?;

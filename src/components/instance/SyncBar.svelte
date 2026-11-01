@@ -31,7 +31,7 @@
     backup: "Backing up files…",
     download: "Downloading…",
     waiting_for_manual_downloads: "Waiting for you to download files",
-    apply: "Applying changes…",
+    apply: "Putting files in place…",
   };
 
   const s = $derived(instance.sync);
@@ -117,6 +117,11 @@
       {#if cancellable}
         <Button size="sm" variant="ghost" disabled={cancelling} onclick={cancel}
           >Cancel</Button
+        >
+      {:else}
+        <!-- Stopping halfway would leave a mix of old and new files. -->
+        <span class="text-[13px] text-(--text-faint)"
+          >Almost done. Your old files are backed up.</span
         >
       {/if}
     </div>

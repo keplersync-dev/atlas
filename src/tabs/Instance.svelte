@@ -457,7 +457,10 @@
     />
   {:else if tab === "sharing"}
     {#if summary.sync}
-      <SharingTab instanceId={summary.id} sync={summary.sync} />
+      <!-- Settings and a short list: a readable width, not the whole window. -->
+      <div class="max-w-3xl">
+        <SharingTab instanceId={summary.id} sync={summary.sync} />
+      </div>
     {:else}
       <div class="py-12 text-center text-(--text-muted)">
         <b class="block text-sm text-(--text-primary)"
@@ -467,10 +470,12 @@
       </div>
     {/if}
   {:else}
-    <HistoryTab
-      instance={detail.data}
-      {lockedReason}
-      onrestored={() => instances.load()}
-    />
+    <div class="max-w-3xl">
+      <HistoryTab
+        instance={detail.data}
+        {lockedReason}
+        onrestored={() => instances.load()}
+      />
+    </div>
   {/if}
 {/if}

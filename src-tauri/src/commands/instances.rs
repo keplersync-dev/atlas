@@ -101,8 +101,12 @@ pub async fn open_in_launcher(state: State<'_, AppState>, id: Id) -> AppResult<(
 
 /// True when the game itself started; false when only the launcher opened.
 #[tauri::command]
-pub async fn play_instance(state: State<'_, AppState>, id: Id) -> AppResult<bool> {
-    instances::play(&state, &id).await
+pub async fn play_instance<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    id: Id,
+) -> AppResult<bool> {
+    instances::play(&state, &app, &id).await
 }
 
 #[tauri::command]

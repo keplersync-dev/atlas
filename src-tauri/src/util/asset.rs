@@ -14,7 +14,7 @@ pub fn url(stored: &str) -> String {
 }
 
 /// Like JavaScript's encodeURIComponent.
-fn encode_component(s: &str) -> String {
+pub fn encode_component(s: &str) -> String {
     let mut out = String::with_capacity(s.len() * 3);
     for b in s.bytes() {
         match b {

@@ -256,7 +256,7 @@
         <section class="mb-9">
           {@render heading("Needs you", attention.length, "warn")}
           <div
-            class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4"
+            class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4"
           >
             {#each attention as inst (inst.id)}
               <InstanceCard instance={inst} />
@@ -285,7 +285,7 @@
           {@render heading("Your instances", rest.length)}
         {/if}
         <!-- auto-fill: as many 240px+ columns as fit, so wide windows get more columns -->
-        <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
+        <div class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
           {#each rest as inst (inst.id)}
             <InstanceCard instance={inst} />
           {:else}

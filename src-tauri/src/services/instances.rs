@@ -549,9 +549,23 @@ pub async fn open_in_launcher(state: &AppState, id: &str) -> AppResult<()> {
 
 /// Start the game for this instance, or open its launcher where that's all it allows.
 /// True when the game itself starts.
-pub async fn play(state: &AppState, id: &str) -> AppResult<bool> {
+pub async fn play<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) -> AppResult<bool> {
     let (kind, root, instance) = in_launcher(state, id).await?;
-    launchers::play(kind, &root, &instance).map_err(|e| open_error(kind, e))
+    let game_dir = PathBuf::from(row(state, id).await?.game_dir);
+    match launchers::play(kind, &root, &instance, &game_dir)
+        .await
+        .map_err(|e| open_error(kind, e))?
+    {
+        launchers::Play::Started => Ok(true),
+        launchers::Play::Opened => Ok(false),
+        launchers::Play::Link(link) => {
+            app.opener().open_url(&link, None::<&str>).map_err(|e| {
+                tracing::warn!(error = %e, "couldn't open the launch link");
+                AppError::unknown(format!("Couldn't start {}", launchers::display_name(kind)))
+            })?;
+            Ok(true)
+        }
+    }
 }
 
 fn open_error(kind: LauncherKind, e: OpenError) -> AppError {

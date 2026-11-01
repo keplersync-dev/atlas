@@ -94,6 +94,13 @@ struct FileHash {
     value: String,
 }
 
+/// The instance's id in CurseForge (its `guid`), which its launch link needs.
+pub fn instance_guid(instance_dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(instance_dir.join("minecraftinstance.json")).ok()?;
+    let value: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).ok()?;
+    Some(value.get("guid")?.as_str()?.to_owned())
+}
+
 /// The modpack CurseForge installed the instance from, with its download. None when it
 /// wasn't from one, or the pack's author doesn't allow downloads outside CurseForge.
 pub fn installed_pack(instance_dir: &Path) -> Option<super::InstalledPack> {

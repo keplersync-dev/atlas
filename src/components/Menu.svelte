@@ -31,6 +31,16 @@
   );
 
   let open = $state(false);
+  // Opens upward when there isn't room below (a menu near the bottom of the window).
+  let up = $state(false);
+  let list = $state<HTMLDivElement>();
+  $effect(() => {
+    if (!open || !list) return;
+    up =
+      root.getBoundingClientRect().bottom + list.offsetHeight + 12 >
+        window.innerHeight &&
+      root.getBoundingClientRect().top > list.offsetHeight + 12;
+  });
   // bind:this gives us the actual DOM element, so we can tell
   // whether a click happened inside the menu or somewhere else.
   let root: HTMLDivElement;
@@ -65,7 +75,10 @@
   {#if open}
     <div
       role="menu"
-      class="absolute top-full right-0 z-30 mt-1.5 min-w-52 rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-[0_16px_40px_#0009]"
+      bind:this={list}
+      class="absolute right-0 z-30 min-w-52 {up
+        ? 'bottom-full mb-1.5'
+        : 'top-full mt-1.5'} rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-[0_16px_40px_#0009]"
     >
       {#each shown as item, i (i)}
         {#if item === "divider"}

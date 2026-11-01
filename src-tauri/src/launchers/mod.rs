@@ -350,18 +350,56 @@ pub fn open(kind: LauncherKind, root: &Path, launcher_instance_id: &str) -> Resu
     start(kind, root, open_args(kind, launcher_instance_id))
 }
 
-/// Play: start the game for this instance where the launcher allows it (Prism and
-/// MultiMC's `--launch`), else open the launcher. True when the game itself starts.
-/// shortcut: the Modrinth App's `modrinth://launch/…` isn't released yet
-/// (modrinth/code#6123); use it here once it ships.
-pub fn play(
+/// How Play starts an instance.
+#[derive(Debug, PartialEq)]
+pub enum Play {
+    /// The launcher was started with the instance's launch arguments.
+    Started,
+    /// Open this link: the launcher starts the game itself.
+    Link(String),
+    /// The launcher can't start one instance from outside: it was only opened.
+    Opened,
+}
+
+/// Play: start the game for this instance. Prism and MultiMC take `--launch`; the
+/// Modrinth App and CurseForge have launch links (the ones their own desktop shortcuts
+/// use); the Minecraft Launcher can only be opened.
+pub async fn play(
     kind: LauncherKind,
     root: &Path,
     launcher_instance_id: &str,
-) -> Result<bool, OpenError> {
-    match play_args(kind, launcher_instance_id) {
-        Some(args) => start(kind, root, args).map(|()| true),
-        None => open(kind, root, launcher_instance_id).map(|()| false),
+    game_dir: &Path,
+) -> Result<Play, OpenError> {
+    if let Some(args) = play_args(kind, launcher_instance_id) {
+        return start(kind, root, args).map(|()| Play::Started);
+    }
+    // The Modrinth App's link takes its own id for the instance, not the folder.
+    let key = match kind {
+        LauncherKind::Modrinth => modrinth::instance_id(root, launcher_instance_id).await,
+        _ => Some(launcher_instance_id.to_owned()),
+    };
+    if let Some(link) = key.and_then(|key| play_link(kind, &key, game_dir)) {
+        return Ok(Play::Link(link));
+    }
+    open(kind, root, launcher_instance_id).map(|()| Play::Opened)
+}
+
+/// The Modrinth App's `modrinth://launch/instance/<its id>` (modrinth/code#6329; tested
+/// with its 2026-10-30 build) and CurseForge's desktop-shortcut link (game id 432 is
+/// Minecraft). `key` is the Modrinth App's instance id; CurseForge reads its own.
+fn play_link(kind: LauncherKind, key: &str, game_dir: &Path) -> Option<String> {
+    match kind {
+        LauncherKind::Modrinth => Some(format!(
+            "modrinth://launch/instance/{}",
+            crate::util::asset::encode_component(key)
+        )),
+        LauncherKind::Curseforge => curseforge::instance_guid(game_dir).map(|guid| {
+            format!(
+                "curseforge://launch-game?instanceId={}&gameId=432",
+                crate::util::asset::encode_component(&guid)
+            )
+        }),
+        _ => None,
     }
 }
 
@@ -424,13 +462,23 @@ mod tests {
             ["--launch", "SMP"]
         );
         assert!(play_args(LauncherKind::Multimc, "SMP").is_some());
-        for kind in [
-            LauncherKind::Modrinth,
-            LauncherKind::Curseforge,
-            LauncherKind::Official,
-        ] {
-            assert!(play_args(kind, "x").is_none(), "{kind:?}");
-        }
+        assert_eq!(
+            play_link(LauncherKind::Modrinth, "legacy:Create SMP", Path::new("x")).unwrap(),
+            "modrinth://launch/instance/legacy%3ACreate%20SMP"
+        );
+        let dir = std::env::temp_dir().join(format!("atlas-cf-play-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("minecraftinstance.json"),
+            "\u{feff}{\"guid\":\"ab-12\"}",
+        )
+        .unwrap();
+        assert_eq!(
+            play_link(LauncherKind::Curseforge, "SMP", &dir).unwrap(),
+            "curseforge://launch-game?instanceId=ab-12&gameId=432"
+        );
+        std::fs::remove_dir_all(&dir).ok();
+        assert!(play_link(LauncherKind::Official, "x", Path::new("x")).is_none());
     }
 
     #[test]

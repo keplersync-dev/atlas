@@ -143,19 +143,20 @@
       return { tone: "muted", text: "No longer updated · the owner left" };
     if (s) {
       const shared = social.shared.find((x) => x.id === s.sharedInstanceId);
-      const others = shared
-        ? shared.members.filter(
-            (m) => m.role !== "owner" && m.status === "active",
-          ).length
-        : 0;
+      const others = (shared?.members ?? []).filter(
+        (m) => m.role !== "owner" && m.status === "active",
+      );
+      // Short enough for a narrow card: who, by name when it's one person.
       return {
         tone: "shared",
         text:
           s.role === "owner"
-            ? others
-              ? `Shared with ${plural(others, "person", "people")} · up to date`
-              : "Shared · nobody has joined yet"
-            : `From ${s.owner?.displayName ?? "a friend"} · up to date`,
+            ? others.length === 1
+              ? `Shared with ${others[0].user.displayName}`
+              : others.length
+                ? `Shared with ${plural(others.length, "person", "people")}`
+                : "Shared · nobody joined yet"
+            : `From ${s.owner?.displayName ?? "a friend"}`,
       };
     }
     return { tone: "faint", text: "Not shared" };
@@ -193,7 +194,7 @@
   <div class="relative">
     <button
       onclick={open}
-      class="relative block aspect-16/7 w-full overflow-hidden"
+      class="relative block aspect-2/1 w-full overflow-hidden"
       tabindex="-1"
       aria-hidden="true"
     >
@@ -212,7 +213,7 @@
           src={instance.icon}
           alt=""
           onerror={() => (iconFailed = true)}
-          class="absolute top-1/2 left-1/2 size-24 -translate-x-1/2 -translate-y-1/2 rounded-2xl object-cover shadow-[0_8px_24px_#0008] transition-transform duration-300 group-hover:scale-[1.04] {instance.status ===
+          class="absolute top-1/2 left-1/2 size-18 -translate-x-1/2 -translate-y-1/2 rounded-2xl object-cover shadow-[0_8px_24px_#0008] transition-transform duration-300 group-hover:scale-[1.04] {instance.status ===
           'missing'
             ? 'grayscale'
             : ''}"
@@ -241,7 +242,7 @@
         onclick={() => play(instance)}
         aria-label="Play {instance.name}"
         title="Play {instance.name}"
-        class="absolute right-3 bottom-3 grid size-10 place-items-center rounded-full bg-(--accent) text-(--accent-ink) shadow-[0_6px_18px_#0009] transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
+        class="absolute right-2.5 bottom-2.5 grid size-9 place-items-center rounded-full bg-(--accent) text-(--accent-ink) shadow-[0_6px_18px_#0009] transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
       >
         <Icon name="play" class="ml-0.5 size-4.5" />
       </button>
@@ -349,7 +350,7 @@
                 ]}"
               >
                 <i class="size-2 shrink-0 rounded-full {DOT[status.tone]}"></i>
-                <span class="truncate">{status.text}</span>
+                <span class="line-clamp-2">{status.text}</span>
               </span>
             </span>
           {/if}
