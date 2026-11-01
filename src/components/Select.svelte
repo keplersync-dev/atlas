@@ -69,7 +69,7 @@
     aria-expanded={open}
     onclick={() => (open ? (open = false) : show())}
     {onkeydown}
-    class="flex h-8 items-center gap-2 rounded-md border bg-(--bg-raise) pr-2 pl-2.5 text-[12.5px] text-(--text-muted) transition-colors hover:text-(--text-primary) focus-visible:outline-none
+    class="flex h-8 items-center gap-2 rounded-md border bg-(--bg-raise) pr-2 pl-2.5 text-[13px] text-(--text-muted) transition-colors hover:text-(--text-primary) focus-visible:outline-none
       {open
       ? 'border-(--accent)'
       : 'border-(--line-2) focus-visible:border-(--accent)'}"
@@ -85,7 +85,7 @@
     <div
       role="listbox"
       aria-label={label}
-      class="absolute top-full right-0 z-30 mt-1.5 min-w-full rounded-lg border border-(--line-2) bg-[#1b1f25] p-1.25 shadow-[0_16px_40px_#0009]"
+      class="absolute top-full right-0 z-30 mt-1.5 min-w-full rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-[0_16px_40px_#0009]"
     >
       {#each options as o, i (o.value)}
         <button
@@ -95,7 +95,7 @@
           tabindex="-1"
           onclick={() => pick(o.value)}
           onmouseenter={() => (active = i)}
-          class="flex w-full items-center gap-2.5 rounded-[5px] px-2.5 py-1.75 text-left text-[12.5px] whitespace-nowrap
+          class="flex w-full items-center gap-2.5 rounded-[5px] px-2.5 py-1.75 text-left text-[13px] whitespace-nowrap
             {i === active ? 'bg-(--bg-hover)' : ''}
             {o.value === value
             ? 'text-(--text-primary)'

@@ -10,14 +10,14 @@
 </script>
 
 {#if need.new}<span
-    class="rounded-full bg-(--accent)/15 px-2 py-0.5 text-[11px] font-semibold text-(--accent)"
+    class="rounded-full bg-(--accent)/15 px-2 py-0.5 text-[13px] font-semibold text-(--accent)"
     >{need.new} new</span
   >{/if}
 {#if need.update}<span
-    class="rounded-full bg-(--warn)/15 px-2 py-0.5 text-[11px] font-semibold text-(--warn)"
+    class="rounded-full bg-(--warn)/15 px-2 py-0.5 text-[13px] font-semibold text-(--warn)"
     >{plural(need.update, "update")}</span
   >{/if}
 {#if need.changes}<span
-    class="rounded-full bg-(--accent)/15 px-2 py-0.5 text-[11px] font-semibold text-(--accent)"
+    class="rounded-full bg-(--accent)/15 px-2 py-0.5 text-[13px] font-semibold text-(--accent)"
     >{plural(need.changes, "to publish", "to publish")}</span
   >{/if}

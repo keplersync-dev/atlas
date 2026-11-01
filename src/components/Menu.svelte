@@ -47,7 +47,7 @@
   {#if open}
     <div
       role="menu"
-      class="absolute top-full right-0 z-30 mt-1.5 min-w-52 rounded-lg border border-(--line-2) bg-[#1b1f25] p-1.25 shadow-[0_16px_40px_#0009]"
+      class="absolute top-full right-0 z-30 mt-1.5 min-w-52 rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-[0_16px_40px_#0009]"
     >
       {#each items as item, i (i)}
         {#if item === "divider"}
@@ -56,7 +56,7 @@
           <button
             role="menuitem"
             onclick={() => choose(item)}
-            class="flex w-full items-center gap-2.5 rounded-[5px] px-2.5 py-1.75 text-left text-[12.5px] hover:bg-(--bg-hover)
+            class="flex w-full items-center gap-2.5 rounded-[5px] px-2.5 py-1.75 text-left text-[13px] hover:bg-(--bg-hover)
               {item.danger ? 'text-(--danger)' : ''}"
           >
             {#if item.icon}<Icon name={item.icon} class="size-4" />{/if}

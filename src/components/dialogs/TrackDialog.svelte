@@ -150,13 +150,13 @@
   onsubmit={submit}
 >
   {#if detected.loading}
-    <p class="py-4 text-[12.5px] text-(--text-muted)">
+    <p class="py-4 text-[13px] text-(--text-muted)">
       Looking through your launchers…
     </p>
   {:else if detected.error}
-    <p class="py-4 text-[12.5px] text-(--danger)">{detected.error}</p>
+    <p class="py-4 text-[13px] text-(--danger)">{detected.error}</p>
   {:else if byLauncher.length === 0}
-    <p class="py-4 text-[12.5px] text-(--text-muted)">
+    <p class="py-4 text-[13px] text-(--text-muted)">
       Atlas didn't find Prism, the Modrinth App, CurseForge or the Minecraft
       Launcher. Choose a folder instead.
     </p>
@@ -165,7 +165,7 @@
       <div class="mb-1 flex justify-end">
         <button
           type="button"
-          class="text-xs text-(--accent) hover:underline"
+          class="text-[13px] text-(--accent) hover:underline"
           onclick={toggleAll}
         >
           {allNewSelected
@@ -178,10 +178,10 @@
     {#each byLauncher as [kind, list] (kind)}
       <section class="mb-2">
         <div
-          class="flex items-center gap-2.5 px-2 pt-2 pb-1 text-[12.5px] font-semibold"
+          class="flex items-center gap-2.5 px-2 pt-2 pb-1 text-[13px] font-semibold"
         >
           <span
-            class="grid size-5 place-items-center rounded-[5px] text-[10px] font-bold text-[#0b0d10]"
+            class="grid size-5 place-items-center rounded-[5px] text-[13px] font-bold text-[#0b0d10]"
             style="background: {LAUNCHER_STYLE[kind].color}"
             >{LAUNCHER_STYLE[kind].mark}</span
           >
@@ -206,7 +206,7 @@
             />
             <span class="min-w-0 flex-1">
               <b class="block truncate font-medium">{d.name}</b>
-              <small class="block text-[11.5px] text-(--text-faint)">
+              <small class="block text-[13px] text-(--text-faint)">
                 {tracked
                   ? "Already tracked"
                   : versionLabel(d.loader, d.minecraftVersion)}
@@ -223,23 +223,23 @@
     {#if !showFolder}
       <button
         type="button"
-        class="text-xs text-(--accent) hover:underline"
+        class="text-[13px] text-(--accent) hover:underline"
         onclick={() => (showFolder = true)}
       >
         Not listed? Choose a folder, a pack or a launcher
       </button>
     {:else}
-      <h3 class="mb-1.5 text-xs font-semibold text-(--text-muted)">
+      <h3 class="mb-1.5 text-[13px] font-semibold text-(--text-muted)">
         Game folder
       </h3>
-      <p class="mb-2 text-xs text-(--text-faint)">
+      <p class="mb-2 text-[13px] text-(--text-faint)">
         The folder that contains mods/ and config/.
       </p>
       <div class="flex gap-2">
         <input
           bind:value={folder}
           placeholder="D:\Minecraft\My Instance"
-          class="h-8.5 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 font-mono text-xs outline-none focus:border-(--accent)"
+          class="h-8.5 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 font-mono text-[13px] outline-none focus:border-(--accent)"
         />
         <Button disabled={!folder.trim() || submitting} onclick={trackFolder}
           >Track folder</Button
@@ -247,10 +247,10 @@
       </div>
 
       {#if importers.length}
-        <h3 class="mt-4 mb-1.5 text-xs font-semibold text-(--text-muted)">
+        <h3 class="mt-4 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
           Modrinth pack (.mrpack)
         </h3>
-        <p class="mb-2 text-xs text-(--text-faint)">
+        <p class="mb-2 text-[13px] text-(--text-faint)">
           {imported
             ? `Finish adding it in ${imported}, then look again here to track it.`
             : "A launcher installs it as a new instance, which you can then track."}
@@ -267,10 +267,10 @@
         </div>
       {/if}
 
-      <h3 class="mt-4 mb-1.5 text-xs font-semibold text-(--text-muted)">
+      <h3 class="mt-4 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
         Launcher folder
       </h3>
-      <p class="mb-2 text-xs text-(--text-faint)">
+      <p class="mb-2 text-[13px] text-(--text-faint)">
         For a launcher Atlas didn't find, like a portable Prism: the folder it
         runs from. Its instances then appear above.
       </p>
@@ -278,7 +278,7 @@
         <input
           bind:value={launcherFolder}
           placeholder="D:\PrismLauncher"
-          class="h-8.5 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 font-mono text-xs outline-none focus:border-(--accent)"
+          class="h-8.5 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 font-mono text-[13px] outline-none focus:border-(--accent)"
         />
         <Button
           disabled={!launcherFolder.trim() || addingLauncher}
@@ -290,7 +290,7 @@
   </div>
 
   {#snippet footer()}
-    {#if error}<span class="mr-auto text-xs text-(--danger)" role="alert"
+    {#if error}<span class="mr-auto text-[13px] text-(--danger)" role="alert"
         >{error}</span
       >{/if}
     <Button variant="ghost" onclick={onclose}>Cancel</Button>

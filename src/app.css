@@ -4,28 +4,28 @@
 @import "@skeletonlabs/skeleton-svelte";
 @import "@skeletonlabs/skeleton/themes/cerberus";
 
-/* Design tokens — match design/prototype.html */
+/* Design tokens: direction A, "Lifted" (design/directions.html) */
 :root {
   color-scheme: dark;
 
-  --bg: #101216;
-  --bg-side: #0b0d10;
-  --bg-raise: #161a1f;
-  --bg-raise-2: #1c2128;
-  --bg-hover: #1a1e24;
+  --bg: #0e1115;
+  --bg-side: #0a0c0f;
+  --bg-raise: #181d24;
+  --bg-raise-2: #222932;
+  --bg-hover: #2a323d;
 
-  --line: #22272e;
-  --line-2: #2e343d;
+  --line: #3d4653;
+  --line-2: #7a8594;
 
-  --text-primary: #e8ecf1;
-  --text-muted: #a1a9b5;
-  --text-faint: #6d7581;
+  --text-primary: #eef1f5;
+  --text-muted: #b9c1cc;
+  --text-faint: #98a1ad;
 
-  --accent: #8ad9eb;
-  --accent-ink: #0a2a33;
-  --warn: #e9b866;
-  --danger: #f07178;
-  --online: #6fd08c;
+  --accent: #7dd3e8;
+  --accent-ink: #062a33;
+  --warn: #f0bf6a;
+  --danger: #ff8f94;
+  --online: #77d892;
 
   /* older names still used by some components */
   --bg-titlebar: var(--bg-side);
@@ -52,7 +52,7 @@ body {
   overflow: hidden;
   background: var(--bg);
   color: var(--text-primary);
-  font: 13px/1.45 var(--font);
+  font: 14px/1.5 var(--font);
   -webkit-font-smoothing: antialiased;
 }
 

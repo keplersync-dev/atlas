@@ -96,11 +96,11 @@
         <li class="relative grid grid-cols-[56px_minmax(0,1fr)] gap-3.5 pb-5.5">
           <!-- the vertical line joining versions; not after the last one -->
           {#if i < shared.data.revisions.length - 1}
-            <span class="absolute top-6.5 bottom-0 left-7 w-px bg-(--line-2)"
+            <span class="absolute top-6.5 bottom-0 left-7 w-px bg-(--line)"
             ></span>
           {/if}
           <span
-            class="relative grid h-6 place-items-center rounded-full font-mono text-[11.5px] font-semibold
+            class="relative grid h-6 place-items-center rounded-full font-mono text-[13px] font-semibold
               {current
               ? 'bg-(--accent)/12 text-(--accent)'
               : 'bg-(--bg-raise-2) text-(--text-muted)'}"
@@ -109,13 +109,13 @@
           </span>
           <div>
             <b class="font-semibold">{rev.changelog ?? "No description"}</b>
-            <span class="ml-2 text-xs text-(--text-faint)">
+            <span class="ml-2 text-[13px] text-(--text-faint)">
               {rev.createdBy?.displayName ?? "Deleted user"} · {timeAgo(
                 rev.createdAt,
               )}{current ? " · your copy" : ""}
             </span>
             <div
-              class="mt-1.5 flex flex-wrap gap-1.5 text-[11.5px] text-(--text-muted)"
+              class="mt-1.5 flex flex-wrap gap-1.5 text-[13px] text-(--text-muted)"
             >
               <!-- Unkeyed: names aren't unique (two files can share one). -->
               {#each open ? all : all.slice(0, SHOWN) as c}
@@ -144,7 +144,7 @@
 {/if}
 
 <h2 class="mt-5 mb-1 text-[13px] font-semibold text-(--text-muted)">Backups</h2>
-<p class="mb-2 text-xs text-(--text-faint)">
+<p class="mb-2 text-[13px] text-(--text-faint)">
   Atlas copies files it's about to change. The last 3 are kept.
 </p>
 {#each instance.backups as b (b.id)}
@@ -153,7 +153,7 @@
   >
     <div class="min-w-0 flex-1">
       <b class="font-medium">{backupLabel(b)}</b>
-      <small class="block text-[11.5px] text-(--text-faint)">
+      <small class="block text-[13px] text-(--text-faint)">
         {timeAgo(b.createdAt)} · {plural(b.fileCount, "file")} · {fileSize(
           b.sizeBytes,
         )}
@@ -168,7 +168,7 @@
     </Button>
   </div>
 {:else}
-  <p class="py-3 text-[12.5px] text-(--text-muted)">
+  <p class="py-3 text-[13px] text-(--text-muted)">
     No backups yet. One is made before every update.
   </p>
 {/each}

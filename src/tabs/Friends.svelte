@@ -150,7 +150,7 @@
           <input
             bind:value={query}
             placeholder="Search friends"
-            class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg-raise) pr-2.5 pl-8 text-[12.5px] placeholder:text-(--text-faint) focus:border-(--accent) focus:outline-none"
+            class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg-raise) pr-2.5 pl-8 text-[13px] placeholder:text-(--text-faint) focus:border-(--accent) focus:outline-none"
           />
         </label>
         <div class="flex gap-1.5" role="radiogroup" aria-label="Filter">
@@ -159,7 +159,7 @@
               role="radio"
               aria-checked={filter === f.key}
               onclick={() => (filter = f.key)}
-              class="h-7 rounded-full px-3 text-xs {filter === f.key
+              class="h-7 rounded-full px-3 text-[13px] {filter === f.key
                 ? 'bg-(--accent)/15 font-semibold text-(--accent)'
                 : 'text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)'}"
             >
@@ -173,7 +173,7 @@
       </div>
       {#each sections as section (section.title)}
         <h2
-          class="mt-4.5 mb-1 text-xs font-semibold text-(--text-faint) first:mt-0"
+          class="mt-4.5 mb-1 text-[13px] font-semibold text-(--text-faint) first:mt-0"
         >
           {section.title} · {section.list.length}
         </h2>
@@ -205,7 +205,7 @@
                   <b class="font-medium">{f.user.displayName}</b>
                   <span class="text-(--text-faint)">@{f.user.username}</span>
                   <small
-                    class="block truncate text-[11.5px] {f.presence.state ===
+                    class="block truncate text-[13px] {f.presence.state ===
                     'playing'
                       ? 'text-(--online)'
                       : 'text-(--text-faint)'}"
@@ -215,7 +215,7 @@
                 </span>
                 {#if theirs.length}
                   <AttentionBadges items={theirs} />
-                  <span class="text-xs text-(--text-muted)"
+                  <span class="text-[13px] text-(--text-muted)"
                     >{plural(theirs.length, "shared instance")}</span
                   >
                   <span

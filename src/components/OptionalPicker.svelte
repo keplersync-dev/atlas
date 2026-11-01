@@ -25,10 +25,10 @@
 </script>
 
 {#if items.length}
-  <h3 class="mt-4 mb-0.5 text-xs font-semibold text-(--text-muted)">
+  <h3 class="mt-4 mb-0.5 text-[13px] font-semibold text-(--text-muted)">
     {title} <span class="font-normal text-(--text-faint)">{items.length}</span>
   </h3>
-  <p class="mb-1.5 text-xs text-(--text-faint)">
+  <p class="mb-1.5 text-[13px] text-(--text-faint)">
     Only downloaded if you tick them. You can change this later.
   </p>
   <div class="rounded-lg bg-(--bg-raise) px-1.5 py-1">
@@ -44,17 +44,16 @@
         />
         <span class="min-w-0 flex-1">
           <b class="block truncate font-medium">{o.name}</b>
-          <small class="text-[11.5px] text-(--text-faint)">{KIND[o.kind]}</small
-          >
+          <small class="text-[13px] text-(--text-faint)">{KIND[o.kind]}</small>
         </span>
-        <span class="text-[11.5px] text-(--text-faint)"
+        <span class="text-[13px] text-(--text-faint)"
           >{fileSize(o.sizeBytes)}</span
         >
       </label>
     {/each}
   </div>
   {#if selected.length}
-    <p class="mt-1.5 text-[11.5px] text-(--text-faint)">
+    <p class="mt-1.5 text-[13px] text-(--text-faint)">
       {plural(selected.length, "extra")} selected · {fileSize(chosenBytes)} more to
       download
     </p>

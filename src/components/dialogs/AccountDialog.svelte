@@ -202,12 +202,14 @@
 
 {#snippet failed(key: string)}
   {#if error?.key === key}
-    <p class="mt-1.5 text-xs text-(--danger)" role="alert">{error.text}</p>
+    <p class="mt-1.5 text-[13px] text-(--danger)" role="alert">{error.text}</p>
   {/if}
 {/snippet}
 
 {#snippet section(title: string)}
-  <h3 class="mt-5 mb-2 text-xs font-semibold text-(--text-muted) first:mt-1">
+  <h3
+    class="mt-5 mb-2 text-[13px] font-semibold text-(--text-muted) first:mt-1"
+  >
     {title}
   </h3>
 {/snippet}
@@ -223,7 +225,7 @@
   {/snippet}
 
   {#if !me}
-    <p class="py-4 text-[12.5px] text-(--text-muted)">You're signed out.</p>
+    <p class="py-4 text-[13px] text-(--text-muted)">You're signed out.</p>
   {:else}
     <!-- ── Profile (its own form with its own Save button) ── -->
     {@render section("Profile")}
@@ -232,7 +234,7 @@
       onsubmit={saveProfile}
       class="grid grid-cols-[1fr_1fr_auto] gap-x-3 gap-y-1.5"
     >
-      <label class="text-xs text-(--text-muted)">
+      <label class="text-[13px] text-(--text-muted)">
         Display name
         <input
           bind:value={displayName}
@@ -243,7 +245,7 @@
             class="mt-1 block text-(--danger)">{displayNameError}</span
           >{/if}
       </label>
-      <label class="text-xs text-(--text-muted)">
+      <label class="text-[13px] text-(--text-muted)">
         Username
         <!-- oninput lowercases as you type; bind:value keeps `username` in sync -->
         <input
@@ -278,7 +280,7 @@
             : "Save"}</Button
       >
       {#if profileMessage && !profileMessage.ok}
-        <span class="col-span-3 text-xs text-(--danger)" role="alert"
+        <span class="col-span-3 text-[13px] text-(--danger)" role="alert"
           >{profileMessage.text}</span
         >
       {/if}
@@ -312,7 +314,7 @@
             <b class="block font-medium {pic.available ? '' : 'opacity-60'}"
               >{pic.label}</b
             >
-            <small class="block text-[11.5px] text-(--text-faint)"
+            <small class="block text-[13px] text-(--text-faint)"
               >{pic.available
                 ? chosen
                   ? "Showing now"
@@ -330,7 +332,7 @@
     <div class="flex items-start gap-3">
       <div class="flex-1">
         <b class="block font-medium">Appear offline</b>
-        <small class="text-[11.5px] text-(--text-faint)"
+        <small class="text-[13px] text-(--text-faint)"
           >Friends see you as offline and can't see what you're playing.</small
         >
       </div>
@@ -346,7 +348,7 @@
     <div class="mt-3 flex items-center gap-3">
       <div class="flex-1">
         <b class="block font-medium">Your data</b>
-        <small class="text-[11.5px] text-(--text-faint)"
+        <small class="text-[13px] text-(--text-faint)"
           >{exported
             ? `Saved to ${exported}`
             : "A copy of everything Atlas stores about you, as a file."}</small
@@ -371,7 +373,7 @@
         <div class="flex items-start gap-3 not-first:mt-3">
           <div class="flex-1">
             <b class="block font-medium">{s.title}</b>
-            <small class="text-[11.5px] text-(--text-faint)">{s.hint}</small>
+            <small class="text-[13px] text-(--text-faint)">{s.hint}</small>
           </div>
           <Switch
             checked={settings[s.key]}
@@ -395,7 +397,7 @@
         <ProviderIcon provider={p.id} />
         <div class="min-w-0 flex-1">
           <b class="block font-medium">{p.label}</b>
-          <small class="text-[11.5px] text-(--text-faint)"
+          <small class="text-[13px] text-(--text-faint)"
             >{linked ? linked.username : "Not linked"}</small
           >
         </div>
@@ -456,14 +458,14 @@
         }}>Reset code</Button
       >
     </div>
-    <small class="text-[11.5px] text-(--text-faint)"
+    <small class="text-[13px] text-(--text-faint)"
       >Reset it if your code was posted somewhere public.</small
     >
     {@render failed("code")}
 
     <!-- ── Storage ── -->
     {@render section("Storage")}
-    <div class="h-1.5 overflow-hidden rounded-full bg-(--line-2)">
+    <div class="h-1.5 overflow-hidden rounded-full bg-(--line)">
       <div
         class="h-full bg-(--accent)"
         style="width: {Math.min(
@@ -472,13 +474,13 @@
         )}%"
       ></div>
     </div>
-    <small class="mt-1.5 block text-[11.5px] text-(--text-faint)">
+    <small class="mt-1.5 block text-[13px] text-(--text-faint)">
       {fileSize(me.storage.usedBytes)} of {fileSize(me.storage.quotaBytes)} used by
       files you've uploaded
     </small>
   {/if}
 
-  <p class="mt-6 text-center text-[11.5px] text-(--text-faint)">
+  <p class="mt-6 text-center text-[13px] text-(--text-faint)">
     {#each [{ page: "terms", label: "Terms of Service" }, { page: "privacy", label: "Privacy Policy" }] as const as l, i (l.page)}
       {#if i}·{/if}
       <button
@@ -496,7 +498,7 @@
 
   {#snippet footer()}
     {#if error?.key === "signout" || error?.key === "delete"}
-      <span class="basis-full text-xs text-(--danger)" role="alert"
+      <span class="basis-full text-[13px] text-(--danger)" role="alert"
         >{error.text}</span
       >
     {/if}

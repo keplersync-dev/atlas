@@ -34,7 +34,7 @@
   {#each toasts.items as t (t.id)}
     <div
       role={t.kind === "error" ? "alert" : "status"}
-      class="pointer-events-auto flex items-start gap-2.5 rounded-lg border px-3.5 py-2.5 text-[12.5px] shadow-[0_12px_32px_#0008]
+      class="pointer-events-auto flex items-start gap-2.5 rounded-lg border px-3.5 py-2.5 text-[13px] shadow-[0_12px_32px_#0008]
         {t.kind === 'error'
         ? 'border-(--danger)/30 bg-[#1d1416]'
         : 'border-(--accent)/35 bg-(--bg-raise-2)'}"

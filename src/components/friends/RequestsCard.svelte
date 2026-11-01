@@ -30,7 +30,7 @@
           <Head user={r.user} size={30} ring="var(--bg-raise)" />
           <div class="min-w-0 flex-1">
             <b class="block font-medium">{r.user.displayName}</b>
-            <small class="text-[11.5px] text-(--text-faint)"
+            <small class="text-[13px] text-(--text-faint)"
               >Wants to be friends · {timeAgo(r.createdAt)}</small
             >
           </div>
@@ -56,7 +56,7 @@
           <Head user={r.user} size={30} ring="var(--bg-raise)" />
           <div class="min-w-0 flex-1">
             <b class="block font-medium">{r.user.displayName}</b>
-            <small class="text-[11.5px] text-(--text-faint)"
+            <small class="text-[13px] text-(--text-faint)"
               >Request sent · {timeAgo(r.createdAt)}</small
             >
           </div>
@@ -71,7 +71,7 @@
         </div>
       {/each}
     </div>
-    {#if error}<p class="mt-2 text-xs text-(--danger)" role="alert">
+    {#if error}<p class="mt-2 text-[13px] text-(--danger)" role="alert">
         {error}
       </p>{/if}
   </div>

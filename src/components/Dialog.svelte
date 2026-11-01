@@ -58,7 +58,7 @@
   {onclick}
   {onclose}
   aria-labelledby="dialog-title"
-  class="m-auto max-h-[calc(100vh-80px)] w-full rounded-xl border border-(--line-2) bg-[#15181d] p-0 text-(--text-primary) shadow-[0_30px_80px_#000a]
+  class="m-auto max-h-[calc(100vh-80px)] w-full rounded-xl border border-(--line) bg-(--bg-raise) p-0 text-(--text-primary) shadow-[0_30px_80px_#000a]
     backdrop:bg-[#05070acc] {wide ? 'max-w-155' : 'max-w-130'}"
 >
   <div class="flex max-h-[calc(100vh-82px)] flex-col">
@@ -66,7 +66,7 @@
       {@render header?.()}
       <div class="min-w-0 flex-1">
         <h2 id="dialog-title" class="text-base font-semibold">{title}</h2>
-        {#if description}<p class="mt-0.5 text-[12.5px] text-(--text-muted)">
+        {#if description}<p class="mt-0.5 text-[13px] text-(--text-muted)">
             {description}
           </p>{/if}
       </div>

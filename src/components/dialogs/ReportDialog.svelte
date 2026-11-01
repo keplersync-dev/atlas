@@ -97,14 +97,14 @@
           />
           <span>
             <b class="block font-medium">{LABELS[r].title}</b>
-            <small class="text-[11.5px] text-(--text-faint)"
+            <small class="text-[13px] text-(--text-faint)"
               >{LABELS[r].hint}</small
             >
           </span>
         </label>
       {/each}
     </div>
-    <h3 class="mt-4 mb-1.5 text-xs font-semibold text-(--text-muted)">
+    <h3 class="mt-4 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
       Details <span class="font-normal text-(--text-faint)">(optional)</span>
     </h3>
     <textarea
@@ -120,7 +120,9 @@
 
   {#snippet footer()}
     {#if error}
-      <span class="mr-auto text-xs text-(--danger)" role="alert">{error}</span>
+      <span class="mr-auto text-[13px] text-(--danger)" role="alert"
+        >{error}</span
+      >
     {/if}
     {#if sent}
       <Button variant="primary" onclick={onclose}>Done</Button>

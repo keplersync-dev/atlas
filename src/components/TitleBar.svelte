@@ -67,7 +67,7 @@
 >
   <div
     data-tauri-drag-region
-    class="flex items-center gap-2 text-[12.5px] font-semibold text-(--text-muted)"
+    class="flex items-center gap-2 text-[13px] font-semibold text-(--text-muted)"
   >
     <img
       data-tauri-drag-region

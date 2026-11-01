@@ -117,7 +117,7 @@
 {/snippet}
 
 {#if items.length === 0}
-  <p class="text-[12.5px] text-(--text-muted)">Nothing yet.</p>
+  <p class="text-[13px] text-(--text-muted)">Nothing yet.</p>
 {:else}
   <div class="flex flex-col">
     {#each items as a (a.id)}
@@ -126,7 +126,7 @@
         this={go_ ? "button" : "div"}
         role={go_ ? undefined : "presentation"}
         onclick={() => go_?.()}
-        class="-mx-2 flex items-start gap-2.5 rounded-md px-2 py-2 text-left text-[12.5px] {go_
+        class="-mx-2 flex items-start gap-2.5 rounded-md px-2 py-2 text-left text-[13px] {go_
           ? 'hover:bg-(--bg-hover)'
           : ''}"
       >
@@ -135,7 +135,7 @@
           >{@render sentence(a)}</span
         >
         <small
-          class="flex shrink-0 items-center gap-1.5 pt-0.5 text-[11px] text-(--text-faint)"
+          class="flex shrink-0 items-center gap-1.5 pt-0.5 text-[13px] text-(--text-faint)"
         >
           {#if !a.readAt}<i class="size-1.5 rounded-full bg-(--accent)"
             ></i>{/if}

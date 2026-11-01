@@ -102,7 +102,7 @@
       </Button>
     </div>
   </div>
-  <p class="mt-1 mb-1.5 text-[12.5px] text-(--text-muted)">
+  <p class="mt-1 mb-1.5 text-[13px] text-(--text-muted)">
     Share an instance with a whole group at once. New members get it
     automatically.
   </p>
@@ -127,7 +127,7 @@
       <input
         bind:value={joinCode}
         placeholder="Invite code or link"
-        class="h-8 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 font-mono text-xs outline-none focus:border-(--accent)"
+        class="h-8 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 font-mono text-[13px] outline-none focus:border-(--accent)"
       />
       <Button
         type="submit"
@@ -140,7 +140,7 @@
 
   {#if message}
     <p
-      class="my-1.5 text-xs {message.ok
+      class="my-1.5 text-[13px] {message.ok
         ? 'text-(--online)'
         : 'text-(--danger)'}"
       role="status"
@@ -161,7 +161,7 @@
         </span>
         <div class="min-w-0 flex-1">
           <b class="block truncate font-medium">{g.name}</b>
-          <small class="text-[11.5px] text-(--text-faint) capitalize">
+          <small class="text-[13px] text-(--text-faint) capitalize">
             {plural(g.members.length, "member")} · {plural(
               g.sharedInstanceIds.length,
               "instance",
@@ -187,7 +187,7 @@
         {/if}
       </div>
     {:else}
-      <p class="py-2 text-[12.5px] text-(--text-muted)">No groups yet.</p>
+      <p class="py-2 text-[13px] text-(--text-muted)">No groups yet.</p>
     {/each}
   </div>
 </div>

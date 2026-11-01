@@ -48,7 +48,7 @@
     <div class="min-w-0 flex-1">
       <b class="block truncate font-medium">{f.user.displayName}</b>
       <small
-        class="block truncate text-[11.5px] {f.presence.state === 'playing'
+        class="block truncate text-[13px] {f.presence.state === 'playing'
           ? 'text-(--online)'
           : 'text-(--text-faint)'}"
       >
@@ -62,20 +62,20 @@
   <h2 class="text-[15px] font-semibold">Friends</h2>
   {#if social.signedIn}
     <button
-      class="text-xs text-(--accent) hover:underline"
+      class="text-[13px] text-(--accent) hover:underline"
       onclick={() => go({ page: "friends" })}>Add friend</button
     >
   {/if}
 </div>
 
 {#if !social.signedIn}
-  <p class="text-[12.5px] text-(--text-muted)">
+  <p class="text-[13px] text-(--text-muted)">
     Sign in to see what your friends are playing and share instances with them.
   </p>
 {:else}
   {#if social.incomingRequests.length}
     <div class="mb-4 rounded-lg bg-(--bg-raise) p-3">
-      <div class="mb-1.5 text-[11.5px] font-semibold text-(--accent)">
+      <div class="mb-1.5 text-[13px] font-semibold text-(--accent)">
         Friend requests · {social.incomingRequests.length}
       </div>
       {#each social.incomingRequests as r (r.user.id)}
@@ -83,7 +83,7 @@
           <Head user={r.user} size={28} ring="var(--bg-raise)" />
           <div class="min-w-0 flex-1">
             <b class="block truncate font-medium">{r.user.displayName}</b>
-            <small class="block truncate text-[11px] text-(--text-faint)"
+            <small class="block truncate text-[13px] text-(--text-faint)"
               >@{r.user.username}</small
             >
           </div>
@@ -109,18 +109,18 @@
   {/if}
 
   {#if social.friends.length === 0}
-    <p class="text-[12.5px] text-(--text-muted)">
+    <p class="text-[13px] text-(--text-muted)">
       No friends yet. Swap friend codes on the Friends page.
     </p>
   {/if}
   {#if online.length}
-    <div class="mt-1 mb-1 text-[11.5px] font-semibold text-(--text-faint)">
+    <div class="mt-1 mb-1 text-[13px] font-semibold text-(--text-faint)">
       Online · {online.length}
     </div>
     {#each online as f (f.user.id)}{@render row(f)}{/each}
   {/if}
   {#if offline.length}
-    <div class="mt-4 mb-1 text-[11.5px] font-semibold text-(--text-faint)">
+    <div class="mt-4 mb-1 text-[13px] font-semibold text-(--text-faint)">
       Offline · {offline.length}
     </div>
     {#each offline as f (f.user.id)}{@render row(f)}{/each}

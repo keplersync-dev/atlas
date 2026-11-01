@@ -72,7 +72,7 @@
     <span class="ico"><Icon name={icon} class="size-4.5" /></span>
     <div class="min-w-0 flex-1">
       <b class="font-semibold">{title}</b>
-      <small class="block text-xs text-(--text-muted) select-text"
+      <small class="block text-[13px] text-(--text-muted) select-text"
         >{detail}</small
       >
     </div>
@@ -97,7 +97,7 @@
   )}
 {:else if instance.status === "syncing" && instance.progress}
   <div class="mt-5 rounded-lg bg-(--bg-raise) px-4 py-3">
-    <div class="flex items-center justify-between gap-3 text-[12.5px]">
+    <div class="flex items-center justify-between gap-3 text-[13px]">
       <span class="flex-1">{STAGES[instance.progress.stage]}</span>
       {#if !waiting}
         <span class="text-(--text-muted) tabular-nums"
@@ -115,7 +115,7 @@
         <ManualDownloads {instance} />
       </div>
     {:else if !waiting}
-      <div class="mt-2 h-1 overflow-hidden rounded-full bg-(--line-2)">
+      <div class="mt-2 h-1 overflow-hidden rounded-full bg-(--line)">
         <div
           class="h-full bg-(--accent) transition-[width] duration-300"
           style="width: {instance.progress.percent}%"
@@ -126,13 +126,13 @@
 {:else if work}
   {@const percent = workPercent(work)}
   <div class="mt-5 rounded-lg bg-(--bg-raise) px-4 py-3">
-    <div class="flex justify-between text-[12.5px]">
+    <div class="flex justify-between text-[13px]">
       <span class="tabular-nums">{workLabel(work)}</span>
       {#if percent !== null}<span class="text-(--text-muted) tabular-nums"
           >{percent}%</span
         >{/if}
     </div>
-    <div class="mt-2 h-1 overflow-hidden rounded-full bg-(--line-2)">
+    <div class="mt-2 h-1 overflow-hidden rounded-full bg-(--line)">
       <div
         class="h-full bg-(--accent) transition-[width] duration-300 {percent ===
         null

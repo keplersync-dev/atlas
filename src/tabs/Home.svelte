@@ -29,6 +29,30 @@
     test: (i: InstanceSummary) => boolean;
   }[];
 
+  const STEPS = [
+    {
+      icon: "plus",
+      title: "Add your instance",
+      text: "From Prism, the Modrinth App or CurseForge. Atlas only reads it.",
+    },
+    {
+      icon: "share",
+      title: "Share it with friends",
+      text: "They pick their launcher, and Atlas sets it up for them.",
+    },
+    {
+      icon: "refresh",
+      title: "Stay the same",
+      text: "When you change a mod, their copy follows.",
+    },
+  ];
+  const LAUNCHERS = [
+    "Prism Launcher",
+    "Modrinth App",
+    "CurseForge",
+    "Minecraft Launcher",
+  ];
+
   const matches = (name: string) =>
     name.toLowerCase().includes(query.trim().toLowerCase());
 
@@ -53,11 +77,38 @@
           ORDER[sort](a, b),
       ),
   );
+  // Under All, cards that need the player get their own section above the rest.
+  const attention = $derived(
+    filter === "all" ? shown.filter(needsAttention) : [],
+  );
+  const rest = $derived(
+    filter === "all" ? shown.filter((i) => !needsAttention(i)) : shown,
+  );
   // Invites only show under All; the search narrows them too.
   const invites = $derived(
     filter === "all" ? social.invites.filter((s) => matches(s.name)) : [],
   );
 </script>
+
+<!-- A section heading with a coloured bar; amber for what needs the player. -->
+{#snippet heading(
+  label: string,
+  count: number,
+  tone: "accent" | "warn" = "accent",
+)}
+  <h2
+    class="mb-3 flex items-center gap-2 font-(family-name:--font-display) text-[16px] font-semibold"
+  >
+    <i
+      class="h-4 w-1 rounded-full {tone === 'warn'
+        ? 'bg-(--warn)'
+        : 'bg-(--accent)'}"
+      aria-hidden="true"
+    ></i>
+    {label}
+    <span class="font-normal text-(--text-faint)">{count}</span>
+  </h2>
+{/snippet}
 
 <div class="flex min-h-full">
   <!-- ── Main column: grows with the window ── -->
@@ -72,21 +123,44 @@
         >
       </div>
     {:else if instances.list.length === 0}
-      <div class="max-w-xl pt-10">
+      <div class="max-w-2xl pt-10">
         <h1
           class="font-(family-name:--font-display) text-3xl font-semibold tracking-tight"
         >
           Keep your friends on the same mods.
         </h1>
-        <p class="mt-2.5 text-sm text-(--text-muted)">
-          Atlas works alongside the launcher you already use. Track an instance
-          from Prism, the Modrinth App or CurseForge to share it or receive
-          updates for it.
+        <ol class="mt-7 grid gap-3 sm:grid-cols-3">
+          {#each STEPS as step, i (step.title)}
+            <li
+              class="rounded-xl border border-(--line) bg-(--bg-raise) px-4 py-3.5 shadow-[0_8px_24px_#0000004d]"
+            >
+              <span
+                class="grid size-8 place-items-center rounded-full bg-(--accent)/14 text-(--accent)"
+              >
+                <Icon name={step.icon} class="size-4" />
+              </span>
+              <b class="mt-3 block text-[15px] font-semibold"
+                >{i + 1}. {step.title}</b
+              >
+              <p class="mt-0.5 text-[13px] text-(--text-muted)">{step.text}</p>
+            </li>
+          {/each}
+        </ol>
+        <p
+          class="mt-5 flex flex-wrap items-center gap-1.5 text-[13px] text-(--text-muted)"
+        >
+          Works with
+          {#each LAUNCHERS as name (name)}
+            <span
+              class="rounded-full border border-(--line) bg-(--bg-raise) px-2.5 py-0.5"
+              >{name}</span
+            >
+          {/each}
         </p>
         <Button
           variant="primary"
           size="lg"
-          class="mt-6"
+          class="mt-7"
           onclick={() => openDialog({ kind: "track" })}
         >
           Choose instances
@@ -104,7 +178,7 @@
           <input
             bind:value={query}
             placeholder="Search instances"
-            class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg-raise) pr-2.5 pl-8 text-[12.5px] placeholder:text-(--text-faint) focus:border-(--accent) focus:outline-none"
+            class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg-raise) pr-2.5 pl-8 text-[13px] placeholder:text-(--text-faint) focus:border-(--accent) focus:outline-none"
           />
         </label>
         <div
@@ -117,7 +191,7 @@
               role="radio"
               aria-checked={filter === f.key}
               onclick={() => (filter = f.key)}
-              class="h-7 rounded-full px-3 text-xs {filter === f.key
+              class="h-7 rounded-full px-3 text-[13px] {filter === f.key
                 ? 'bg-(--accent)/15 font-semibold text-(--accent)'
                 : 'text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)'}"
             >
@@ -148,14 +222,24 @@
         </div>
       </div>
 
+      <!-- Under All, what needs the player gets its own section first. -->
+      {#if attention.length}
+        <section class="mb-9">
+          {@render heading("Needs you", attention.length, "warn")}
+          <div
+            class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4"
+          >
+            {#each attention as inst (inst.id)}
+              <InstanceCard instance={inst} />
+            {/each}
+          </div>
+        </section>
+      {/if}
+
       <!-- Invites are instances too, so they get a row of cards above yours. -->
       {#if invites.length}
         <section class="mb-9">
-          <h2 class="mb-3 text-[15px] font-semibold">
-            Shared with you <span class="font-normal text-(--text-faint)"
-              >{invites.length}</span
-            >
-          </h2>
+          {@render heading("Shared with you", invites.length)}
           <div
             class="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3"
           >
@@ -167,29 +251,27 @@
       {/if}
 
       <section>
-        <!-- Only needed to tell them apart from the invites above. -->
-        {#if invites.length}
-          <h2 class="mb-3 text-[15px] font-semibold">
-            Your instances <span class="font-normal text-(--text-faint)"
-              >{shown.length}</span
-            >
-          </h2>
+        <!-- Only needed to tell them apart from the sections above. -->
+        {#if invites.length || attention.length}
+          {@render heading("Your instances", rest.length)}
         {/if}
         <!-- auto-fill: as many 240px+ columns as fit, so wide windows get more columns -->
         <div class="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-4">
-          {#each shown as inst (inst.id)}
+          {#each rest as inst (inst.id)}
             <InstanceCard instance={inst} />
           {:else}
-            <p class="col-span-full py-10 text-center text-(--text-muted)">
-              {query.trim()
-                ? `No instances match “${query.trim()}”.`
-                : {
-                    all: "",
-                    needs: "Nothing needs you right now.",
-                    shared: "None of your instances are shared yet.",
-                    local: "Every instance you track is shared.",
-                  }[filter]}
-            </p>
+            {#if !attention.length}
+              <p class="col-span-full py-10 text-center text-(--text-muted)">
+                {query.trim()
+                  ? `No instances match “${query.trim()}”.`
+                  : {
+                      all: "",
+                      needs: "Nothing needs you right now.",
+                      shared: "None of your instances are shared yet.",
+                      local: "Every instance you track is shared.",
+                    }[filter]}
+              </p>
+            {/if}
           {/each}
         </div>
       </section>

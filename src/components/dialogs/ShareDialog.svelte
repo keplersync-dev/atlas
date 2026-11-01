@@ -156,11 +156,11 @@
   {/snippet}
 
   {#if !social.signedIn}
-    <p class="py-4 text-[12.5px] text-(--text-muted)">
+    <p class="py-4 text-[13px] text-(--text-muted)">
       Sign in to share instances with friends.
     </p>
   {:else}
-    <h3 class="mt-1 mb-1.5 text-xs font-semibold text-(--text-muted)">
+    <h3 class="mt-1 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
       People
     </h3>
     {#each social.friends as f (f.user.id)}
@@ -181,7 +181,7 @@
         <Head user={f.user} size={28} ring="#15181d" />
         <span class="min-w-0 flex-1">
           <b class="block font-medium">{f.user.displayName}</b>
-          <small class="block text-[11.5px] text-(--text-faint)"
+          <small class="block text-[13px] text-(--text-faint)"
             >{status === "invited"
               ? "Invite pending"
               : member
@@ -191,13 +191,13 @@
         </span>
       </label>
     {:else}
-      <p class="text-[12.5px] text-(--text-muted)">
+      <p class="text-[13px] text-(--text-muted)">
         No friends yet. Add some on the Friends page, or share with a group.
       </p>
     {/each}
 
     {#if groups.data?.length}
-      <h3 class="mt-4 mb-1.5 text-xs font-semibold text-(--text-muted)">
+      <h3 class="mt-4 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
         Groups
       </h3>
       {#each groups.data as g (g.id)}
@@ -223,7 +223,7 @@
           </span>
           <span class="min-w-0 flex-1">
             <b class="block font-medium">{g.name}</b>
-            <small class="block text-[11.5px] text-(--text-faint)">
+            <small class="block text-[13px] text-(--text-faint)">
               {plural(g.members.length, "member")}{linked
                 ? " · already shared"
                 : ""}
@@ -233,7 +233,7 @@
       {/each}
     {/if}
 
-    <h3 class="mt-4 mb-1.5 text-xs font-semibold text-(--text-muted)">
+    <h3 class="mt-4 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
       They can
     </h3>
     <div
@@ -247,7 +247,7 @@
           type="button"
           aria-pressed={role === option.id}
           onclick={() => (role = option.id)}
-          class="rounded px-3 py-1 text-xs font-medium {role === option.id
+          class="rounded px-3 py-1 text-[13px] font-medium {role === option.id
             ? 'bg-(--bg-raise-2) text-(--text-primary)'
             : 'text-(--text-muted)'}"
         >
@@ -257,7 +257,7 @@
     </div>
 
     {#if mode === "share"}
-      <h3 class="mt-4 mb-1.5 text-xs font-semibold text-(--text-muted)">
+      <h3 class="mt-4 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
         Description <span class="font-normal text-(--text-faint)"
           >(optional)</span
         >
@@ -269,17 +269,17 @@
         class="h-8.5 w-full rounded-md border border-(--line-2) bg-(--bg) px-3 outline-none focus:border-(--accent)"
       />
 
-      <h3 class="mt-4 mb-0.5 text-xs font-semibold text-(--text-muted)">
+      <h3 class="mt-4 mb-0.5 text-[13px] font-semibold text-(--text-muted)">
         What friends get
       </h3>
       {#if plan.loading}
-        <p class="text-[12.5px] text-(--text-muted) tabular-nums">
+        <p class="text-[13px] text-(--text-muted) tabular-nums">
           {work
             ? workLabel(work)
             : "Checking which files friends can download…"}
         </p>
       {:else if plan.error}
-        <p class="text-[12.5px] text-(--danger)">{plan.error}</p>
+        <p class="text-[13px] text-(--danger)">{plan.error}</p>
       {:else if plan.data}
         <SharePicker
           items={plan.data.items}
@@ -308,10 +308,10 @@
         tone={submitting && work ? "muted" : "danger"}
       />
     {:else if submitting && work}<span
-        class="mr-auto text-xs text-(--text-muted) tabular-nums"
+        class="mr-auto text-[13px] text-(--text-muted) tabular-nums"
         >{workLabel(work)}</span
       >{:else if error}<span
-        class="mr-auto text-xs text-(--danger)"
+        class="mr-auto text-[13px] text-(--danger)"
         role="alert">{error}</span
       >{/if}
     <Button variant="ghost" onclick={onclose}>Cancel</Button>

@@ -56,7 +56,7 @@
         {link.label}
         {#if badge(link.view)}
           <span
-            class="ml-auto rounded-full bg-(--accent) px-1.5 text-[11px] leading-4.25 font-semibold text-(--accent-ink) tabular-nums"
+            class="ml-auto rounded-full bg-(--accent) px-1.5 text-[13px] leading-4.25 font-semibold text-(--accent-ink) tabular-nums"
           >
             {badge(link.view)}
           </span>
@@ -66,7 +66,7 @@
   </nav>
 
   <div
-    class="flex items-center justify-between px-5 pt-4 pb-1.5 text-[11.5px] font-semibold text-(--text-faint)"
+    class="flex items-center justify-between px-5 pt-4 pb-1.5 text-[13px] font-semibold text-(--text-faint)"
   >
     <span>Instances</span>
     <button
@@ -105,7 +105,7 @@
         <span class="min-w-0 flex-1">
           <b class="block truncate text-[13px] font-medium">{inst.name}</b>
           <small
-            class="block truncate text-[11px] {inst.status === 'missing'
+            class="block truncate text-[13px] {inst.status === 'missing'
               ? 'text-(--warn)'
               : 'text-(--text-faint)'}"
           >
@@ -125,7 +125,7 @@
       </button>
     {:else}
       {#if instances.loaded}
-        <p class="px-2.5 py-1.5 text-xs text-(--text-faint)">
+        <p class="px-2.5 py-1.5 text-[13px] text-(--text-faint)">
           Nothing tracked yet.
         </p>
       {/if}
@@ -151,7 +151,7 @@
         <b class="block truncate text-[13px] font-medium"
           >{social.session.user.displayName}</b
         >
-        <small class="block text-[11px] text-(--text-faint)"
+        <small class="block text-[13px] text-(--text-faint)"
           >{!social.session.online
             ? "Can't reach the server"
             : social.session.user.appearOffline
@@ -162,7 +162,7 @@
       <Icon name="more" class="size-4 text-(--text-faint)" />
     </button>
   {:else if social.loaded && !social.hasServer}
-    <p class="px-5 pt-3 pb-4 text-center text-[11.5px] text-(--text-faint)">
+    <p class="px-5 pt-3 pb-4 text-center text-[13px] text-(--text-faint)">
       Friends and sharing aren't available in this copy of Atlas.
     </p>
   {:else if social.loaded}
@@ -177,7 +177,7 @@
         </button>
       {/each}
       {#if social.signingIn}
-        <p class="mt-0.5 text-center text-[11.5px] text-(--text-faint)">
+        <p class="mt-0.5 text-center text-[13px] text-(--text-faint)">
           Finish signing in there.
           <button
             onclick={() => social.signingIn && social.signIn(social.signingIn)}
@@ -190,14 +190,11 @@
           >
         </p>
       {:else if social.signInError || legalError}
-        <p
-          class="mt-0.5 text-center text-[11.5px] text-(--danger)"
-          role="alert"
-        >
+        <p class="mt-0.5 text-center text-[13px] text-(--danger)" role="alert">
           {social.signInError ?? legalError}
         </p>
       {/if}
-      <p class="mt-1 text-center text-[11px] leading-snug text-(--text-faint)">
+      <p class="mt-1 text-center text-[13px] leading-snug text-(--text-faint)">
         By signing in you agree to the
         <button
           type="button"

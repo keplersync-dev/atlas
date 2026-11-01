@@ -155,7 +155,7 @@
 {#if unchecked.length}
   <!-- Whether these need uploading isn't known, so sharing waits for an answer. -->
   <div
-    class="mb-3 flex items-start gap-3 rounded-lg bg-(--warn)/10 px-3.5 py-3 text-[12.5px]"
+    class="mb-3 flex items-start gap-3 rounded-lg bg-(--warn)/10 px-3.5 py-3 text-[13px]"
     role="alert"
   >
     <Icon name="warn" class="mt-0.5 size-4 text-(--warn)" />
@@ -187,7 +187,7 @@
   <!-- Only shown when an unknown file is set to be shared. Named, so the checkbox
        is about files the owner can see. -->
   <div class="mb-3 rounded-lg bg-(--bg-raise) px-3.5 py-3">
-    <p class="text-[12.5px] text-(--text-muted)">
+    <p class="text-[13px] text-(--text-muted)">
       {uploads.length === 1 ? "This isn't" : "These aren't"} on Modrinth or CurseForge,
       so {uploads.length === 1 ? "it" : "they"} will be uploaded to Atlas for your
       friends.
@@ -201,26 +201,26 @@
             class="size-5 rounded-[4px]"
           />
           <span class="min-w-0 flex-1 truncate font-medium">{item.name}</span>
-          <span class="text-[11.5px] text-(--text-faint)"
+          <span class="text-[13px] text-(--text-faint)"
             >{fileSize(item.sizeBytes)}</span
           >
           <button
             type="button"
             onclick={() => keepLocal([item])}
-            class="rounded px-2 py-0.5 text-[12px] text-(--accent) hover:bg-(--bg-hover)"
+            class="rounded px-2 py-0.5 text-[13px] text-(--accent) hover:bg-(--bg-hover)"
             >Set to Only me</button
           >
         </li>
       {/each}
     </ul>
-    <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-(--line-2)">
+    <div class="mt-2 h-1.5 overflow-hidden rounded-full bg-(--line)">
       <div
         class="h-full {overQuota ? 'bg-(--danger)' : 'bg-(--accent)'}"
         style="width: {Math.min(100, (usedAfter / storage.quotaBytes) * 100)}%"
       ></div>
     </div>
     <div
-      class="mt-1.5 flex justify-between text-[11.5px] {overQuota
+      class="mt-1.5 flex justify-between text-[13px] {overQuota
         ? 'text-(--danger)'
         : 'text-(--text-faint)'}"
     >
@@ -230,7 +230,7 @@
       {#if overQuota}<span>Not enough space</span>{/if}
     </div>
     {#if tooBig.length}
-      <p class="mt-1.5 text-[11.5px] text-(--danger)">
+      <p class="mt-1.5 text-[13px] text-(--danger)">
         {tooBig.map((i) => i.name).join(", ")}
         {tooBig.length === 1 ? "is" : "are"} over the {fileSize(
           storage.maxFileBytes,
@@ -247,7 +247,7 @@
         type="button"
         aria-pressed={kind === chip.id}
         onclick={() => (kind = chip.id)}
-        class="h-7 rounded-full px-2.75 text-xs font-medium transition-colors
+        class="h-7 rounded-full px-2.75 text-[13px] font-medium transition-colors
           {kind === chip.id
           ? 'bg-(--bg-raise-2) text-(--text-primary)'
           : 'text-(--text-muted) hover:bg-(--bg-hover)'}"
@@ -270,7 +270,7 @@
           type="button"
           aria-pressed={filter === f.id}
           onclick={() => (filter = f.id as "new" | "all")}
-          class="rounded px-2.5 py-0.5 text-xs font-medium {filter === f.id
+          class="rounded px-2.5 py-0.5 text-[13px] font-medium {filter === f.id
             ? 'bg-(--bg-raise-2) text-(--text-primary)'
             : 'text-(--text-muted)'}"
         >
@@ -286,11 +286,11 @@
     <input
       bind:value={query}
       placeholder="Search {plural(ofKind.length, 'file')}"
-      class="w-full border-none bg-transparent text-xs text-(--text-primary) placeholder:text-(--text-faint) focus:ring-0 focus:outline-hidden!"
+      class="w-full border-none bg-transparent text-[13px] text-(--text-primary) placeholder:text-(--text-faint) focus:ring-0 focus:outline-hidden!"
     />
   </label>
   {#if shown.length > 1}
-    <span class="flex items-center gap-1 text-[11.5px] text-(--text-faint)">
+    <span class="flex items-center gap-1 text-[13px] text-(--text-faint)">
       Set all shown:
       {#each SHARE_MODES as m (m.id)}
         <button
@@ -323,7 +323,7 @@
             ? 'text-(--text-muted)'
             : ''}">{item.name}</b
         >
-        <small class="block truncate text-[11.5px] text-(--text-faint)">
+        <small class="block truncate text-[13px] text-(--text-faint)">
           {KIND[item.kind]}
           {#if item.isNew}· <span class="text-(--accent)">new</span>{/if}
           {#if was && was !== "private" && mode !== was}· was {SHARE_MODES.find(
@@ -332,11 +332,11 @@
         </small>
         <!-- Its own line, so the warning is never the part that gets cut off. -->
         {#if item.unchecked && mode !== "private"}
-          <small class="block text-[11.5px] text-(--warn)">
+          <small class="block text-[13px] text-(--warn)">
             Couldn't check with Modrinth and CurseForge yet
           </small>
         {:else if item.needsUpload && !item.alreadyUploaded && mode !== "private"}
-          <small class="block text-[11.5px] text-(--warn)">
+          <small class="block text-[13px] text-(--warn)">
             Not on Modrinth or CurseForge · uploads {fileSize(item.sizeBytes)}
           </small>
         {/if}
@@ -348,7 +348,7 @@
       />
     </div>
   {:else}
-    <p class="px-3 py-6 text-center text-[12.5px] text-(--text-muted)">
+    <p class="px-3 py-6 text-center text-[13px] text-(--text-muted)">
       {#if query}
         Nothing matches “{query}”.
       {:else if filter === "new"}

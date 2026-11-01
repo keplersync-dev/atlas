@@ -28,7 +28,9 @@
   <ContentIcon src={invite.icon} seed={invite.id} class="size-12 rounded-lg" />
   <div class="min-w-0 flex-1">
     <b class="block truncate text-[14px] font-semibold">{invite.name}</b>
-    <span class="mt-0.5 flex items-center gap-1.5 text-xs text-(--text-muted)">
+    <span
+      class="mt-0.5 flex items-center gap-1.5 text-[13px] text-(--text-muted)"
+    >
       {#if from}<Head user={from} size={16} ring="var(--bg-raise)" />{/if}
       <span class="truncate">
         {from?.displayName ?? "Someone"}{invite.myViaGroup
@@ -36,7 +38,7 @@
           : ""} · {timeAgo(invite.invitedAt)}
       </span>
     </span>
-    <small class="block truncate text-[11.5px] text-(--text-faint)">
+    <small class="block truncate text-[13px] text-(--text-faint)">
       {versionLabel(invite.loader, invite.minecraftVersion)} · {plural(
         invite.contentCount,
         "item",

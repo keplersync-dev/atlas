@@ -77,23 +77,23 @@
   onsubmit={act}
 >
   {#if !social.signedIn}
-    <p class="py-2 text-[12.5px] text-(--text-muted)">
+    <p class="py-2 text-[13px] text-(--text-muted)">
       Sign in first, then open the link again.
     </p>
   {:else if loading}
-    <p class="py-2 text-[12.5px] text-(--text-muted)">Looking it up…</p>
+    <p class="py-2 text-[13px] text-(--text-muted)">Looking it up…</p>
   {:else if lookupError}
-    <p class="py-2 text-[12.5px] text-(--danger)">{lookupError}</p>
+    <p class="py-2 text-[13px] text-(--danger)">{lookupError}</p>
   {:else if friend.data}
     <div class="flex items-center gap-3 rounded-lg bg-(--bg-raise) px-3 py-3">
       <Head user={friend.data} size={36} ring="var(--bg-raise)" />
       <div class="min-w-0 flex-1">
         <b class="block font-semibold">{friend.data.displayName}</b>
-        <small class="text-[11.5px] text-(--text-faint)"
+        <small class="text-[13px] text-(--text-faint)"
           >@{friend.data.username}</small
         >
       </div>
-      <span class="text-xs text-(--text-muted)">
+      <span class="text-[13px] text-(--text-muted)">
         {#if relation === "self"}That's you
         {:else if relation === "friend"}Already friends
         {:else if relation === "pending"}Request sent
@@ -104,13 +104,13 @@
   {:else if group.data}
     <div class="rounded-lg bg-(--bg-raise) px-3.5 py-3">
       <b class="block text-[14px] font-semibold">{group.data.groupName}</b>
-      <small class="text-[11.5px] text-(--text-faint)">
+      <small class="text-[13px] text-(--text-faint)">
         {plural(group.data.memberCount, "member")}{group.data.invitedBy
           ? ` · invite from ${group.data.invitedBy.displayName}`
           : ""}
       </small>
     </div>
-    <p class="mt-2.5 text-xs text-(--text-muted)">
+    <p class="mt-2.5 text-[13px] text-(--text-muted)">
       {group.data.alreadyMember
         ? "You're already in this group."
         : "Instances shared with the group will show up for you to add."}
@@ -118,7 +118,7 @@
   {/if}
 
   {#snippet footer()}
-    {#if error}<span class="mr-auto text-xs text-(--danger)" role="alert"
+    {#if error}<span class="mr-auto text-[13px] text-(--danger)" role="alert"
         >{error}</span
       >{/if}
     <Button variant="ghost" onclick={onclose}>

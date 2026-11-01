@@ -111,17 +111,17 @@
   {/snippet}
 
   {#if plan.loading}
-    <p class="py-4 text-[12.5px] text-(--text-muted) tabular-nums">
+    <p class="py-4 text-[13px] text-(--text-muted) tabular-nums">
       {work
         ? workLabel(work)
         : `Comparing your folder with v${nextVersion - 1}…`}
     </p>
   {:else if plan.error}
-    <p class="py-4 text-[12.5px] text-(--danger)">{plan.error}</p>
+    <p class="py-4 text-[13px] text-(--danger)">{plan.error}</p>
   {:else if plan.data}
     <!-- Plain summary of the effect, updated live as settings change. -->
     <div
-      class="mb-3 flex flex-wrap gap-x-4 gap-y-1 rounded-lg bg-(--bg-raise) px-3.5 py-2.5 text-[12.5px]"
+      class="mb-3 flex flex-wrap gap-x-4 gap-y-1 rounded-lg bg-(--bg-raise) px-3.5 py-2.5 text-[13px]"
     >
       {#if total === 0}
         <span class="text-(--text-muted)"
@@ -167,7 +167,7 @@
       bind:rules={fileRules}
     />
 
-    <h3 class="mt-4 mb-1.5 text-xs font-semibold text-(--text-muted)">
+    <h3 class="mt-4 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
       What changed? <span class="font-normal text-(--text-faint)"
         >(optional)</span
       >
@@ -191,13 +191,15 @@
         tone={submitting && work ? "muted" : "danger"}
       />
     {:else if submitting && work}
-      <span class="mr-auto text-xs text-(--text-muted) tabular-nums"
+      <span class="mr-auto text-[13px] text-(--text-muted) tabular-nums"
         >{workLabel(work)}</span
       >
     {:else if error}
-      <span class="mr-auto text-xs text-(--danger)" role="alert">{error}</span>
+      <span class="mr-auto text-[13px] text-(--danger)" role="alert"
+        >{error}</span
+      >
     {:else if plan.data && total}
-      <span class="mr-auto text-xs text-(--text-faint)"
+      <span class="mr-auto text-[13px] text-(--text-faint)"
         >{plural(total, "change")}</span
       >
     {/if}

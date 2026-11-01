@@ -44,7 +44,7 @@
   {#if open}
     <div
       role="menu"
-      class="absolute top-full right-0 z-30 mt-1.5 w-72 rounded-lg border border-(--line-2) bg-[#1b1f25] p-1.25 shadow-[0_16px_40px_#0009]"
+      class="absolute top-full right-0 z-30 mt-1.5 w-72 rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-[0_16px_40px_#0009]"
     >
       {#each unshared as i (i.id)}
         <button
@@ -54,14 +54,14 @@
         >
           <ContentIcon src={i.icon} seed={i.id} class="size-7 rounded-md" />
           <span class="min-w-0 flex-1">
-            <b class="block truncate text-[12.5px] font-medium">{i.name}</b>
-            <small class="block truncate text-[11px] text-(--text-faint)"
+            <b class="block truncate text-[13px] font-medium">{i.name}</b>
+            <small class="block truncate text-[13px] text-(--text-faint)"
               >{i.launcher.name}</small
             >
           </span>
         </button>
       {:else}
-        <p class="px-2.5 py-2 text-[12.5px] text-(--text-muted)">
+        <p class="px-2.5 py-2 text-[13px] text-(--text-muted)">
           Everything you track is already shared.
         </p>
       {/each}
@@ -72,7 +72,7 @@
           open = false;
           openDialog({ kind: "track" });
         }}
-        class="w-full rounded-[5px] px-2.5 py-1.75 text-left text-[12.5px] text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+        class="w-full rounded-[5px] px-2.5 py-1.75 text-left text-[13px] text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
       >
         Track another instance…
       </button>

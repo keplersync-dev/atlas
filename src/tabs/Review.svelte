@@ -116,7 +116,7 @@
 <div class="max-w-205">
   <button
     onclick={() => go({ page: "instance", id })}
-    class="mb-4.5 inline-flex items-center gap-1.5 text-[12.5px] text-(--text-muted) hover:text-(--text-primary)"
+    class="mb-4.5 inline-flex items-center gap-1.5 text-[13px] text-(--text-muted) hover:text-(--text-primary)"
   >
     <Icon name="chev" class="size-3.5 rotate-180" />{summary?.name ?? "Back"}
   </button>
@@ -185,7 +185,7 @@
 
     <!-- ── Things that need attention ── -->
     {#if preview.gameRunning || summary.isRunning}
-      <div class="mb-5.5 rounded-lg bg-(--warn)/10 px-4 py-3 text-[12.5px]">
+      <div class="mb-5.5 rounded-lg bg-(--warn)/10 px-4 py-3 text-[13px]">
         <b class="font-semibold text-(--warn)"
           >Minecraft is running this instance.</b
         >
@@ -196,7 +196,7 @@
 
     {#if preview.launcherChange}
       {@const lc = preview.launcherChange}
-      <div class="mb-5.5 rounded-lg bg-(--bg-raise) px-4 py-3 text-[12.5px]">
+      <div class="mb-5.5 rounded-lg bg-(--bg-raise) px-4 py-3 text-[13px]">
         <b class="font-semibold"
           >This version needs a different setup in {summary.launcher.name}</b
         >
@@ -217,7 +217,7 @@
     {/if}
 
     {#if preview.overwrittenLocalChanges.length}
-      <div class="mb-5.5 rounded-lg bg-(--warn)/10 px-4 py-3 text-[12.5px]">
+      <div class="mb-5.5 rounded-lg bg-(--warn)/10 px-4 py-3 text-[13px]">
         <b class="font-semibold text-(--warn)"
           >This update undoes your changes to:</b
         >
@@ -226,7 +226,7 @@
     {/if}
 
     {#if preview.unverified.length}
-      <div class="mb-5.5 rounded-lg bg-(--warn)/10 px-4 py-3 text-[12.5px]">
+      <div class="mb-5.5 rounded-lg bg-(--warn)/10 px-4 py-3 text-[13px]">
         <b class="font-semibold text-(--warn)"
           >Unverified: not from Modrinth or CurseForge.</b
         >
@@ -242,7 +242,7 @@
           >You changed a config file this update also changes</b
         >
         <div
-          class="mt-0.5 font-(family-name:--font-mono) text-xs text-(--text-muted)"
+          class="mt-0.5 font-(family-name:--font-mono) text-[13px] text-(--text-muted)"
         >
           {conflict.path}
         </div>
@@ -263,7 +263,7 @@
               />
               {option.label}
               <code
-                class="mt-1.5 block bg-transparent p-0 font-(family-name:--font-mono) text-[11.5px] text-(--text-muted)"
+                class="mt-1.5 block bg-transparent p-0 font-(family-name:--font-mono) text-[13px] text-(--text-muted)"
                 >{option.value}</code
               >
             </label>
@@ -274,9 +274,7 @@
 
     <!-- ── The diff ── -->
     {#snippet group(title: string, count: number)}
-      <h2
-        class="mb-1 flex gap-2 text-[12.5px] font-semibold text-(--text-muted)"
-      >
+      <h2 class="mb-1 flex gap-2 text-[13px] font-semibold text-(--text-muted)">
         {title} <span class="font-normal text-(--text-faint)">{count}</span>
       </h2>
     {/snippet}
@@ -289,7 +287,8 @@
           >{symbol}</span
         >
         <span>{name}</span>
-        <span class="font-(family-name:--font-mono) text-xs text-(--text-muted)"
+        <span
+          class="font-(family-name:--font-mono) text-[13px] text-(--text-muted)"
           >{version}</span
         >
       </div>
@@ -355,17 +354,17 @@
         {@const manual = progress.stage === "waiting_for_manual_downloads"}
         {#if manual && summary}
           <div
-            class="basis-full rounded-lg border border-(--line-2) bg-(--bg-raise) px-4 py-3"
+            class="basis-full rounded-lg border border-(--line) bg-(--bg-raise) px-4 py-3"
           >
             <ManualDownloads instance={summary} />
           </div>
         {/if}
-        <span class="text-[12.5px] text-(--text-muted)"
+        <span class="text-[13px] text-(--text-muted)"
           >{STAGES[progress.stage]}</span
         >
         <div class="flex items-center gap-3">
           {#if !manual && progress.stage !== "waiting_for_game_exit"}
-            <div class="h-1 w-56 overflow-hidden rounded-full bg-(--line-2)">
+            <div class="h-1 w-56 overflow-hidden rounded-full bg-(--line)">
               <div
                 class="h-full bg-(--accent) transition-[width] duration-300"
                 style="width: {progress.percent}%"
@@ -386,7 +385,7 @@
         </div>
       {:else}
         <span
-          class="text-[12.5px] {error
+          class="text-[13px] {error
             ? 'text-(--danger)'
             : 'text-(--text-muted)'}"
         >

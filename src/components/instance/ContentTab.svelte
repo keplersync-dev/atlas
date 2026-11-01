@@ -187,7 +187,7 @@
       <button
         aria-pressed={kind === chip.id}
         onclick={() => (kind = chip.id)}
-        class="h-7 rounded-full px-2.75 text-xs font-medium transition-colors
+        class="h-7 rounded-full px-2.75 text-[13px] font-medium transition-colors
           {kind === chip.id
           ? 'bg-(--bg-raise-2) text-(--text-primary)'
           : 'text-(--text-muted) hover:bg-(--bg-hover)'}"
@@ -205,18 +205,18 @@
     <input
       bind:value={query}
       placeholder="Filter {instance.content.length} items"
-      class="w-full bg-transparent text-[12.5px] text-(--text-primary) outline-none placeholder:text-(--text-faint)"
+      class="w-full bg-transparent text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-faint)"
     />
   </label>
 </div>
 
 {#if canSetModes}
-  <p class="mb-1 text-xs text-(--text-faint)">
+  <p class="mb-1 text-[13px] text-(--text-faint)">
     Choose how each file is shared. Changes reach friends when you publish.
   </p>
 {/if}
 {#if lockedReason}
-  <p class="mb-1 text-xs text-(--text-faint)">{lockedReason}</p>
+  <p class="mb-1 text-[13px] text-(--text-faint)">{lockedReason}</p>
 {/if}
 
 <div>
@@ -236,7 +236,7 @@
       />
       <div class="min-w-0 {present ? '' : 'opacity-60'}">
         <b class="block truncate font-medium">{item.name}</b>
-        <small class="block truncate text-[11.5px] text-(--text-faint)">
+        <small class="block truncate text-[13px] text-(--text-faint)">
           {SINGULAR[item.kind]}
           {#if canSetModes}
             · <span title={SOURCES[item.source].hint}
@@ -268,7 +268,7 @@
           {/if}
         </small>
       </div>
-      <span class="truncate font-mono text-xs text-(--text-faint)"
+      <span class="truncate font-mono text-[13px] text-(--text-faint)"
         >{item.versionLabel ?? "—"}</span
       >
 
@@ -294,7 +294,7 @@
       {:else}
         <span
           title={SOURCES[item.source].hint}
-          class="flex min-w-0 items-center gap-1.5 text-[11.5px] text-(--text-muted)"
+          class="flex min-w-0 items-center gap-1.5 text-[13px] text-(--text-muted)"
         >
           <i class="size-1.5 shrink-0 rounded-xs {SOURCES[item.source].dot}"
           ></i><span class="truncate">{SOURCES[item.source].label}</span>

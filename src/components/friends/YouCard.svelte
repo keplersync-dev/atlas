@@ -119,7 +119,7 @@
               aria-haspopup="menu"
               aria-expanded={statusOpen}
               onclick={() => (statusOpen = !statusOpen)}
-              class="-ml-1 flex items-center gap-1.5 rounded px-1 text-xs text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+              class="-ml-1 flex items-center gap-1.5 rounded px-1 text-[13px] text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
             >
               <span
                 class="size-2 rounded-full {me.appearOffline
@@ -132,7 +132,7 @@
             {#if statusOpen}
               <div
                 role="menu"
-                class="absolute top-full left-0 z-30 mt-1.5 w-64 rounded-lg border border-(--line-2) bg-[#1b1f25] p-1.25 shadow-[0_16px_40px_#0009]"
+                class="absolute top-full left-0 z-30 mt-1.5 w-64 rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-[0_16px_40px_#0009]"
               >
                 {#each [{ offline: false, label: "Online", hint: "Friends see when you're on and what you're playing" }, { offline: true, label: "Appear offline", hint: "Friends see you as offline" }] as o (o.label)}
                   <button
@@ -147,8 +147,8 @@
                         : 'bg-(--online)'}"
                     ></span>
                     <span>
-                      <b class="block text-[12.5px] font-medium">{o.label}</b>
-                      <small class="text-[11.5px] text-(--text-faint)"
+                      <b class="block text-[13px] font-medium">{o.label}</b>
+                      <small class="text-[13px] text-(--text-faint)"
                         >{o.hint}</small
                       >
                     </span>
@@ -160,11 +160,11 @@
         </div>
       </div>
 
-      <span class="h-9 w-px bg-(--line-2)"></span>
+      <span class="h-9 w-px bg-(--line)"></span>
 
       <!-- Your code -->
       <div>
-        <small class="block text-[11px] text-(--text-faint)"
+        <small class="block text-[13px] text-(--text-faint)"
           >Your friend code</small
         >
         <span class="font-mono text-lg font-semibold tracking-[2px] select-text"
@@ -210,27 +210,29 @@
 
     <!-- Results and messages, under the row -->
     {#if clip.failed === "code"}
-      <p class="mt-2.5 text-xs text-(--warn)">
+      <p class="mt-2.5 text-[13px] text-(--warn)">
         Couldn't copy. Select the code and copy it yourself.
       </p>
     {:else if clip.failed === "link"}
-      <p class="mt-2.5 text-xs text-(--warn)">
+      <p class="mt-2.5 text-[13px] text-(--warn)">
         Couldn't copy. Your link: {me.friendLink}
       </p>
     {/if}
-    {#if statusError}<p class="mt-2.5 text-xs text-(--danger)" role="alert">
+    {#if statusError}<p class="mt-2.5 text-[13px] text-(--danger)" role="alert">
         {statusError}
       </p>{/if}
     {#if lookup.status === "loading"}
-      <p class="mt-2.5 text-xs text-(--text-faint)">
+      <p class="mt-2.5 text-[13px] text-(--text-faint)">
         Looking up {formatCode(code)}…
       </p>
     {:else if lookup.status === "missing"}
-      <p class="mt-2.5 text-xs text-(--danger)">
+      <p class="mt-2.5 text-[13px] text-(--danger)">
         No one has that code. Check it with your friend; codes can be reset.
       </p>
     {:else if lookup.status === "self"}
-      <p class="mt-2.5 text-xs text-(--text-muted)">That's your own code.</p>
+      <p class="mt-2.5 text-[13px] text-(--text-muted)">
+        That's your own code.
+      </p>
     {:else if lookup.status === "found"}
       <div
         class="mt-3 flex items-center gap-3 rounded-lg bg-(--bg) px-3 py-2.5"
@@ -238,14 +240,14 @@
         <Head user={lookup.user} size={32} />
         <div class="min-w-0 flex-1">
           <b class="block font-medium">{lookup.user.displayName}</b>
-          <small class="text-[11.5px] text-(--text-faint)"
+          <small class="text-[13px] text-(--text-faint)"
             >@{lookup.user.username}</small
           >
         </div>
         {#if relation === "friend"}
-          <span class="text-xs text-(--online)">Already friends</span>
+          <span class="text-[13px] text-(--online)">Already friends</span>
         {:else if relation === "pending"}
-          <span class="text-xs text-(--text-faint)">Request sent</span>
+          <span class="text-[13px] text-(--text-faint)">Request sent</span>
         {:else}
           <Button size="sm" variant="primary" disabled={sending} onclick={send}>
             {relation === "incoming" ? "Accept their request" : "Send request"}
@@ -253,9 +255,11 @@
         {/if}
       </div>
     {:else if sentTo}
-      <p class="mt-2.5 text-xs text-(--online)">Request sent to {sentTo}.</p>
+      <p class="mt-2.5 text-[13px] text-(--online)">
+        Request sent to {sentTo}.
+      </p>
     {/if}
-    {#if error}<p class="mt-2.5 text-xs text-(--danger)" role="alert">
+    {#if error}<p class="mt-2.5 text-[13px] text-(--danger)" role="alert">
         {error}
       </p>{/if}
   </section>

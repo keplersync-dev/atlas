@@ -21,18 +21,16 @@
 
 {#snippet step(n: number)}
   <span
-    class="grid size-5 shrink-0 place-items-center rounded-full bg-(--accent)/15 text-[11px] font-semibold text-(--accent)"
+    class="grid size-5 shrink-0 place-items-center rounded-full bg-(--accent)/15 text-[13px] font-semibold text-(--accent)"
     >{n}</span
   >
 {/snippet}
 
-<div class="text-[12.5px]">
+<div class="text-[13px]">
   <ol class="grid gap-1.5">
     <li class="flex items-center gap-2.5">
       {@render step(1)}
-      <span
-        >Your browser downloads {one ? "it" : "them"} in a few seconds</span
-      >
+      <span>Your browser downloads {one ? "it" : "them"} in a few seconds</span>
     </li>
     <li class="flex items-center gap-2.5">
       {@render step(2)}
@@ -44,7 +42,7 @@
       <li class="flex items-center gap-3">
         <span class="min-w-0 flex-1">
           <b class="block truncate font-medium">{f.contentName}</b>
-          <small class="block truncate text-[11.5px] text-(--text-faint)"
+          <small class="block truncate text-[13px] text-(--text-faint)"
             >{f.fileName}</small
           >
         </span>

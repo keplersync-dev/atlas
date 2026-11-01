@@ -203,7 +203,7 @@
       >
       {#if on && f.changed}
         <span
-          class="shrink-0 rounded-full bg-(--bg-raise-2) px-2 text-[12px] text-(--text-muted)"
+          class="shrink-0 rounded-full bg-(--bg-raise-2) px-2 text-[13px] text-(--text-muted)"
           title="Set differently from the modpack's copy, so friends get yours. Mods often change their own settings when the game runs, so not every change is yours."
           >Changed</span
         >
@@ -228,7 +228,7 @@
           title={kept === "first_install"
             ? "Friends get your copy when they join, then keep their own changes. Click to keep it in sync on every update instead."
             : "Send it once: friends get your copy when they join, then keep their own changes."}
-          class="shrink-0 rounded-full px-2 text-[12px] {kept ===
+          class="shrink-0 rounded-full px-2 text-[13px] {kept ===
           'first_install'
             ? 'bg-(--accent)/12 text-(--accent) hover:bg-(--accent)/20'
             : 'border border-dashed border-(--line-2) text-(--text-muted) opacity-0 group-hover:opacity-100 hover:text-(--text-primary) focus-visible:opacity-100'}"
@@ -236,13 +236,13 @@
         >
       {:else if on && kept === "first_install"}
         <span
-          class="shrink-0 rounded-full bg-(--accent)/12 px-2 text-[12px] text-(--accent)"
+          class="shrink-0 rounded-full bg-(--accent)/12 px-2 text-[13px] text-(--accent)"
           title="Your settings, keys and video options: friends get your copy when they join, then keep their own."
           >Sent once</span
         >
       {:else if on && kept === "merged"}
         <span
-          class="shrink-0 rounded-full bg-(--accent)/12 px-2 text-[12px] text-(--accent)"
+          class="shrink-0 rounded-full bg-(--accent)/12 px-2 text-[13px] text-(--accent)"
           title="Your servers are added to each friend's server list. Theirs stay too."
           >Added to theirs</span
         >
@@ -293,7 +293,7 @@
       </p>
     {/if}
 
-    <div role="table" aria-label="Files to share" class="text-[13.5px]">
+    <div role="table" aria-label="Files to share" class="text-[14px]">
       <div
         role="row"
         class="{ROW} border-t border-(--line) py-2 text-[13px] text-(--text-muted)"

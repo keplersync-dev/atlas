@@ -203,7 +203,7 @@
     />
     <span class="min-w-0 flex-1">
       <b class="block truncate font-semibold">{s.name}</b>
-      <small class="block truncate text-xs text-(--text-faint)">
+      <small class="block truncate text-[13px] text-(--text-faint)">
         {#if showOwner}
           <span class="text-(--text-muted)"
             >{s.owner ? `From ${s.owner.displayName}` : "No owner"}</span
@@ -221,10 +221,10 @@
   </button>
 
   <span class="flex shrink-0 flex-col items-end">
-    <span class="flex items-center gap-1.5 text-xs {TONE[st.tone]}">
+    <span class="flex items-center gap-1.5 text-[13px] {TONE[st.tone]}">
       <i class="size-1.5 rounded-full {DOT[st.tone]}"></i>{st.text}
     </span>
-    {#if error}<small class="text-[11px] text-(--danger)" role="alert"
+    {#if error}<small class="text-[13px] text-(--danger)" role="alert"
         >{error}</small
       >{/if}
   </span>

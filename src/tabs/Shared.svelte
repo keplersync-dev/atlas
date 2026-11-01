@@ -173,7 +173,7 @@
     <input
       bind:value={query}
       placeholder="Search shared instances"
-      class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg-raise) pr-2.5 pl-8 text-[12.5px] placeholder:text-(--text-faint) focus:border-(--accent) focus:outline-none"
+      class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg-raise) pr-2.5 pl-8 text-[13px] placeholder:text-(--text-faint) focus:border-(--accent) focus:outline-none"
     />
   </label>
 {/snippet}
@@ -186,7 +186,7 @@
         role="radio"
         aria-checked={filter === f.key}
         onclick={() => (filter = f.key)}
-        class="h-7 rounded-full px-3 text-xs {filter === f.key
+        class="h-7 rounded-full px-3 text-[13px] {filter === f.key
           ? 'bg-(--accent)/15 font-semibold text-(--accent)'
           : 'text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)'}"
       >
@@ -201,7 +201,7 @@
   <div class="grid grid-cols-1 items-start gap-10">
     {#if narrowed && sections.every((sec) => !sec.items.length)}
       <p
-        class="rounded-xl bg-(--bg-raise) px-4 py-6 text-[12.5px] text-(--text-muted)"
+        class="rounded-xl bg-(--bg-raise) px-4 py-6 text-[13px] text-(--text-muted)"
       >
         {noMatches}
       </p>
@@ -219,7 +219,7 @@
           <span class="min-w-0 flex-1">
             <b class="font-semibold">{sec.title}</b>
             <span class="ml-1 text-(--text-faint)">{sec.items.length}</span>
-            <small class="block truncate text-xs text-(--text-faint)"
+            <small class="block truncate text-[13px] text-(--text-faint)"
               >{sec.blurb}</small
             >
           </span>
@@ -228,7 +228,7 @@
         {#each sec.items as s (s.id)}
           <SharedRow {s} showOwner={sec.showOwner} />
         {:else}
-          <p class="px-4 py-6 text-[12.5px] text-(--text-muted)">{sec.empty}</p>
+          <p class="px-4 py-6 text-[13px] text-(--text-muted)">{sec.empty}</p>
         {/each}
       </section>
     {/each}

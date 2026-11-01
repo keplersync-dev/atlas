@@ -43,7 +43,7 @@
       {#if social.session && !social.session.online}
         <div
           role="status"
-          class="flex items-start gap-3 border-b border-(--warn)/25 bg-(--warn)/10 px-9 py-2.5 text-[12.5px]"
+          class="flex items-start gap-3 border-b border-(--warn)/25 bg-(--warn)/10 px-9 py-2.5 text-[13px]"
         >
           <Icon name="warn" class="mt-0.5 size-4 text-(--warn)" />
           <p>

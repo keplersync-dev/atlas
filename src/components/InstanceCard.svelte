@@ -164,18 +164,23 @@
     // Hollow: nothing going on.
     faint: "border border-(--text-faint)",
   };
+  // Coloured states are pills (dot and words, never colour alone); quiet ones plain text.
   const TEXT = {
-    warn: "text-(--warn)",
-    accent: "text-(--accent)",
-    online: "text-(--online)",
+    warn: "rounded-full bg-(--warn)/13 px-2 py-0.5 font-semibold text-(--warn)",
+    accent:
+      "rounded-full bg-(--accent)/14 px-2 py-0.5 font-semibold text-(--accent)",
+    online:
+      "rounded-full bg-(--online)/13 px-2 py-0.5 font-semibold text-(--online)",
     muted: "text-(--text-muted)",
-    shared: "text-(--text-primary)",
+    shared:
+      "rounded-full bg-(--online)/13 px-2 py-0.5 font-semibold text-(--online)",
     faint: "text-(--text-faint)",
   };
 </script>
 
 <article
-  class="group flex flex-col overflow-hidden rounded-xl bg-(--bg-raise) transition-colors hover:bg-(--bg-raise-2)
+  class="group flex flex-col overflow-hidden rounded-xl border bg-(--bg-raise) shadow-[0_8px_24px_#0000004d] transition-colors hover:bg-(--bg-raise-2)
+    {needsAttention(instance) ? 'border-(--warn)/45' : 'border-(--line)'}
     {instance.status === 'missing' ? 'opacity-75' : ''}"
 >
   <!-- Cover and title open the instance; the buttons do their own thing. -->
@@ -234,7 +239,7 @@
       </button>
       <!-- The launcher's name opens the instance there. -->
       <small
-        class="flex min-w-0 items-center gap-1 text-xs text-(--text-muted)"
+        class="flex min-w-0 items-center gap-1 text-[13px] text-(--text-muted)"
       >
         <span class="shrink-0"
           >{versionLabel(instance.loader, instance.minecraftVersion)} ·</span
@@ -256,7 +261,7 @@
       <button
         onclick={open}
         tabindex="-1"
-        class="mt-1.5 flex w-full items-center gap-3 text-left text-[11.5px] text-(--text-faint)"
+        class="mt-1.5 flex w-full items-center gap-3 text-left text-[13px] text-(--text-faint)"
       >
         <span class="flex items-center gap-1">
           <Icon name="cube" class="size-3" />
@@ -273,24 +278,24 @@
 
     <div class="mt-auto border-t border-(--line) pt-2.5">
       {#if instance.progress?.stage === "waiting_for_manual_downloads"}
-        <p class="flex min-h-7 items-center text-xs text-(--warn)">
+        <p class="flex min-h-7 items-center text-[13px] text-(--warn)">
           {instance.progress.manualDownloads.length === 1
             ? "Download 1 file to finish: open it to see how"
             : `Download ${instance.progress.manualDownloads.length} files to finish: open it to see how`}
         </p>
       {:else if instance.progress?.stage === "waiting_for_game_exit"}
-        <p class="flex min-h-7 items-center text-xs text-(--warn)">
+        <p class="flex min-h-7 items-center text-[13px] text-(--warn)">
           Close Minecraft to finish updating
         </p>
       {:else if instance.status === "syncing" && instance.progress}
         <div
-          class="flex items-center justify-between text-xs text-(--text-muted)"
+          class="flex items-center justify-between text-[13px] text-(--text-muted)"
         >
           <span>Updating…</span><span class="tabular-nums"
             >{instance.progress.percent}%</span
           >
         </div>
-        <div class="mt-1.5 h-1 overflow-hidden rounded-full bg-(--line-2)">
+        <div class="mt-1.5 h-1 overflow-hidden rounded-full bg-(--line)">
           <div
             class="h-full bg-(--accent) transition-[width] duration-300"
             style="width: {instance.progress.percent}%"
@@ -299,10 +304,10 @@
       {:else if work}
         {@const percent = workPercent(work)}
         <div class="flex min-h-7 flex-col justify-center">
-          <span class="truncate text-xs text-(--text-muted) tabular-nums"
+          <span class="truncate text-[13px] text-(--text-muted) tabular-nums"
             >{workLabel(work)}</span
           >
-          <div class="mt-1.5 h-1 overflow-hidden rounded-full bg-(--line-2)">
+          <div class="mt-1.5 h-1 overflow-hidden rounded-full bg-(--line)">
             <div
               class="h-full bg-(--accent) transition-[width] duration-300 {percent ===
               null
@@ -313,23 +318,25 @@
           </div>
         </div>
       {:else}
-        <div class="flex min-h-7 items-center gap-2.5">
-          <span
-            class="flex min-w-0 flex-1 items-center gap-1.5 text-xs {TEXT[
-              status.tone
-            ]}"
-          >
-            {#if openError}
+        <div class="flex min-h-7 flex-wrap items-center gap-x-2.5 gap-y-2">
+          {#if openError}
+            <span
+              class="line-clamp-2 min-w-0 flex-1 text-[13px] text-(--danger)"
+              role="alert"
+              title={openError}>{openError}</span
+            >
+          {:else}
+            <span class="flex max-w-full min-w-0 shrink-0">
               <span
-                class="line-clamp-2 text-(--danger)"
-                role="alert"
-                title={openError}>{openError}</span
+                class="flex min-w-0 items-center gap-1.5 text-[13px] {TEXT[
+                  status.tone
+                ]}"
               >
-            {:else}
-              <i class="size-1.5 shrink-0 rounded-full {DOT[status.tone]}"></i>
-              <span class="truncate">{status.text}</span>
-            {/if}
-          </span>
+                <i class="size-2 shrink-0 rounded-full {DOT[status.tone]}"></i>
+                <span class="truncate">{status.text}</span>
+              </span>
+            </span>
+          {/if}
           {#if !status.action && people.length}
             <span
               class="flex shrink-0 items-center gap-1"
@@ -342,7 +349,7 @@
               {/each}
               {#if people.length > 3}
                 <span
-                  class="grid h-5 place-items-center rounded-full bg-(--line-2) px-1.5 text-[10.5px] font-semibold text-(--text-primary) tabular-nums"
+                  class="grid h-5 place-items-center rounded-full bg-(--line) px-1.5 text-[13px] font-semibold text-(--text-primary) tabular-nums"
                   >+{people.length - 2}</span
                 >
               {/if}
@@ -350,6 +357,7 @@
           {/if}
           {#if status.action}
             <Button
+              class="ml-auto"
               size="sm"
               variant={status.action.variant}
               onclick={status.action.run}>{status.action.label}</Button

@@ -80,7 +80,7 @@
   }
 </script>
 
-<p class="mt-4 mb-2 text-[12.5px] text-(--text-muted)">
+<p class="mt-4 mb-2 text-[13px] text-(--text-muted)">
   {sync.role === "owner"
     ? "You own this instance."
     : sync.role === "editor"
@@ -96,7 +96,7 @@
 >
   <div class="min-w-0 flex-1">
     <b class="block font-medium">Keep it up to date automatically</b>
-    <small class="block text-[12.5px] text-(--text-muted)">
+    <small class="block text-[13px] text-(--text-muted)">
       New versions install before you next play. Atlas still asks when one would
       undo your changes or adds a mod that isn't on Modrinth or CurseForge.
     </small>
@@ -111,7 +111,7 @@
 
 {#if isOwner}
   <!-- What the two roles mean, next to where they're changed. -->
-  <p class="mb-3 text-xs text-(--text-faint)">
+  <p class="mb-3 text-[13px] text-(--text-faint)">
     {#each ROLES as r, i (r.id)}
       <b class="font-semibold text-(--text-muted)">{r.label}</b>: {r.hint.toLowerCase()}{i <
       ROLES.length - 1
@@ -137,11 +137,11 @@
         <b class="font-medium">{m.user.displayName}</b>
         {#if m.user.id === myId}<span class="text-(--text-faint)">(you)</span
           >{/if}
-        <small class="block text-[11.5px] text-(--text-faint)">
+        <small class="block text-[13px] text-(--text-faint)">
           @{m.user.username}{m.viaGroup ? ` · via ${m.viaGroup.name}` : ""}
         </small>
       </div>
-      <span class="text-[12px] {status.cls}">{status.text}</span>
+      <span class="text-[13px] {status.cls}">{status.text}</span>
 
       {#if isOwner && m.role !== "owner"}
         <div
@@ -156,7 +156,7 @@
               aria-checked={m.role === r.id}
               title={r.hint}
               onclick={() => m.role !== r.id && setRole(m, r.id)}
-              class="rounded px-2.5 py-0.5 text-[11.5px] font-medium transition-colors
+              class="rounded px-2.5 py-0.5 text-[13px] font-medium transition-colors
                 {m.role === r.id
                 ? 'bg-(--bg-raise-2) text-(--text-primary)'
                 : 'text-(--text-faint) hover:text-(--text-primary)'}"
@@ -186,7 +186,7 @@
         </button>
       {:else}
         <!-- pl-3: lines up with the first label of the role switch above or below. -->
-        <span class="pl-3 text-[12.5px] text-(--text-muted) capitalize"
+        <span class="pl-3 text-[13px] text-(--text-muted) capitalize"
           >{m.role}</span
         >
         <span></span>

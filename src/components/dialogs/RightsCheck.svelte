@@ -18,7 +18,7 @@
 </script>
 
 <div class="mr-auto flex min-w-0 flex-col gap-1">
-  <label class="flex cursor-pointer items-center gap-2 text-[12.5px]">
+  <label class="flex cursor-pointer items-center gap-2 text-[13px]">
     <input type="checkbox" bind:checked class="accent-(--accent)" />
     <span
       >I made <b class="font-medium">{names}</b> or have permission to share {count ===
@@ -29,7 +29,7 @@
   </label>
   {#if note}
     <span
-      class="text-xs tabular-nums {tone === 'danger'
+      class="text-[13px] tabular-nums {tone === 'danger'
         ? 'text-(--danger)'
         : 'text-(--text-muted)'}"
       role={tone === "danger" ? "alert" : undefined}>{note}</span

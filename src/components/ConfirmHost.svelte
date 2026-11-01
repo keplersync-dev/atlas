@@ -29,7 +29,7 @@
         <p class="text-[13px] text-(--text-muted)">{open.message}</p>
       {/if}
       {#if open.typeToConfirm}
-        <label class="mt-3.5 block text-[12.5px]">
+        <label class="mt-3.5 block text-[13px]">
           <span class="text-(--text-muted)">
             Type <b class="font-mono text-(--text-primary)"
               >{open.typeToConfirm}</b

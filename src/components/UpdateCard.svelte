@@ -21,15 +21,15 @@
   <div
     class="mx-2.5 mb-2 rounded-lg border px-3 py-2.5 {updates.required
       ? 'border-(--warn)/50 bg-(--warn)/8'
-      : 'border-(--line-2) bg-(--bg-raise-2)'}"
+      : 'border-(--line) bg-(--bg-raise-2)'}"
     role={updates.required ? "alert" : "status"}
   >
-    <b class="block text-[12.5px] font-medium">
+    <b class="block text-[13px] font-medium">
       {updates.required
         ? "Update Atlas to keep syncing"
         : `Atlas ${updates.available?.version} is ready`}
     </b>
-    <small class="mt-0.5 block text-[11.5px] leading-snug text-(--text-faint)">
+    <small class="mt-0.5 block text-[13px] leading-snug text-(--text-faint)">
       {updates.required
         ? "This version is too old for the Atlas server. Your instances still work on this PC."
         : "Atlas closes for a few seconds while it updates."}
@@ -48,7 +48,7 @@
       >
     {/if}
     {#if updates.error}
-      <p class="mt-1.5 text-[11.5px] text-(--danger)" role="alert">
+      <p class="mt-1.5 text-[13px] text-(--danger)" role="alert">
         {updates.error}
       </p>
     {/if}

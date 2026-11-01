@@ -16,14 +16,14 @@
   <div>
     <div class="flex items-baseline justify-between">
       <b class="font-semibold">Upload space</b>
-      <span class="text-xs text-(--text-muted) tabular-nums"
+      <span class="text-[13px] text-(--text-muted) tabular-nums"
         >{fileSize(storage.usedBytes)} of {fileSize(storage.quotaBytes)}</span
       >
     </div>
     <div class="mt-2 h-2 overflow-hidden rounded-full bg-(--bg-raise-2)">
       <div class="h-full rounded-full {fill}" style="width: {pct}%"></div>
     </div>
-    <p class="mt-2 text-xs text-(--text-faint)">
+    <p class="mt-2 text-[13px] text-(--text-faint)">
       Custom files you share are stored on Atlas, up to {fileSize(
         storage.maxFileBytes,
       )} each. Mods from Modrinth and CurseForge don't count.

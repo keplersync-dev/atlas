@@ -197,7 +197,7 @@
     <span class="min-w-0 flex-1">
       <b class="block truncate font-medium">{title}</b>
       <small
-        class="block text-[11.5px] {warn
+        class="block text-[13px] {warn
           ? 'text-(--warn)'
           : 'text-(--text-faint)'}">{hint}</small
       >
@@ -229,7 +229,7 @@
   {/snippet}
 
   {#if !invite}
-    <p class="py-4 text-[12.5px] text-(--text-muted)">
+    <p class="py-4 text-[13px] text-(--text-muted)">
       This shared instance isn't available anymore.
     </p>
   {:else if submitting}
@@ -239,9 +239,9 @@
         name="refresh"
         class="mt-0.5 size-5 shrink-0 animate-spin text-(--accent)"
       />
-      <div class="text-[12.5px]">
+      <div class="text-[13px]">
         {#if pickedLauncher?.kind === "modrinth"}
-          <b class="block text-[13.5px] font-semibold"
+          <b class="block text-[14px] font-semibold"
             >Confirm in the Modrinth App</b
           >
           <p class="mt-1 text-(--text-muted)">
@@ -249,14 +249,14 @@
             there, and Atlas adds the {plural(invite.contentCount, "item")} by itself.
           </p>
         {:else if pickedLauncher}
-          <b class="block text-[13.5px] font-semibold"
+          <b class="block text-[14px] font-semibold"
             >Creating the {newWhat(pickedLauncher)} in {pickedLauncher.name}…</b
           >
           <p class="mt-1 text-(--text-muted)">
             Then Atlas adds the {plural(invite.contentCount, "item")}.
           </p>
         {:else}
-          <b class="block text-[13.5px] font-semibold"
+          <b class="block text-[14px] font-semibold"
             >Linking {pickedInstance?.name ?? "the instance"}…</b
           >
           <p class="mt-1 text-(--text-muted)">
@@ -267,11 +267,11 @@
     </div>
   {:else}
     {#if launchers.loading}
-      <p class="text-[12.5px] text-(--text-muted)">Looking for launchers…</p>
+      <p class="text-[13px] text-(--text-muted)">Looking for launchers…</p>
     {:else if launchers.error}
-      <p class="text-[12.5px] text-(--danger)">{launchers.error}</p>
+      <p class="text-[13px] text-(--danger)">{launchers.error}</p>
     {:else if nowhere}
-      <p class="rounded-lg bg-(--bg-raise) px-3.5 py-3 text-[12.5px]">
+      <p class="rounded-lg bg-(--bg-raise) px-3.5 py-3 text-[13px]">
         <b class="mb-0.5 block font-medium">Nowhere to add it yet</b>
         <span class="text-(--text-muted)">
           Make an empty {versionLabel(invite.loader, invite.minecraftVersion)}
@@ -282,7 +282,7 @@
       <h3 class="mt-1 mb-2 text-[13px] font-semibold">Where should it go?</h3>
 
       {#if creatable.length}
-        <p class="mb-1.5 text-[11.5px] font-medium text-(--text-faint)">New</p>
+        <p class="mb-1.5 text-[13px] font-medium text-(--text-faint)">New</p>
         <div class="flex flex-col gap-1.5">
           {#each creatable as l (l.id)}
             {@render choice(
@@ -298,7 +298,7 @@
 
       {#if spare.length}
         <p
-          class="mb-1.5 text-[11.5px] font-medium text-(--text-faint) {creatable.length
+          class="mb-1.5 text-[13px] font-medium text-(--text-faint) {creatable.length
             ? 'mt-4'
             : ''}"
         >
@@ -327,7 +327,7 @@
       >
         <div class="min-w-0 flex-1">
           <b class="block font-medium">Keep it up to date automatically</b>
-          <small class="block text-[12.5px] text-(--text-muted)">
+          <small class="block text-[13px] text-(--text-muted)">
             When {invite.owner?.displayName ?? "the owner"} sends an update, it's
             installed before you next play.
           </small>
@@ -340,7 +340,7 @@
       </div>
     {/if}
     {#if invite.uploadedFiles?.length}
-      <div class="mt-3 rounded-lg bg-(--warn)/10 px-4 py-3 text-[12.5px]">
+      <div class="mt-3 rounded-lg bg-(--warn)/10 px-4 py-3 text-[13px]">
         <b class="font-semibold text-(--warn)"
           >Unverified: not from Modrinth or CurseForge.</b
         >
@@ -351,7 +351,7 @@
   {/if}
 
   {#snippet footer()}
-    {#if error}<span class="mr-auto text-xs text-(--danger)" role="alert"
+    {#if error}<span class="mr-auto text-[13px] text-(--danger)" role="alert"
         >{error}</span
       >{/if}
     <!-- Closing doesn't stop it: the work carries on and the instance shows up when done. -->

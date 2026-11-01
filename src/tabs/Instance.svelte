@@ -259,7 +259,7 @@
   {#if backLabel}
     <button
       onclick={back}
-      class="mb-4.5 inline-flex items-center gap-1.5 text-[12.5px] text-(--text-muted) hover:text-(--text-primary)"
+      class="mb-4.5 inline-flex items-center gap-1.5 text-[13px] text-(--text-muted) hover:text-(--text-primary)"
     >
       <Icon name="chev" class="size-3.5 rotate-180" />{backLabel}
     </button>
@@ -268,7 +268,7 @@
   {#if instances.failures[id]}
     <div
       role="alert"
-      class="mb-5 flex items-start gap-3 rounded-lg border border-(--danger)/30 bg-(--danger)/8 px-4 py-3 text-[12.5px]"
+      class="mb-5 flex items-start gap-3 rounded-lg border border-(--danger)/30 bg-(--danger)/8 px-4 py-3 text-[13px]"
     >
       <span class="mt-0.5 text-(--danger)"
         ><Icon name="warn" class="size-4" /></span
@@ -304,7 +304,7 @@
         {summary.name}
       </h1>
       <div
-        class="flex flex-wrap gap-x-4 gap-y-1.5 text-[12.5px] text-(--text-muted)"
+        class="flex flex-wrap gap-x-4 gap-y-1.5 text-[13px] text-(--text-muted)"
       >
         <span>{versionLabel(summary.loader, summary.minecraftVersion)}</span>
         <span>{summary.launcher.name}</span>
@@ -379,7 +379,7 @@
   />
 
   {#if error}
-    <p class="mt-3 text-xs text-(--danger)" role="alert">{error}</p>
+    <p class="mt-3 text-[13px] text-(--danger)" role="alert">{error}</p>
   {/if}
 
   <!-- ── Tabs ───────────────────────────────────────────────────────── -->
