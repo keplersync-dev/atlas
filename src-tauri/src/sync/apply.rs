@@ -45,12 +45,21 @@ pub struct Request {
     pub config_choices: HashMap<String, ConfigChoice>,
 }
 
-/// sha256 of every config path either version mentions, as it is on disk now.
+/// sha256 of every config path either version mentions, as it is on disk now. A file
+/// set the same as the synced version (a mod only rewrote it) counts as that version, so
+/// an update doesn't take it for the member's own change. `cached` reads a version's
+/// file by sha256, when it's still in the download cache.
 fn config_hashes(
     game_dir: &Path,
     synced: Option<&Manifest>,
     target: &Manifest,
+    cached: &dyn Fn(&str) -> Option<Vec<u8>>,
 ) -> HashMap<String, String> {
+    let base: HashMap<String, &str> = synced
+        .into_iter()
+        .flat_map(|m| &m.overrides)
+        .map(|o| (o.path.to_lowercase(), o.sha256.as_str()))
+        .collect();
     let paths = synced
         .into_iter()
         .flat_map(|m| &m.overrides)
@@ -59,7 +68,22 @@ fn config_hashes(
     paths
         .filter_map(|p| {
             let bytes = std::fs::read(game_dir.join(&p)).ok()?;
-            Some((p.to_lowercase(), hex::encode(Sha256::digest(bytes))))
+            let key = p.to_lowercase();
+            let sha = hex::encode(Sha256::digest(&bytes));
+            let rewritten = base.get(&key).filter(|b| **b != sha).is_some_and(|b| {
+                let mine = super::settings::fingerprint(&p, &bytes);
+                mine.is_some()
+                    && cached(b)
+                        .is_some_and(|theirs| super::settings::fingerprint(&p, &theirs) == mine)
+            });
+            Some((
+                key.clone(),
+                if rewritten {
+                    base[&key].to_owned()
+                } else {
+                    sha
+                },
+            ))
         })
         .collect()
 }
@@ -76,9 +100,13 @@ pub async fn make_plan(
     let synced = row.synced_manifest();
     let game_dir = PathBuf::from(&row.game_dir);
     let (s, t) = (synced.clone(), target.clone());
-    let configs = tokio::task::spawn_blocking(move || config_hashes(&game_dir, s.as_ref(), &t))
-        .await
-        .map_err(AppError::from)?;
+    let paths = state.paths.clone();
+    let configs = tokio::task::spawn_blocking(move || {
+        let cached = |sha: &str| std::fs::read(fetch::blob_file(&paths, sha)).ok();
+        config_hashes(&game_dir, s.as_ref(), &t, &cached)
+    })
+    .await
+    .map_err(AppError::from)?;
     let lookup = |p: &str| configs.get(&p.to_lowercase()).cloned();
     let plan = plan::plan(&plan::Input {
         synced: synced.as_ref(),
@@ -547,4 +575,62 @@ fn hide(path: &Path) {
     }
     #[cfg(not(windows))]
     let _ = path;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_config_a_mod_only_rewrote_counts_as_the_synced_one() {
+        let dir = std::env::temp_dir().join(format!("atlas-apply-{}", new_id()));
+        std::fs::create_dir_all(dir.join("config")).unwrap();
+        let synced_bytes = b"[general]
+speed = 2
+";
+        let synced_sha = hex::encode(Sha256::digest(synced_bytes));
+        let config = |path: &str, sha: &str| Override {
+            path: path.into(),
+            sha256: sha.into(),
+            size_bytes: 1,
+            in_pack: false,
+            keep: None,
+        };
+        let mut synced: Manifest = serde_json::from_value(serde_json::json!({
+            "schemaVersion": 2, "name": "m",
+            "minecraft": { "version": "1.21.1", "loader": "fabric" },
+            "content": [], "overrides": []
+        }))
+        .unwrap();
+        synced.overrides = vec![
+            config("config/a.toml", &synced_sha),
+            config("config/b.toml", &synced_sha),
+        ];
+        // a: the game rewrote it with comments; b: the member changed a setting.
+        std::fs::write(
+            dir.join("config/a.toml"),
+            "# Speed
+[general]
+  speed = 2
+",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("config/b.toml"),
+            "[general]
+speed = 5
+",
+        )
+        .unwrap();
+        let cached = |sha: &str| (sha == synced_sha).then(|| synced_bytes.to_vec());
+        let hashes = config_hashes(&dir, Some(&synced), &synced, &cached);
+        assert_eq!(hashes["config/a.toml"], synced_sha);
+        assert_ne!(hashes["config/b.toml"], synced_sha);
+        let not_cached = |_: &str| None;
+        let hashes = config_hashes(&dir, Some(&synced), &synced, &not_cached);
+        assert_ne!(
+            hashes["config/a.toml"], synced_sha,
+            "nothing to compare with"
+        );
+    }
 }
