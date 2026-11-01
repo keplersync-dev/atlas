@@ -2,7 +2,9 @@
   import { api } from "$lib/api";
   import { copier } from "$lib/clipboard.svelte";
   import { confirmAction } from "$lib/confirm.svelte";
-  import { plural } from "$lib/format";
+  import { openContextMenu } from "$lib/contextMenu.svelte";
+  import { plural, timeAgo } from "$lib/format";
+  import { personItems } from "$lib/people";
   import { social } from "$lib/stores";
   import type { Group, GroupMember } from "$lib/types";
   import Button from "../Button.svelte";
@@ -188,9 +190,9 @@
     ];
   }
 
-  /** What I can do to a member, as a menu: the owner hands over and removes anyone.
-   *  Empty when there's nothing to do (then the chip isn't a button). */
-  function memberMenu(g: Group, m: GroupMember): MenuItem[] {
+  /** A member's menu: the owner hands over and removes, and for anyone but you, the
+   *  same report and block as everywhere else. */
+  function memberItems(g: Group, m: GroupMember): MenuItem[] {
     return [
       ...(g.myRole === "owner" && m.user.id !== me
         ? [
@@ -203,18 +205,37 @@
             },
           ]
         : []),
-      "divider",
       ...(canRemove(g, m)
         ? [
             {
-              label: `Remove ${m.user.displayName}`,
+              label: `Remove from ${g.name}`,
               danger: true,
               onselect: () => remove(g, m),
             },
           ]
         : []),
+      "divider",
+      ...personItems(m.user),
     ];
   }
+
+  /** Under a member's name: you, a friend's status, or their username. */
+  function about(m: GroupMember) {
+    if (m.user.id === me) return "You";
+    const p = social.friends.find((f) => f.user.id === m.user.id)?.presence;
+    if (!p) return `@${m.user.username}`;
+    if (p.state === "playing")
+      return p.instanceName ? `Playing ${p.instanceName}` : "Playing Minecraft";
+    return p.state === "online"
+      ? "Online"
+      : `Last seen ${timeAgo(p.updatedAt)}`;
+  }
+  const presenceOf = (m: GroupMember) =>
+    social.friends.find((f) => f.user.id === m.user.id)?.presence.state ?? null;
+
+  /** Each group's own colour for its tile, from its id, so groups are told apart. */
+  const hue = (id: string) =>
+    [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
 
   /** Packs shared with the group that this PC knows about, by name. */
   const packsOf = (g: Group) =>
@@ -286,19 +307,35 @@
     </p>
   {/if}
 
-  <div class="divide-y divide-(--line)">
+  <!-- Each group its own panel, with its own coloured tile, so two never read as one. -->
+  <div class="grid gap-3 p-3">
     {#each social.groups as g (g.id)}
-      <div class="px-4 py-3">
+      <!-- svelte-ignore a11y_no_static_element_interactions (right-click repeats the ⋯ menu, which keyboards reach) -->
+      <div
+        class="rounded-lg border border-(--line) bg-(--bg)"
+        oncontextmenu={(e) => openContextMenu(e, menu(g))}
+      >
         <!-- Wraps: when narrow the buttons drop under the name. -->
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <div class="min-w-40 flex-1">
-            <b class="block truncate font-medium">{g.name}</b>
-            <small class="block truncate text-[13px] text-(--text-faint)">
-              {plural(g.members.length, "member")} · {plural(
-                g.sharedInstanceIds.length,
-                "pack",
-              )}{g.myRole === "owner" ? " · You own it" : ""}
-            </small>
+        <div
+          class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3.5 pt-3 pb-2"
+        >
+          <div class="flex min-w-40 flex-1 items-center gap-3">
+            <span
+              aria-hidden="true"
+              class="grid size-9 shrink-0 place-items-center rounded-lg text-[15px] font-semibold text-white"
+              style="background: hsl({hue(g.id)} 42% 34%)"
+              >{g.name.trim().charAt(0).toUpperCase()}</span
+            >
+            <div class="min-w-0 flex-1">
+              <b class="block truncate font-semibold" title={g.name}>{g.name}</b
+              >
+              <small class="block truncate text-[13px] text-(--text-faint)">
+                {plural(g.members.length, "member")} · {plural(
+                  g.sharedInstanceIds.length,
+                  "pack",
+                )}{g.myRole === "owner" ? " · You own it" : ""}
+              </small>
+            </div>
           </div>
           <div class="ml-auto flex items-center gap-1">
             {#if manages(g)}
@@ -315,38 +352,48 @@
           </div>
         </div>
 
-        <!-- Members, always in view; click one for what you can do. -->
-        <div class="mt-2.5 flex flex-wrap gap-1.5">
+        <!-- Members as rows, like friends: what you can do is in ⋯ and on right-click. -->
+        <div class="px-1.5 pb-1.5">
           {#each g.members as m (m.user.id)}
-            {@const items = memberMenu(g, m)}
-            {#snippet chip()}
-              <Head user={m.user} size={20} ring="var(--bg-raise)" />
-              <span class="max-w-36 truncate">{m.user.displayName}</span>
-              {#if m.role === "owner"}<span class="text-(--text-faint)"
-                  >Owner</span
-                >{/if}
-              {#if m.user.id === me}<span class="text-(--text-faint)"
-                  >(you)</span
-                >{/if}
-            {/snippet}
-            {#if items.length}
-              <Menu
-                {items}
-                align="left"
-                label="{m.user.displayName}: options"
-                trigger={chip}
-                triggerClass="flex h-7 items-center gap-1.5 rounded-full border border-(--line) bg-(--bg) py-0.5 pr-2.5 pl-1 text-[13px] hover:border-(--line-2) hover:bg-(--bg-hover)"
+            {@const items = memberItems(g, m)}
+            <!-- svelte-ignore a11y_no_static_element_interactions (right-click repeats the ⋯ menu, which keyboards reach) -->
+            <div
+              class="group flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-(--bg-hover)"
+              oncontextmenu={(e) => openContextMenu(e, items)}
+            >
+              <Head
+                user={m.user}
+                size={28}
+                presence={presenceOf(m)}
+                ring="var(--bg)"
               />
-            {:else}
-              <span
-                class="flex h-7 items-center gap-1.5 rounded-full border border-(--line) bg-(--bg) py-0.5 pr-2.5 pl-1 text-[13px]"
-                >{@render chip()}</span
+              <div class="min-w-0 flex-1">
+                <span class="flex min-w-0 items-center gap-2">
+                  <b class="truncate font-medium">{m.user.displayName}</b>
+                  {#if m.role === "owner"}
+                    <span
+                      class="flex shrink-0 items-center gap-1 rounded-full bg-(--bg-raise-2) px-2 text-[13px] text-(--text-muted)"
+                      ><Icon name="crown" class="size-3" />Owner</span
+                    >
+                  {/if}
+                </span>
+                <small
+                  class="block truncate text-[13px] {presenceOf(m) === 'playing'
+                    ? 'text-(--online)'
+                    : 'text-(--text-faint)'}">{about(m)}</small
+                >
+              </div>
+              <!-- Shown on hover, or while focused for keyboards, like on friends. -->
+              <div
+                class="opacity-0 group-hover:opacity-100 focus-within:opacity-100"
               >
-            {/if}
+                <Menu {items} label="More for {m.user.displayName}" />
+              </div>
+            </div>
           {/each}
         </div>
         {#if packsOf(g).length}
-          <p class="mt-2 truncate text-[13px] text-(--text-faint)">
+          <p class="truncate px-3.5 pb-3 text-[13px] text-(--text-faint)">
             Packs:
             {#each packsOf(g) as p, i (p.id)}{#if i}{", "}{/if}<span
                 class="text-(--text-muted)">{p.name}</span
@@ -358,7 +405,7 @@
           <!-- Every friend: those already in or invited are ticked and greyed, so an
                empty choice is plain to see rather than a message. -->
           {@const free = social.friends.filter((f) => !taken(g, f.user.id))}
-          <div class="mt-3 rounded-lg bg-(--bg) p-2">
+          <div class="mx-3 mb-3 rounded-lg bg-(--bg-raise) p-2">
             {#each social.friends as f (f.user.id)}
               {@const why = taken(g, f.user.id)}
               <label
@@ -381,7 +428,7 @@
                     class="size-3.75 accent-(--accent)"
                   />
                 {/if}
-                <Head user={f.user} size={28} ring="var(--bg)" />
+                <Head user={f.user} size={28} ring="var(--bg-raise)" />
                 <span class="min-w-0 flex-1">
                   <b class="block truncate font-medium">{f.user.displayName}</b>
                   <small class="block truncate text-[13px] text-(--text-faint)"
@@ -419,7 +466,7 @@
         {/if}
       </div>
     {:else}
-      <p class="px-4 py-6 text-[13px] text-(--text-muted)">
+      <p class="px-1 py-3 text-[13px] text-(--text-muted)">
         No groups yet. Make one, then invite friends to it from here.
       </p>
     {/each}

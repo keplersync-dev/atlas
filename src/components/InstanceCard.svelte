@@ -26,8 +26,10 @@
   } from "$lib/format";
   import { go } from "$lib/nav.svelte";
   import { kindFor, wallPixels } from "$lib/pixel";
-  import { canPlay, play } from "$lib/play";
+  import { canPlay, play, unfinished } from "$lib/play";
   import { instances, social } from "$lib/stores";
+  import { openContextMenu } from "$lib/contextMenu.svelte";
+  import { instanceItems } from "$lib/instanceMenu";
   import Button from "./Button.svelte";
   import Head from "./Head.svelte";
   import Icon from "./Icon.svelte";
@@ -101,6 +103,16 @@
         action: { label: "Open", variant: "default", run: open },
       };
     if (i.isRunning) return { tone: "online", text: "Playing now" };
+    if (unfinished(i))
+      return {
+        tone: "warn",
+        text: "Not set up yet",
+        action: {
+          label: "Finish",
+          variant: "warn",
+          run: () => go({ page: "review", id: i.id }),
+        },
+      };
     if (s?.state === "update_available")
       return {
         tone: "warn",
@@ -190,7 +202,9 @@
   };
 </script>
 
+<!-- Right-click: open, play, files, share (instanceItems). -->
 <article
+  oncontextmenu={(e) => openContextMenu(e, instanceItems(instance))}
   class="group flex flex-col overflow-hidden rounded-xl border bg-(--bg-raise) shadow-[0_8px_24px_#0000004d] transition-colors hover:bg-(--bg-raise-2)
     {needsAttention(instance) ? 'border-(--warn)/45' : 'border-(--line)'}
     {instance.status === 'missing' ? 'opacity-75' : ''}"

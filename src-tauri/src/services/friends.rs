@@ -91,6 +91,11 @@ pub async fn change<R: Runtime>(
     Ok(())
 }
 
+/// The people you blocked, so a block can be undone.
+pub async fn blocked(state: &AppState) -> AppResult<Vec<crate::dto::PublicUser>> {
+    state.cloud.call(Method::GET, "/blocks", None::<&()>).await
+}
+
 pub async fn activity(state: &AppState) -> AppResult<Vec<ActivityItem>> {
     let page: Page<ActivityItem> = state.cloud.cached_get("activity", "/notifications").await?;
     Ok(page.items)

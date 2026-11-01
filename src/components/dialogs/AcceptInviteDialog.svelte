@@ -42,15 +42,16 @@
   // Where the files go: a new instance in a launcher, or an instance you already have.
   type Target = { kind: "launcher" | "instance"; id: Id };
 
-  // A *writable* $derived: it starts as "the first launcher that can receive
-  // instances" (or the first spare instance), and fills in by itself once the lists
-  // load, but assigning to it overrides that — which is what clicking a radio does.
-  let target = $derived<Target | null>(
-    creatable[0]
-      ? { kind: "launcher", id: creatable[0].id }
-      : spare[0]
-        ? { kind: "instance", id: spare[0].id }
-        : null,
+  // What the user clicked, kept apart from the default: a writable $derived went back to
+  // the first launcher whenever the lists reloaded, quietly undoing their choice.
+  let chosen = $state<Target | null>(null);
+  const target = $derived<Target | null>(
+    chosen ??
+      (creatable[0]
+        ? { kind: "launcher", id: creatable[0].id }
+        : spare[0]
+          ? { kind: "instance", id: spare[0].id }
+          : null),
   );
   const picked = (kind: Target["kind"], id: Id) =>
     target?.kind === kind && target.id === id;
@@ -131,6 +132,11 @@
     if (!canSubmit || !target) return;
     submitting = true;
     error = null;
+    // Named now: the lists reload below.
+    const where =
+      target.kind === "launcher"
+        ? (pickedLauncher?.name ?? "your launcher")
+        : (pickedInstance?.name ?? "your instance");
     try {
       const created =
         target.kind === "launcher"
@@ -147,10 +153,6 @@
               autoUpdate,
             );
       await Promise.all([instances.load(), social.load()]);
-      const where =
-        target.kind === "launcher"
-          ? (pickedLauncher?.name ?? "your launcher")
-          : (pickedInstance?.name ?? "your instance");
       showDone(
         `Adding ${invite?.name ?? "it"} to ${where}. Then you're on the same mods as ${invite?.owner?.displayName ?? "the owner"}.`,
       );
@@ -195,7 +197,7 @@
       name="target"
       value={id}
       checked={on}
-      onchange={() => (target = { kind, id })}
+      onchange={() => (chosen = { kind, id })}
       class="sr-only"
     />
     {#if instance}

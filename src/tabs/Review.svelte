@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { unfinished } from "$lib/play";
   import { api } from "$lib/api";
   import { fileSize, plural, timeAgo } from "$lib/format";
   import { go } from "$lib/nav.svelte";
@@ -155,9 +156,11 @@
         <h1
           class="font-(family-name:--font-display) text-[22px] font-semibold tracking-tight"
         >
-          {latest?.createdBy
-            ? `${latest.createdBy.displayName} sent an update`
-            : "An update to install"}
+          {unfinished(summary)
+            ? `Finish setting up ${summary.name}`
+            : latest?.createdBy
+              ? `${latest.createdBy.displayName} sent an update`
+              : "An update to install"}
         </h1>
         <p class="mt-1 text-(--text-muted)">
           {summary.name} · {summary.launcher.name}
@@ -400,7 +403,7 @@
             >Not now</Button
           >
           <Button variant="warn" size="lg" disabled={started} onclick={apply}
-            >Update now</Button
+            >{unfinished(summary) ? "Finish setting up" : "Update now"}</Button
           >
         </div>
       {/if}

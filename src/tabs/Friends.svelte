@@ -8,10 +8,9 @@
 </script>
 
 <script lang="ts">
+  import { openContextMenu } from "$lib/contextMenu.svelte";
   import { fuzzy } from "$lib/fuzzy";
-  import { showError } from "$lib/toasts.svelte";
-  import { confirmAction } from "$lib/confirm.svelte";
-  import { openDialog } from "$lib/dialogs.svelte";
+  import { personItems } from "$lib/people";
   import { plural, timeAgo } from "$lib/format";
   import { social } from "$lib/stores";
   import type { Friend } from "$lib/types";
@@ -95,31 +94,6 @@
     if (p.state === "online") return "Online in Atlas";
     return `Last seen ${timeAgo(p.updatedAt)}`;
   }
-
-  async function remove(f: Friend, block: boolean) {
-    const name = f.user.displayName;
-    const ok = await confirmAction(
-      block
-        ? {
-            title: `Block ${name}?`,
-            message: `${name} is removed from your friends and can't send you requests anymore.`,
-            confirmLabel: "Block",
-            danger: true,
-          }
-        : {
-            title: `Remove ${name}?`,
-            message: "You can add each other again later with a friend code.",
-            confirmLabel: "Remove friend",
-            danger: true,
-          },
-    );
-    if (!ok) return;
-    try {
-      await social.removeFriend(f.user.id, block);
-    } catch (e) {
-      showError((e as Error).message);
-    }
-  }
 </script>
 
 {#if !social.signedIn}
@@ -198,7 +172,11 @@
           {#each section.list as f (f.user.id)}
             {@const theirs = sharedBy(f)}
             {@const open = theirs.length > 0 && isOpen(f)}
-            <div class="rounded-lg {open ? 'my-1 bg-(--bg)' : ''}">
+            <!-- svelte-ignore a11y_no_static_element_interactions (right-click repeats the ⋯ menu, which keyboards reach) -->
+            <div
+              class="rounded-lg {open ? 'my-1 bg-(--bg)' : ''}"
+              oncontextmenu={(e) => openContextMenu(e, personItems(f.user))}
+            >
               <div
                 class="group flex items-center gap-3 rounded-lg px-2 py-2.25 hover:bg-(--bg-hover)"
               >
@@ -249,32 +227,7 @@
                 >
                   <Menu
                     label="More for {f.user.displayName}"
-                    items={[
-                      {
-                        label: "Report…",
-                        icon: "flag",
-                        onselect: () =>
-                          openDialog({
-                            kind: "report",
-                            about: {
-                              kind: "user",
-                              id: f.user.id,
-                              name: f.user.displayName,
-                            },
-                          }),
-                      },
-                      "divider",
-                      {
-                        label: "Remove friend",
-                        danger: true,
-                        onselect: () => remove(f, false),
-                      },
-                      {
-                        label: "Block",
-                        danger: true,
-                        onselect: () => remove(f, true),
-                      },
-                    ]}
+                    items={personItems(f.user)}
                   />
                 </div>
               </div>

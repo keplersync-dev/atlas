@@ -125,6 +125,8 @@ export const tauriApi: AtlasApi = {
   cancelFriendRequest: (userId) => call("cancel_friend_request", { userId }),
   removeFriend: (userId) => call("remove_friend", { userId }),
   blockUser: (userId) => call("block_user", { userId }),
+  unblockUser: (userId) => call("unblock_user", { userId }),
+  listBlocked: () => call("list_blocked"),
   takeOpenedLink: () => call("take_opened_link"),
 
   report: (input) => call("report", { input }),

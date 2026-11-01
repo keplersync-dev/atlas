@@ -88,7 +88,8 @@ export function audit(): Promise<Finding[]> {
     const root =
       [...document.querySelectorAll("dialog[open]")].pop() ?? document.body;
     for (const el of root.querySelectorAll("*")) {
-      if (!shown(el) || el.closest("svg")) continue;
+      // Hidden from screen readers and Tab on purpose (a duplicate of a named control).
+      if (!shown(el) || el.closest("svg, [aria-hidden=true]")) continue;
       const cs = getComputedStyle(el);
       const r = el.getBoundingClientRect();
       // Inside something that scrolls sideways on purpose, the edge doesn't matter.

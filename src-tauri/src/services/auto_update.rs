@@ -88,6 +88,11 @@ async fn try_check<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) -
     let Some(info) = super::sync::info(state, &row).await? else {
         return Ok(());
     };
+    // Its first install never finished: the player cancelled it (or it failed), so it
+    // waits for them to press Finish rather than starting again by itself.
+    if info.synced_revision == 0 {
+        return Ok(());
+    }
     let needs = match info.state {
         SyncState::Conflict => Some(Needs::TheirChanges),
         SyncState::UpdateAvailable => needs(&super::sync::preview(state, id).await?),

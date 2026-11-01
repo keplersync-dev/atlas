@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { unfinished } from "$lib/play";
   import { api } from "$lib/api";
   import { plural, workLabel, workPercent } from "$lib/format";
   import { instances } from "$lib/stores";
@@ -81,7 +82,7 @@
     </div>
     {#if tone === "warn" && (s?.state === "update_available" || s?.state === "conflict")}
       <Button variant="warn" disabled={busy} onclick={onupdate}
-        >Review update</Button
+        >{unfinished(instance) ? "Finish setting up" : "Review update"}</Button
       >
     {:else if instance.status === "missing"}
       {#if onsetup}
@@ -163,6 +164,13 @@
     "clock",
     "Minecraft is running this instance",
     "Atlas won't change any files until you close the game.",
+  )}
+{:else if unfinished(instance)}
+  {@render bar(
+    "warn",
+    "download",
+    "Not set up yet",
+    `Adding it stopped before its files were in. Finish to get ${s?.owner?.displayName ?? "the owner"}'s pack.`,
   )}
 {:else if s?.state === "update_available" || s?.state === "conflict"}
   {@render bar(

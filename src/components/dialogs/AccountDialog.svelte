@@ -4,6 +4,7 @@
   import { confirmAction } from "$lib/confirm.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
   import { fileSize, formatCode } from "$lib/format";
+  import { resource } from "$lib/resource.svelte";
   import { social } from "$lib/stores";
   import type { AppSettings, AuthProvider } from "$lib/types";
   import Button from "../Button.svelte";
@@ -78,6 +79,7 @@
   let busy = $state<string | null>(null);
   let attempt = 0;
   let exported = $state<string | null>(null);
+  const blocked = resource(() => api.listBlocked());
 
   // This PC's settings, which aren't part of the account.
   let pc = $state<AppSettings | null>(null);
@@ -429,6 +431,44 @@
         >
       </div>
       {@render failed("export")}
+      <!-- Blocking is undone here, so a block from any ⋯ menu is never final. -->
+      <div class={ROW}>
+        <div class="min-w-0 flex-1">
+          <b class="block font-medium">Blocked</b>
+          {#if blocked.data?.length}
+            <div class="mt-2 grid gap-1.5">
+              {#each blocked.data as u (u.id)}
+                <div class="flex items-center gap-2.5">
+                  <Head user={u} size={24} ring="var(--bg)" />
+                  <span class="min-w-0 flex-1 truncate"
+                    >{u.displayName}
+                    <span class="text-(--text-faint)">@{u.username}</span></span
+                  >
+                  <Button
+                    size="sm"
+                    disabled={busy !== null}
+                    aria-label="Unblock {u.displayName}"
+                    onclick={() =>
+                      act("unblock", async () => {
+                        await api.unblockUser(u.id);
+                        blocked.reload();
+                      })}>Unblock</Button
+                  >
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <small class="text-[13px] text-(--text-faint)"
+              >{blocked.loading
+                ? "Loading…"
+                : blocked.error
+                  ? `Couldn't load who you blocked: ${blocked.error}`
+                  : "Nobody. You can block someone from their ⋯ menu."}</small
+            >
+          {/if}
+          {@render failed("unblock")}
+        </div>
+      </div>
     </div>
 
     {@render thisPc()}

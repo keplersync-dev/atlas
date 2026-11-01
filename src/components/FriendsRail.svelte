@@ -1,10 +1,13 @@
 <script lang="ts">
+  import { openContextMenu } from "$lib/contextMenu.svelte";
   import { go } from "$lib/nav.svelte";
+  import { personItems } from "$lib/people";
   import { social } from "$lib/stores";
   import { timeAgo } from "$lib/format";
   import type { Friend, Id } from "$lib/types";
   import Button from "./Button.svelte";
   import Head from "./Head.svelte";
+  import Menu from "./Menu.svelte";
 
   // The friends column on Home. Reads straight from the store, so presence
   // events update it live. Incoming friend requests sit on top: they're about people.
@@ -36,8 +39,10 @@
 </script>
 
 {#snippet row(f: Friend)}
+  <!-- svelte-ignore a11y_no_static_element_interactions (right-click repeats the ⋯ menu, which keyboards reach) -->
   <div
-    class="-mx-2 flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-(--bg-hover)"
+    class="group -mx-2 flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-(--bg-hover)"
+    oncontextmenu={(e) => openContextMenu(e, personItems(f.user))}
   >
     <Head
       user={f.user}
@@ -54,6 +59,14 @@
       >
         {status(f)}
       </small>
+    </div>
+    <!-- Shown on hover, or while focused for keyboards, like on the Friends page. -->
+    <div class="opacity-0 group-hover:opacity-100 focus-within:opacity-100">
+      <Menu
+        label="More for {f.user.displayName}"
+        items={personItems(f.user)}
+        triggerClass="grid size-7 place-items-center rounded-md text-(--text-muted) hover:bg-(--bg-raise-2) hover:text-(--text-primary)"
+      />
     </div>
   </div>
 {/snippet}

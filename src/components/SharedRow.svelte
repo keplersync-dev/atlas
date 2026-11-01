@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import { unfinished } from "$lib/play";
   import { openDialog } from "$lib/dialogs.svelte";
   import { plural, timeAgo } from "$lib/format";
   import { go } from "$lib/nav.svelte";
@@ -87,6 +88,17 @@
       return { tone: "muted", text: "Not on this PC", action: add(s) };
     if (local.status === "missing") return missing(local);
     if (local.isRunning) return { tone: "online", text: "Playing now" };
+    if (unfinished(local))
+      return {
+        tone: "warn",
+        text: "Not set up yet",
+        action: {
+          label: "Finish",
+          variant: "warn",
+          run: () => go({ page: "review", id: local.id }),
+        },
+        attention: "update",
+      };
     if (local.sync?.state === "update_available")
       return {
         tone: "warn",
@@ -138,6 +150,8 @@
 
 <script lang="ts">
   import { confirmAction } from "$lib/confirm.svelte";
+  import { openContextMenu } from "$lib/contextMenu.svelte";
+  import type { MenuItem } from "./MenuList.svelte";
   import { fileSize, versionLabel } from "$lib/format";
   import { social } from "$lib/stores";
   import Button from "./Button.svelte";
@@ -184,6 +198,49 @@
     }
   }
 
+  // Right-click: the row's click, its button's action, report, then decline or stop.
+  const items = $derived<MenuItem[]>([
+    local
+      ? {
+          label: "Open",
+          icon: "grid",
+          onselect: () => go({ page: "instance", id: local.id }),
+        }
+      : {
+          label: "Add to this PC…",
+          icon: "download",
+          onselect: () =>
+            openDialog({ kind: "accept", sharedInstanceId: s.id }),
+        },
+    ...(st.action && st.action.label !== "Add" && st.action.label !== "Open"
+      ? [{ label: st.action.label, onselect: st.action.run }]
+      : []),
+    ...(s.myRole !== "owner"
+      ? [
+          "divider" as const,
+          {
+            label: "Report…",
+            icon: "flag",
+            onselect: () =>
+              openDialog({
+                kind: "report",
+                about: { kind: "shared_instance", id: s.id, name: s.name },
+              }),
+          },
+        ]
+      : []),
+    ...(invited || leavable
+      ? [
+          "divider" as const,
+          {
+            label: invited ? "Decline" : "Stop getting updates",
+            danger: true,
+            onselect: decline,
+          },
+        ]
+      : []),
+  ]);
+
   const TONE: Record<Tone, string> = {
     accent: "text-(--accent)",
     warn: "text-(--warn)",
@@ -198,8 +255,10 @@
   };
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions (right-click repeats the row's buttons, which keyboards reach) -->
 <div
   class="flex items-center gap-3.5 px-4 py-2.5 not-last:border-b not-last:border-(--line)"
+  oncontextmenu={(e) => openContextMenu(e, items)}
 >
   <!-- Click: open it if it's on this PC, otherwise start adding it. -->
   <button

@@ -277,16 +277,17 @@ fn new_name(name: &str, owner: Option<&str>, taken: &[String]) -> String {
     if free(name) {
         return name.to_owned();
     }
-    let base = match owner {
-        Some(owner) => format!("{name} (from {owner})"),
-        None => format!("{name} (shared)"),
+    // The count goes inside the brackets: "SkyFactory 5 (from Haloxx, 2)".
+    let whose = match owner {
+        Some(owner) => format!("from {owner}"),
+        None => "shared".to_owned(),
     };
     (1..)
         .map(|i| {
             if i == 1 {
-                base.clone()
+                format!("{name} ({whose})")
             } else {
-                format!("{base} {i}")
+                format!("{name} ({whose}, {i})")
             }
         })
         .find(|n| free(n))
@@ -306,7 +307,7 @@ mod tests {
         assert_eq!(new_name("PPTools", Some("Haloxx"), &taken), "PPTools");
         assert_eq!(
             new_name("skyfactory 5", Some("Haloxx"), &taken),
-            "skyfactory 5 (from Haloxx) 2"
+            "skyfactory 5 (from Haloxx, 2)"
         );
         assert_eq!(
             new_name("SkyFactory 5", None, &taken),

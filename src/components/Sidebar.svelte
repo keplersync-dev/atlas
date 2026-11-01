@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { unfinished } from "$lib/play";
   import { api } from "$lib/api";
   import { go, isActive, type View } from "$lib/nav.svelte";
+  import { openContextMenu } from "$lib/contextMenu.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
+  import { instanceItems } from "$lib/instanceMenu";
   import { instances, social } from "$lib/stores";
   import type { AuthProvider, InstanceSummary } from "$lib/types";
   import ContentIcon from "./ContentIcon.svelte";
@@ -104,6 +107,7 @@
       {@const active = isActive(view)}
       <button
         onclick={() => go(view)}
+        oncontextmenu={(e) => openContextMenu(e, instanceItems(inst))}
         aria-current={active ? "page" : undefined}
         title={inst.name}
         class="flex min-h-10 w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left transition-colors
@@ -131,12 +135,14 @@
               ? "Folder missing"
               : inst.status === "syncing"
                 ? "Updating…"
-                : inst.sync?.state === "update_available" ||
-                    inst.sync?.state === "conflict"
-                  ? "Update ready"
-                  : needsYou(inst)
-                    ? "Changes not sent"
-                    : inst.launcher.name}
+                : unfinished(inst)
+                  ? "Not set up yet"
+                  : inst.sync?.state === "update_available" ||
+                      inst.sync?.state === "conflict"
+                    ? "Update ready"
+                    : needsYou(inst)
+                      ? "Changes not sent"
+                      : inst.launcher.name}
           </small>
         </span>
         {#if needsYou(inst)}
@@ -180,7 +186,7 @@
               : "Online"}</small
         >
       </span>
-      <Icon name="more" class="size-4 text-(--text-faint)" />
+      <Icon name="settings" class="size-4 text-(--text-faint)" />
     </button>
   {:else if social.loaded && !social.hasServer}
     <p class="px-5 pt-3 pb-1 text-center text-[13px] text-(--text-faint)">

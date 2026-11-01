@@ -8,7 +8,7 @@
   } from "$lib/confirm.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
   import { openLabel, plural, versionLabel } from "$lib/format";
-  import { canPlay, play } from "$lib/play";
+  import { canPlay, play, unfinished } from "$lib/play";
   import { resource } from "$lib/resource.svelte";
   import { instances, social } from "$lib/stores";
   import type { Id } from "$lib/types";
@@ -326,6 +326,7 @@
       <div class="min-w-60 flex-1 pt-1">
         <h1
           class="mb-2 truncate font-(family-name:--font-display) text-2xl font-semibold tracking-tight"
+          title={summary.name}
         >
           {summary.name}
         </h1>
@@ -375,7 +376,9 @@
             disabled={busy || !canPlay(summary)}
             title={summary.isRunning
               ? "Minecraft is running"
-              : `Play in ${summary.launcher.name}`}
+              : unfinished(summary)
+                ? "Finish setting it up first"
+                : `Play in ${summary.launcher.name}`}
             onclick={() => play(summary)}
           >
             <Icon

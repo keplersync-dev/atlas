@@ -110,6 +110,8 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::friends::cancel_friend_request,
         commands::friends::remove_friend,
         commands::friends::block_user,
+        commands::friends::unblock_user,
+        commands::friends::list_blocked,
         commands::friends::take_opened_link,
         // Groups
         commands::groups::list_groups,
