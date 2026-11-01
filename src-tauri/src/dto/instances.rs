@@ -113,6 +113,9 @@ pub struct InstanceSummary {
     pub tracked_at: IsoDate,
     pub last_scanned_at: Option<IsoDate>,
     pub sync: Option<InstanceSyncInfo>,
+    /// Shared while signed in to another server or account: not shared on this one
+    /// (`sync` is None), and signing back in to that one brings the link back.
+    pub shared_elsewhere: bool,
     pub progress: Option<SyncProgress>,
 }
 

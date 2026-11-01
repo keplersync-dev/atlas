@@ -122,7 +122,7 @@
   </button>
 
   {#if !summary}
-    <p class="text-(--text-muted)">This instance isn't tracked anymore.</p>
+    <p class="text-(--text-muted)">This instance isn't in Atlas anymore.</p>
   {:else if !hasUpdate && !started}
     <div class="py-12 text-center text-(--text-muted)">
       <b class="block text-sm text-(--text-primary)"

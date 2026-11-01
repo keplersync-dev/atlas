@@ -225,7 +225,7 @@
             class="gap-1.5"
             onclick={() => openDialog({ kind: "track" })}
           >
-            <Icon name="plus" class="size-3.5" />Track instances
+            <Icon name="plus" class="size-3.5" />Add instances
           </Button>
         </div>
       </div>
@@ -299,7 +299,7 @@
                       all: "",
                       needs: "Nothing needs you right now.",
                       shared: "None of your instances are shared yet.",
-                      local: "Every instance you track is shared.",
+                      local: "Every instance you've added is shared.",
                     }[filter]}
               </p>
             {/if}

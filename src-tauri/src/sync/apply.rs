@@ -186,7 +186,7 @@ pub async fn run<R: Runtime>(
     let game_dir = PathBuf::from(&row.game_dir);
     if !game_dir.is_dir() {
         return Err(AppError::conflict(
-            "The instance's folder is missing. If you moved it, track it again from its new place.",
+            "The instance's folder is missing. If you moved it, add it to Atlas again from its new place.",
         ));
     }
     let (plan, _, _) = make_plan(

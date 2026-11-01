@@ -271,7 +271,7 @@
   {#if instances.loaded}
     <div class="py-16 text-center text-(--text-muted)">
       <b class="block text-sm text-(--text-primary)"
-        >This instance isn't tracked anymore.</b
+        >This instance isn't in Atlas anymore.</b
       >
       <Button class="mt-4" onclick={() => go({ page: "home" })}
         >Back to Home</Button
@@ -340,6 +340,8 @@
                 ? "Shared by you"
                 : `From ${summary.sync.owner?.displayName ?? "a deleted user"}`}
             </span>
+          {:else if summary.sharedElsewhere}
+            <span>Shared on another account</span>
           {:else}
             <span>Not shared</span>
           {/if}
@@ -385,13 +387,15 @@
 
         <!-- The main action depends on the sync state. -->
         {#if !summary.sync}
-          <Button
-            variant="primary"
-            disabled={summary.status !== "ready"}
-            onclick={() => openDialog({ kind: "share", instanceId: id })}
-          >
-            <Icon name="share" class="size-3.5" />Share
-          </Button>
+          {#if !summary.sharedElsewhere}
+            <Button
+              variant="primary"
+              disabled={summary.status !== "ready"}
+              onclick={() => openDialog({ kind: "share", instanceId: id })}
+            >
+              <Icon name="share" class="size-3.5" />Share
+            </Button>
+          {/if}
         {:else if summary.sync.state === "local_changes" && summary.sync.role !== "viewer"}
           <Button
             variant="primary"
@@ -460,6 +464,14 @@
       <!-- Settings and a short list: a readable width, not the whole window. -->
       <div class="max-w-3xl">
         <SharingTab instanceId={summary.id} sync={summary.sync} />
+      </div>
+    {:else if summary.sharedElsewhere}
+      <div class="py-12 text-center text-(--text-muted)">
+        <b class="block text-sm text-(--text-primary)"
+          >Shared on another account</b
+        >
+        You shared or joined this while signed in to another account. Sign in to that
+        one to send or get its updates. Your files here are fine.
       </div>
     {:else}
       <div class="py-12 text-center text-(--text-muted)">

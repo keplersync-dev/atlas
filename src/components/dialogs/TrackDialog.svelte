@@ -158,7 +158,7 @@
 </script>
 
 <Dialog
-  title="Track instances"
+  title="Add instances"
   description="Found in the launchers on this PC. Atlas only reads them until you share or update."
   wide
   {onclose}
@@ -220,15 +220,22 @@
                   ? 'cursor-pointer border-(--accent)/60 bg-(--accent)/8'
                   : 'cursor-pointer border-(--line) hover:bg-(--bg-hover)'}"
             >
-              <input
-                type="checkbox"
-                bind:group={selected}
-                value={keyOf(d)}
-                disabled={tracked}
-                class="size-4 shrink-0 accent-(--accent) {tracked
-                  ? 'invisible'
-                  : ''}"
-              />
+              <!-- Ticked and greyed, like every picker: it's already in Atlas. -->
+              {#if tracked}
+                <input
+                  type="checkbox"
+                  checked
+                  disabled
+                  class="size-4 shrink-0 accent-(--accent)"
+                />
+              {:else}
+                <input
+                  type="checkbox"
+                  bind:group={selected}
+                  value={keyOf(d)}
+                  class="size-4 shrink-0 accent-(--accent)"
+                />
+              {/if}
               <ContentIcon
                 src={d.icon}
                 seed={d.gameDir}
@@ -241,9 +248,8 @@
                 </small>
               </span>
               {#if tracked}
-                <span
-                  class="flex shrink-0 items-center gap-1 text-[13px] text-(--text-muted)"
-                  ><Icon name="check" class="size-3.5" />Already added</span
+                <span class="shrink-0 text-[13px] text-(--text-muted)"
+                  >Already added</span
                 >
               {/if}
             </label>
@@ -281,7 +287,7 @@
           class="h-8.5 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 font-mono text-[13px] outline-none focus:border-(--accent)"
         />
         <Button disabled={!folder.trim() || submitting} onclick={trackFolder}
-          >Track folder</Button
+          >Add folder</Button
         >
       </div>
 
@@ -292,7 +298,7 @@
         <p class="mb-2 text-[13px] text-(--text-faint)">
           {imported
             ? `Finish adding it in ${imported}, then look again here to track it.`
-            : "A launcher installs it as a new instance, which you can then track."}
+            : "A launcher installs it as a new instance, which you can then add here."}
         </p>
         <div class="flex flex-wrap gap-2">
           {#each importers as l (l.id)}
@@ -340,10 +346,10 @@
       disabled={submitting || selected.length === 0}
     >
       {submitting
-        ? "Tracking…"
+        ? "Adding…"
         : selected.length
-          ? `Track ${plural(selected.length, "instance")}`
-          : "Track selected"}
+          ? `Add ${plural(selected.length, "instance")}`
+          : "Add selected"}
     </Button>
   {/snippet}
 </Dialog>

@@ -213,7 +213,7 @@
               social
                 .resetFriendCode()
                 .catch((e) => showError((e as Error).message));
-          }}>Reset</Button
+          }}>Reset code</Button
         >
       </div>
     </div>

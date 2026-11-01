@@ -18,11 +18,13 @@
   const blocked = (i: (typeof all)[number]) =>
     i.sync
       ? "Already shared"
-      : i.status === "missing"
-        ? "Folder not found"
-        : i.status === "syncing"
-          ? "Updating"
-          : null;
+      : i.sharedElsewhere
+        ? "Shared on another account"
+        : i.status === "missing"
+          ? "Folder not found"
+          : i.status === "syncing"
+            ? "Updating"
+            : null;
 
   let open = $state(false);
   let root: HTMLDivElement;
@@ -60,6 +62,7 @@
           <button
             role="menuitem"
             disabled={!!why}
+            title={why ? `${i.name}: ${why}` : i.name}
             onclick={() => pick(i.id)}
             class="flex w-full items-center gap-2.5 rounded-[5px] px-2 py-1.5 text-left {why
               ? 'opacity-50'

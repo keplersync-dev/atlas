@@ -159,7 +159,12 @@
             : `From ${s.owner?.displayName ?? "a friend"}`,
       };
     }
-    return { tone: "faint", text: "Not shared" };
+    return {
+      tone: "faint",
+      text: instance.sharedElsewhere
+        ? "Shared on another account"
+        : "Not shared",
+    };
   });
 
   const DOT = {
@@ -252,7 +257,10 @@
   <div class="flex flex-1 flex-col px-3.5 pt-2.5 pb-3">
     <div class="mb-3">
       <button onclick={open} class="block w-full text-left">
-        <b class="block truncate text-[14px] font-semibold">{instance.name}</b>
+        <b
+          class="block truncate text-[14px] font-semibold"
+          title={instance.name}>{instance.name}</b
+        >
       </button>
       <!-- The launcher's name opens the instance there. -->
       <small

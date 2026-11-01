@@ -329,6 +329,9 @@ export interface InstanceSummary {
   lastScannedAt: IsoDate | null;
   /** null = only on this PC. */
   sync: InstanceSyncInfo | null;
+  /** Shared while signed in to another server or account: `sync` is null here, and
+   *  signing back in to that one brings the link back. */
+  sharedElsewhere: boolean;
   /** Present only while status is "syncing". */
   progress: SyncProgress | null;
 }

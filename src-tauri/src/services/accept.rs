@@ -141,7 +141,7 @@ pub async fn into_existing<R: Runtime>(
     }
     if !Path::new(&row.game_dir).is_dir() {
         return Err(AppError::conflict(
-            "The instance's folder is missing. If you moved it, track it again from its new place.",
+            "The instance's folder is missing. If you moved it, add it to Atlas again from its new place.",
         ));
     }
     let invite = addable(state, shared_id).await?;

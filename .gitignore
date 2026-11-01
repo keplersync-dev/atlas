@@ -16,3 +16,4 @@ vite.config.ts.timestamp-*
 
 docs/
 design/
+e2e/out

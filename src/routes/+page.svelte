@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { api } from "$lib/api";
-  import { nav } from "$lib/nav.svelte";
-  import { connectStores, social } from "$lib/stores";
+  import { go, nav } from "$lib/nav.svelte";
+  import { closeDialog, openDialog } from "$lib/dialogs.svelte";
+  import { connectStores, instances, social } from "$lib/stores";
   import Icon from "../components/Icon.svelte";
   import TitleBar from "../components/TitleBar.svelte";
   import Sidebar from "../components/Sidebar.svelte";
@@ -14,6 +15,13 @@
   import Friends from "../tabs/Friends.svelte";
   import Instance from "../tabs/Instance.svelte";
   import Review from "../tabs/Review.svelte";
+
+  // Dev builds only: lets the e2e suite (e2e/) reach every page and dialog directly.
+  if (import.meta.env.DEV) {
+    Object.assign(window, {
+      __atlas: { go, openDialog, closeDialog, instances, social },
+    });
+  }
 
   // Load all shared data once and keep it live. The returned cleanup
   // unsubscribes from events if this component is ever destroyed.

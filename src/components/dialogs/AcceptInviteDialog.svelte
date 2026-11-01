@@ -383,7 +383,7 @@
     >
     {#if nowhere}
       <Button variant="primary" onclick={() => openDialog({ kind: "track" })}>
-        Track an instance
+        Add an instance
       </Button>
     {:else}
       <Button type="submit" variant="primary" disabled={!canSubmit}>

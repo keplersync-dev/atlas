@@ -96,6 +96,7 @@ pub fn summary(
         tracked_at: row.tracked_at.clone(),
         last_scanned_at: row.last_scanned_at.clone(),
         sync,
+        shared_elsewhere: false,
         progress: job.flatten(),
     }
 }
@@ -105,7 +106,17 @@ async fn full_summary(
     row: &InstanceRow,
     count: u32,
 ) -> AppResult<InstanceSummary> {
-    let sync = super::sync::info(state, row).await?;
+    let mut sync = super::sync::info(state, row).await?;
+    // The list that last had the link belongs to another server or account (`shared::list`
+    // leaves such links alone): on this account it isn't shared.
+    let elsewhere = sync.is_some()
+        && match (state.cloud.link_scope().await, row.shared_scope.as_deref()) {
+            (Some(now), Some(then)) => now != then,
+            _ => false,
+        };
+    if elsewhere {
+        sync = None;
+    }
     let mut s = summary(
         row,
         count,
@@ -113,6 +124,7 @@ async fn full_summary(
         sync,
         state.jobs.status(&row.id),
     );
+    s.shared_elsewhere = elsewhere;
     // The launcher has no picture for it: show the shared one.
     if s.icon.is_none() {
         s.icon = super::shared::cached_icon(state, row).await;
@@ -231,7 +243,7 @@ pub async fn track_folder<R: Runtime>(
         .await?
         .is_some()
     {
-        return Err(AppError::conflict("That folder is already tracked"));
+        return Err(AppError::conflict("That folder is already in Atlas"));
     }
     let name = Path::new(&game_dir)
         .file_name()
@@ -586,7 +598,7 @@ async fn in_launcher(state: &AppState, id: &str) -> AppResult<(LauncherKind, Pat
     let row = row(state, id).await?;
     if row.status() == InstanceStatus::Missing {
         return Err(AppError::conflict(
-            "The instance's folder is missing. If you moved it, track it again from its new place.",
+            "The instance's folder is missing. If you moved it, add it to Atlas again from its new place.",
         ));
     }
     let kind = row.kind();
@@ -613,7 +625,7 @@ pub async fn open_folder<R: Runtime>(
     let row = row(state, id).await?;
     if row.status() == InstanceStatus::Missing || !Path::new(&row.game_dir).is_dir() {
         return Err(AppError::conflict(
-            "The instance's folder is missing. If you moved it, track it again from its new place.",
+            "The instance's folder is missing. If you moved it, add it to Atlas again from its new place.",
         ));
     }
     app.opener()

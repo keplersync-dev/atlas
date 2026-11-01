@@ -197,7 +197,9 @@
             seed={item.name}
             class="size-5 rounded-[4px]"
           />
-          <span class="min-w-0 flex-1 truncate font-medium">{item.name}</span>
+          <span class="min-w-0 flex-1 truncate font-medium" title={item.name}
+            >{item.name}</span
+          >
           <span class="text-[13px] text-(--text-faint)"
             >{fileSize(item.sizeBytes)}</span
           >
@@ -318,7 +320,8 @@
         <b
           class="block truncate font-medium {mode === 'private'
             ? 'text-(--text-muted)'
-            : ''}">{item.name}</b
+            : ''}"
+          title={item.name}>{item.name}</b
         >
         <small class="block truncate text-[13px] text-(--text-faint)">
           {KIND[item.kind]}

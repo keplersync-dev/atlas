@@ -259,8 +259,8 @@
     <div
       class="grid items-center gap-3.5 border-b border-(--line) px-2 pb-1.5 text-[13px] text-(--text-faint)
         {canSetModes
-        ? 'grid-cols-[28px_minmax(0,1fr)_minmax(0,140px)_224px_36px]'
-        : 'grid-cols-[28px_minmax(0,1fr)_minmax(0,150px)_minmax(0,130px)_36px]'}"
+        ? 'grid-cols-[28px_minmax(0,1fr)_minmax(140px,0.35fr)_224px_36px]'
+        : 'grid-cols-[28px_minmax(0,1fr)_minmax(150px,0.35fr)_minmax(0,130px)_36px]'}"
       aria-hidden="true"
     >
       <span></span>
@@ -278,8 +278,8 @@
     <div
       class="grid items-center gap-3.5 rounded-md px-2 py-2.25 hover:bg-(--bg-hover)
         {canSetModes
-        ? 'grid-cols-[28px_minmax(0,1fr)_minmax(0,140px)_224px_36px]'
-        : 'grid-cols-[28px_minmax(0,1fr)_minmax(0,150px)_minmax(0,130px)_36px]'}"
+        ? 'grid-cols-[28px_minmax(0,1fr)_minmax(140px,0.35fr)_224px_36px]'
+        : 'grid-cols-[28px_minmax(0,1fr)_minmax(150px,0.35fr)_minmax(0,130px)_36px]'}"
     >
       <ContentIcon
         src={item.iconUrl}
@@ -287,7 +287,7 @@
         class="size-7 rounded-[5px] {present ? '' : 'opacity-40'}"
       />
       <div class="min-w-0 {present ? '' : 'opacity-60'}">
-        <b class="block truncate font-medium">{item.name}</b>
+        <b class="block truncate font-medium" title={item.name}>{item.name}</b>
         <small class="block truncate text-[13px] text-(--text-faint)">
           {SINGULAR[item.kind]}
           {#if canSetModes}
@@ -320,8 +320,9 @@
           {/if}
         </small>
       </div>
-      <span class="truncate font-mono text-[13px] text-(--text-faint)"
-        >{item.versionLabel ?? "—"}</span
+      <span
+        class="truncate font-mono text-[13px] text-(--text-faint)"
+        title={item.versionLabel ?? undefined}>{item.versionLabel ?? "—"}</span
       >
 
       {#if canSetModes}

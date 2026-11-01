@@ -157,18 +157,22 @@
 {#snippet folderRow(f: Folder)}
   {@const c = counts.get(f.path) ?? { total: 0, shared: 0 }}
   <div class="{ROW} border-t border-(--line) py-2 hover:bg-(--bg-hover)">
-    <input
-      type="checkbox"
-      checked={c.total > 0 && c.shared === c.total}
-      indeterminate={c.shared > 0 && c.shared < c.total}
-      aria-label="Share {f.name}"
-      onchange={() => tick(f.path, c.shared < c.total)}
-      class="size-4 accent-(--accent)"
-    />
+    <!-- The whole 28 px cell ticks it, not just the 16 px box. -->
+    <label class="grid size-7 cursor-pointer place-items-center">
+      <input
+        type="checkbox"
+        checked={c.total > 0 && c.shared === c.total}
+        indeterminate={c.shared > 0 && c.shared < c.total}
+        aria-label="Share {f.name}"
+        onchange={() => tick(f.path, c.shared < c.total)}
+        class="size-4 accent-(--accent)"
+      />
+    </label>
     <button
       type="button"
       onclick={() => (at = f.path)}
-      class="flex min-w-0 items-center gap-2.5 text-left"
+      class="flex min-h-7 min-w-0 items-center gap-2.5 text-left"
+      title={f.name}
     >
       <Icon name="folder" class="size-4.5 shrink-0 text-(--text-muted)" />
       <span class="truncate">{f.name}</span>
@@ -196,19 +200,23 @@
       ? f.path.slice(0, f.path.lastIndexOf("/"))
       : ""}
   <div class="group {ROW} border-t border-(--line) py-2 hover:bg-(--bg-hover)">
-    <input
-      type="checkbox"
-      checked={on}
-      aria-label="Share {f.path}"
-      onchange={() => tick(f.path, !on)}
-      class="size-4 accent-(--accent)"
-    />
+    <label class="grid size-7 cursor-pointer place-items-center">
+      <input
+        type="checkbox"
+        checked={on}
+        aria-label="Share {f.path}"
+        onchange={() => tick(f.path, !on)}
+        class="size-4 accent-(--accent)"
+      />
+    </label>
     <span class="flex min-w-0 items-center gap-2.5">
       <Icon name="file" class="size-4.5 shrink-0 text-(--text-faint)" />
       <!-- The name first; under it, "Changed" and (searching) its folder, so a
            long path cut at the end never hides the name. -->
       <span class="min-w-0">
-        <span class="block truncate">{f.path.split("/").pop()}</span>
+        <span class="block truncate" title={f.path}
+          >{f.path.split("/").pop()}</span
+        >
         {#if (on && f.changed) || folder}
           <small class="block truncate text-[13px] text-(--text-faint)">
             {#if on && f.changed}<span
@@ -309,15 +317,17 @@
         role="row"
         class="{ROW} border-t border-(--line) py-2 text-[13px] text-(--text-muted)"
       >
-        <input
-          type="checkbox"
-          checked={scope.total > 0 && scope.shared === scope.total}
-          indeterminate={scope.shared > 0 && scope.shared < scope.total}
-          aria-label={scope.shared < scope.total ? "Tick all" : "Untick all"}
-          title={scope.shared < scope.total ? "Tick all" : "Untick all"}
-          onchange={tickAll}
-          class="size-4 accent-(--accent)"
-        />
+        <label class="grid size-7 cursor-pointer place-items-center">
+          <input
+            type="checkbox"
+            checked={scope.total > 0 && scope.shared === scope.total}
+            indeterminate={scope.shared > 0 && scope.shared < scope.total}
+            aria-label={scope.shared < scope.total ? "Tick all" : "Untick all"}
+            title={scope.shared < scope.total ? "Tick all" : "Untick all"}
+            onchange={tickAll}
+            class="size-4 accent-(--accent)"
+          />
+        </label>
         {@render sortHeader("name", "Name")}
         {@render sortHeader("size", "Size")}
         {@render sortHeader("modified", "Modified")}

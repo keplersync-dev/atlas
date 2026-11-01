@@ -182,7 +182,7 @@ pub async fn sync<R: Runtime>(
     }
     if !Path::new(&row.game_dir).is_dir() {
         return Err(AppError::conflict(
-            "The instance's folder is missing. If you moved it, track it again from its new place.",
+            "The instance's folder is missing. If you moved it, add it to Atlas again from its new place.",
         ));
     }
     let revision = src.latest_revision();
@@ -316,7 +316,7 @@ pub async fn restore<R: Runtime>(
     let row = row(state, id).await?;
     if !Path::new(&row.game_dir).is_dir() {
         return Err(AppError::conflict(
-            "The instance's folder is missing. If you moved it, track it again from its new place.",
+            "The instance's folder is missing. If you moved it, add it to Atlas again from its new place.",
         ));
     }
     let b = db::backups::get(&state.db, id, backup_id)

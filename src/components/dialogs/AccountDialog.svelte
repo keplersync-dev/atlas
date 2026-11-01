@@ -451,6 +451,7 @@
               size="sm"
               variant="ghost"
               disabled={busy !== null || me.identities.length === 1}
+              aria-label="Unlink {p.label}"
               title={me.identities.length === 1
                 ? "You need at least one way to sign in"
                 : undefined}
@@ -504,7 +505,7 @@
             const ok = await confirmAction({
               title: "Reset your friend code?",
               message:
-                "Your old code and link stop working right away. You'll get a new one to share.",
+                "Your old code and link stop working right away. Friends you already have stay friends.",
               confirmLabel: "Reset code",
             });
             if (ok) act("code", () => social.resetFriendCode());

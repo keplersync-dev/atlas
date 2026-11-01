@@ -86,9 +86,9 @@
     <span>Instances</span>
     <button
       onclick={() => openDialog({ kind: "track" })}
-      aria-label="Track an instance"
-      title="Track an instance"
-      class="grid rounded p-0.5 hover:bg-(--bg-hover) hover:text-(--text-primary)"
+      aria-label="Add an instance"
+      title="Add an instance"
+      class="-my-1 grid size-6 place-items-center rounded hover:bg-(--bg-hover) hover:text-(--text-primary)"
     >
       <Icon name="plus" class="size-3.5" />
     </button>
@@ -105,6 +105,7 @@
       <button
         onclick={() => go(view)}
         aria-current={active ? "page" : undefined}
+        title={inst.name}
         class="flex min-h-10 w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left transition-colors
           {active
           ? 'bg-(--bg-raise-2) text-(--text-primary)'
