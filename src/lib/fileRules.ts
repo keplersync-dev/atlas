@@ -5,7 +5,13 @@
 import type { FileRules, ShareFile } from "$lib/types";
 
 /** Ticked when no rule says otherwise. DEFAULT_DIRS in share_files.rs. */
-const DEFAULT_DIRS = ["config/", "defaultconfigs/", "kubejs/", "scripts/"];
+const DEFAULT_DIRS = [
+  "config/",
+  "defaultconfigs/",
+  "kubejs/",
+  "resources/",
+  "scripts/",
+];
 /** Always first install only. FIRST_INSTALL in share_files.rs. */
 const FIRST_INSTALL = ["options.txt"];
 
@@ -72,7 +78,7 @@ export function setFirstInstall(
 /** A file that can't be uploaded and doesn't come from the pack never goes out. */
 export const blocked = (f: ShareFile) => !!f.refusal && !f.fromPack;
 
-/** The defaults: config and script folders and the pack's own files, nothing else. */
+/** The defaults: config, script and resources folders and the pack's own files, nothing else. */
 export const DEFAULT_RULES: FileRules = {
   include: [],
   exclude: [],

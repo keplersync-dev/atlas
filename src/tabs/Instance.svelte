@@ -1,13 +1,10 @@
 <script lang="ts">
   import { api } from "$lib/api";
   import { back, forgetInstance, go, nav } from "$lib/nav.svelte";
-  import {
-    chooseAction,
-    confirmAction,
-    type Choice,
-  } from "$lib/confirm.svelte";
+  import { confirmAction } from "$lib/confirm.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
   import { openLabel, plural, versionLabel } from "$lib/format";
+  import { instanceItems, removeFromAtlas } from "$lib/instanceMenu";
   import { canPlay, play, unfinished } from "$lib/play";
   import { resource } from "$lib/resource.svelte";
   import { instances, social } from "$lib/stores";
@@ -15,7 +12,7 @@
   import ContentIcon from "../components/ContentIcon.svelte";
   import Button from "../components/Button.svelte";
   import Icon from "../components/Icon.svelte";
-  import Menu, { type MenuItem } from "../components/Menu.svelte";
+  import Menu from "../components/Menu.svelte";
   import Tabs from "../components/Tabs.svelte";
   import ContentTab from "../components/instance/ContentTab.svelte";
   import HistoryTab from "../components/instance/HistoryTab.svelte";
@@ -98,68 +95,7 @@
       : null,
   );
 
-  const stopTracking = { confirmLabel: "Remove", danger: true };
-
-  async function untrack() {
-    if (!summary) return;
-    const forget = `Atlas forgets it and deletes its backups. It stays in ${summary.launcher.name}, untouched.`;
-    let choice: Choice | null;
-    if (!sharedId) {
-      choice = await chooseAction({
-        ...stopTracking,
-        title: `Remove ${summary.name} from Atlas?`,
-        message: `${forget} You can add it again later.`,
-      });
-    } else if (summary.sync?.role === "owner") {
-      // Stopping tracking here never ends the sharing: you may have it on another PC.
-      const shared = social.shared.find((s) => s.id === sharedId);
-      const people =
-        shared?.members.filter(
-          (m) => m.role !== "owner" && m.status === "active",
-        ).length ?? 0;
-      choice = await chooseAction({
-        ...stopTracking,
-        title: `Remove ${summary.name} from Atlas?`,
-        message: `${forget} It stays shared${people ? ` with ${plural(people, "person", "people")}` : ""}, and you can add it back from Shared to send updates again.`,
-        alternativeLabel: "Stop sharing too",
-      });
-      if (
-        choice === "alternative" &&
-        !(await confirmAction({
-          title: `Stop sharing ${summary.name}?`,
-          message:
-            "Nobody gets updates anymore. Everyone keeps their copy as a normal instance.",
-          confirmLabel: "Stop sharing",
-          danger: true,
-        }))
-      )
-        return;
-    } else {
-      choice = await chooseAction({
-        ...stopTracking,
-        title: `Remove ${summary.name} from Atlas?`,
-        message: `${forget} You still get its updates, so you can add it back from Shared.`,
-        alternativeLabel: "Stop updates too",
-      });
-    }
-    if (!choice) return;
-    try {
-      if (choice === "alternative" && sharedId)
-        await (summary.sync?.role === "owner"
-          ? api.archiveSharedInstance(sharedId)
-          : api.leaveSharedInstance(sharedId));
-      await api.untrackInstance(id);
-    } catch (e) {
-      error = (e as Error).message;
-      await instances.load();
-      return;
-    }
-    await social.load();
-    await instances.load();
-    // This page no longer exists: remove it from history and leave without remembering it.
-    forgetInstance(id);
-    go({ page: "home" }, { replace: true });
-  }
+  const untrack = () => summary && removeFromAtlas(summary);
 
   /** A shared pack whose folder is gone: forget this copy and add a fresh one. */
   async function setUpAgain() {
@@ -177,94 +113,9 @@
     openDialog({ kind: "accept", sharedInstanceId: shared });
   }
 
-  const menuItems = $derived.by((): MenuItem[] => {
-    if (!summary) return [];
-    const s = summary.sync;
-    const missing = summary.status === "missing";
-    return [
-      ...(missing
-        ? []
-        : [
-            {
-              label: "Show in File Explorer",
-              icon: "folders",
-              onselect: () => run(() => api.openInstanceFolder(id)),
-            },
-            {
-              label: "Rescan folder",
-              icon: "refresh",
-              onselect: () => run(() => api.rescanInstance(id)),
-            },
-            {
-              label: "Export as .mrpack…",
-              icon: "download",
-              onselect: () => run(() => api.exportMrpack(id)),
-            },
-          ]),
-      "divider",
-      ...(s && s.role !== "owner"
-        ? [
-            {
-              label: "Stop getting updates",
-              hint: `Leave ${s.owner?.displayName ?? "the owner"}'s pack. Your files stay as they are.`,
-              danger: true,
-              onselect: async () => {
-                const ok = await confirmAction({
-                  title: `Stop getting updates for ${summary.name}?`,
-                  message: `You leave ${s.owner?.displayName ?? "the owner"}'s pack. Your copy stays here and keeps working, but won't change when they send updates. They'd have to invite you again.`,
-                  confirmLabel: "Stop updates",
-                  danger: true,
-                });
-                if (ok) run(() => api.leaveSharedInstance(s.sharedInstanceId));
-              },
-            },
-          ]
-        : []),
-      ...(s && s.role === "owner"
-        ? [
-            {
-              label: "Stop sharing",
-              hint: "Friends keep their copy but get no more updates.",
-              danger: true,
-              onselect: async () => {
-                const ok = await confirmAction({
-                  title: `Stop sharing ${summary.name}?`,
-                  message:
-                    "Nobody gets updates anymore, you included. Everyone keeps their copy as a normal instance.",
-                  confirmLabel: "Stop sharing",
-                  danger: true,
-                });
-                if (ok)
-                  run(() => api.archiveSharedInstance(s.sharedInstanceId));
-              },
-            },
-          ]
-        : []),
-      {
-        label: "Remove from Atlas",
-        hint: `Atlas forgets it. It stays in ${summary.launcher.name}.`,
-        danger: true,
-        onselect: untrack,
-      },
-      ...(s && s.role !== "owner"
-        ? [
-            "divider" as const,
-            {
-              label: "Report…",
-              onselect: () =>
-                openDialog({
-                  kind: "report",
-                  about: {
-                    kind: "shared_instance",
-                    id: s.sharedInstanceId,
-                    name: summary.name,
-                  },
-                }),
-            },
-          ]
-        : []),
-    ];
-  });
+  const menuItems = $derived(
+    summary ? instanceItems(summary, { onPage: true, run }) : [],
+  );
 </script>
 
 {#if !summary}
@@ -364,11 +215,10 @@
           <Button
             variant="ghost"
             disabled={busy}
+            icon="external"
             onclick={() => run(() => api.openInLauncher(id))}
           >
-            <Icon name="external" class="size-3.5" />{openLabel(
-              summary.launcher,
-            )}
+            {openLabel(summary.launcher)}
           </Button>
         {/if}
         {#if summary.launcher.kind !== "folder" && summary.status !== "missing"}
@@ -381,10 +231,10 @@
                 : `Play in ${summary.launcher.name}`}
             onclick={() => play(summary)}
           >
-            <Icon
-              name="play"
-              class="size-3.5 text-(--online)"
-            />{summary.isRunning ? "Playing" : "Play"}
+            {#snippet icon()}
+              <Icon name="play" class="size-3.5 text-(--online)" />
+            {/snippet}
+            {summary.isRunning ? "Playing" : "Play"}
           </Button>
         {/if}
 
@@ -394,9 +244,10 @@
             <Button
               variant="primary"
               disabled={summary.status !== "ready"}
+              icon="share"
               onclick={() => openDialog({ kind: "share", instanceId: id })}
             >
-              <Icon name="share" class="size-3.5" />Share
+              Share
             </Button>
           {/if}
         {:else if summary.sync.state === "local_changes" && summary.sync.role !== "viewer"}

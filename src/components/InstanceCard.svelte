@@ -202,7 +202,7 @@
   };
 </script>
 
-<!-- Right-click: open, play, files, share (instanceItems). -->
+<!-- Right-click: the same menu as its page, plus Open and Share (instanceItems). -->
 <article
   oncontextmenu={(e) => openContextMenu(e, instanceItems(instance))}
   class="group flex flex-col overflow-hidden rounded-xl border bg-(--bg-raise) shadow-[0_8px_24px_#0000004d] transition-colors hover:bg-(--bg-raise-2)
@@ -263,7 +263,7 @@
         title="Play {instance.name}"
         class="absolute right-2.5 bottom-2.5 grid size-9 place-items-center rounded-full bg-(--accent) text-(--accent-ink) shadow-[0_6px_18px_#0009] transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
       >
-        <Icon name="play" class="ml-0.5 size-4.5" />
+        <Icon name="play" class="size-4.5" />
       </button>
     {/if}
   </div>

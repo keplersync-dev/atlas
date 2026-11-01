@@ -178,24 +178,16 @@
       <div class="flex gap-1.5">
         <Button
           size="sm"
-          class="gap-1.5"
+          icon={clip.copied === "code" ? "check" : undefined}
           onclick={() => clip.copy(formatCode(me.friendCode), "code")}
         >
-          {#if clip.copied === "code"}<Icon
-              name="check"
-              class="size-3.5"
-            />{/if}
           Copy code
         </Button>
         <Button
           size="sm"
-          class="gap-1.5"
+          icon={clip.copied === "link" ? "check" : undefined}
           onclick={() => clip.copy(me.friendLink, "link")}
         >
-          {#if clip.copied === "link"}<Icon
-              name="check"
-              class="size-3.5"
-            />{/if}
           Copy link
         </Button>
         <Button

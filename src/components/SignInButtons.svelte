@@ -22,11 +22,17 @@
       class="gap-2"
       onclick={() => social.signIn("minecraft")}
     >
-      <ProviderIcon provider="minecraft" class="size-4" />
+      {#snippet icon()}<ProviderIcon
+          provider="minecraft"
+          class="size-4"
+        />{/snippet}
       {label("minecraft", "Minecraft")}
     </Button>
     <Button class="gap-2" onclick={() => social.signIn("discord")}>
-      <ProviderIcon provider="discord" class="size-4" />
+      {#snippet icon()}<ProviderIcon
+          provider="discord"
+          class="size-4"
+        />{/snippet}
       {label("discord", "Discord")}
     </Button>
   </div>

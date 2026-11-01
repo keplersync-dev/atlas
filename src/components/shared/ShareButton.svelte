@@ -3,7 +3,6 @@
   import { instances } from "$lib/stores";
   import ContentIcon from "../ContentIcon.svelte";
   import Button from "../Button.svelte";
-  import Icon from "../Icon.svelte";
 
   // "Share an instance" without opening the instance first: a dropdown of every
   // tracked instance, the ones that can't be shared greyed with why. Picking one opens
@@ -46,9 +45,10 @@
     aria-haspopup="menu"
     aria-expanded={open}
     onclick={() => (open = !open)}
-    class="w-full gap-1.5"
+    icon="plus"
+    class="w-full"
   >
-    <Icon name="plus" class="size-3.5" />Share an instance
+    Share an instance
   </Button>
 
   {#if open}

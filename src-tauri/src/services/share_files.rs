@@ -17,8 +17,15 @@ use crate::dto::FileRules;
 use crate::sync::manifest::{CONTENT_DIRS, Keep, NEVER_SHARED};
 
 /// Ticked by default, like the Modrinth App's whole `config/`, plus the folders packs
-/// keep their scripts in (SkyFactory 4 needs its CraftTweaker scripts).
-pub const DEFAULT_DIRS: [&str; 4] = ["config/", "defaultconfigs/", "kubejs/", "scripts/"];
+/// keep their scripts and loose textures in (SkyFactory 4 needs its CraftTweaker scripts,
+/// and its menu art in `resources/`).
+pub const DEFAULT_DIRS: [&str; 5] = [
+    "config/",
+    "defaultconfigs/",
+    "kubejs/",
+    "resources/",
+    "scripts/",
+];
 
 /// Never listed, as in the Modrinth App's export: caches, native libraries mods unpack,
 /// and other programs' files.
@@ -273,6 +280,11 @@ mod tests {
         let none = rules(&[], &[]);
         assert!(shared(&none, "config/create/server.toml", false));
         assert!(shared(&none, "scripts/recipes.zs", false));
+        assert!(shared(
+            &none,
+            "resources/test/textures/gui/title/background/bg.png",
+            false
+        ));
         assert!(
             shared(&none, "global_packs/a/pack.mcmeta", true),
             "from the pack"

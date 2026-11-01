@@ -268,9 +268,9 @@
       size="sm"
       aria-pressed={creating}
       class={creating ? "border-(--accent)!" : ""}
+      icon="plus"
       onclick={() => (creating = !creating)}
     >
-      <Icon name="plus" class="size-3.5" />
       New group
     </Button>
   </header>
@@ -343,9 +343,10 @@
                 size="sm"
                 aria-expanded={open?.id === g.id && open.panel === "invite"}
                 disabled={busy}
+                icon="users"
                 onclick={() => show(g, "invite")}
               >
-                <Icon name="users" class="size-3.5" />Invite friends
+                Invite friends
               </Button>
             {/if}
             <Menu items={menu(g)} label="More for {g.name}" />

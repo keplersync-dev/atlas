@@ -1,21 +1,25 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import type { HTMLButtonAttributes } from "svelte/elements";
+  import Icon from "./Icon.svelte";
 
   type Variant = "default" | "primary" | "warn" | "danger" | "ghost";
 
-  // `children` is whatever is written between <Button> and </Button>.
+  // `children` is whatever is written between <Button> and </Button>: the label.
+  // `icon` goes before it: an Icon name, or a snippet for anything else.
   // `...rest` collects every other attribute (onclick, disabled, aria-label…)
   // so the parent can use <Button> exactly like a normal <button>.
   let {
     variant = "default",
     size = "md",
     class: className = "",
+    icon,
     children,
     ...rest
   }: HTMLButtonAttributes & {
     variant?: Variant;
     size?: "sm" | "md" | "lg";
+    icon?: string | Snippet;
     children: Snippet;
   } = $props();
 
@@ -46,5 +50,13 @@
     size
   ]} {className}"
 >
-  {@render children()}
+  {#if typeof icon === "string"}
+    <!-- The icons' own padding leaves more room on the left; even it out. -->
+    <Icon name={icon} class="-ml-0.5 size-3.5" />
+  {:else if icon}
+    {@render icon()}
+  {/if}
+  <!-- Trimmed to cap height and baseline, so the letters themselves are centred:
+       Segoe's line box puts them about a pixel and a half low. -->
+  <span class="[text-box:trim-both_cap_alphabetic]">{@render children()}</span>
 </button>

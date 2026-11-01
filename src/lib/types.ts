@@ -720,7 +720,7 @@ export interface ShareFile {
 
 /**
  * Which tree files are shared: paths ticked or unticked, a folder ending in "/" and ""
- * for everything. The longest matching rule wins; with none, config and script folders
+ * for everything. The longest matching rule wins; with none, config, script and resources folders
  * and the pack's own files are shared. See $lib/fileRules.ts.
  */
 export interface FileRules {

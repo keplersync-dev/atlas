@@ -222,10 +222,10 @@
           />
           <Button
             variant="primary"
-            class="gap-1.5"
+            icon="plus"
             onclick={() => openDialog({ kind: "track" })}
           >
-            <Icon name="plus" class="size-3.5" />Add instances
+            Add instances
           </Button>
         </div>
       </div>
