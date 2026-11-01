@@ -15,7 +15,6 @@
   import { fileSize, plural } from "$lib/format";
   import type { FileRules, LeftOutFile, ShareFile } from "$lib/types";
   import Icon from "../Icon.svelte";
-  import Menu from "../Menu.svelte";
 
   // Every file in the instance besides mods and packs, as a table to tick, like the
   // Modrinth App's export. Files that can never be sent (programs, logins) aren't
@@ -132,14 +131,11 @@
 
   const when = (iso: string | null) =>
     iso
-      ? new Date(iso).toLocaleString(undefined, {
-          dateStyle: "short",
-          timeStyle: "short",
-        })
+      ? new Date(iso).toLocaleDateString(undefined, { dateStyle: "short" })
       : "";
 
   const ROW =
-    "grid grid-cols-[28px_minmax(0,1fr)_84px_140px_36px] items-center gap-2 px-3";
+    "grid grid-cols-[28px_minmax(0,1fr)_72px_92px_104px] items-center gap-2 px-3";
 </script>
 
 {#snippet sortHeader(s: Sort, label: string, cls = "")}
@@ -182,7 +178,7 @@
       type="button"
       aria-label="Open {f.name}"
       onclick={() => (at = f.path)}
-      class="grid size-7 place-items-center rounded text-(--text-muted) hover:bg-(--bg-raise-2) hover:text-(--text-primary)"
+      class="grid size-7 place-items-center justify-self-end rounded text-(--text-muted) hover:bg-(--bg-raise-2) hover:text-(--text-primary)"
     >
       <Icon name="chev" class="size-4" />
     </button>
@@ -192,7 +188,7 @@
 {#snippet fileRow(f: ShareFile)}
   {@const on = isShared(current, f.path, f.fromPack)}
   {@const kept = keptAs(current, f.path)}
-  <div class="{ROW} border-t border-(--line) py-2 hover:bg-(--bg-hover)">
+  <div class="group {ROW} border-t border-(--line) py-2 hover:bg-(--bg-hover)">
     <input
       type="checkbox"
       checked={on}
@@ -212,10 +208,36 @@
           >Changed</span
         >
       {/if}
-      {#if on && kept === "first_install"}
+    </span>
+    <span class="text-[13px] text-(--text-muted)">{fileSize(f.sizeBytes)}</span>
+    <span class="truncate text-[13px] text-(--text-muted)"
+      >{when(f.modified)}</span
+    >
+    <span class="flex h-7 items-center justify-end">
+      {#if on && canChooseFirstInstall(f.path)}
+        <!-- The badge is the switch: shown when on, and on hover or focus when off. -->
+        <button
+          type="button"
+          aria-pressed={kept === "first_install"}
+          onclick={() =>
+            (rules = setFirstInstall(
+              current,
+              f.path,
+              kept !== "first_install",
+            ))}
+          title={kept === "first_install"
+            ? "Friends get your copy when they join, then keep their own changes. Click to keep it in sync on every update instead."
+            : "Send it once: friends get your copy when they join, then keep their own changes."}
+          class="shrink-0 rounded-full px-2 text-[12px] {kept ===
+          'first_install'
+            ? 'bg-(--accent)/12 text-(--accent) hover:bg-(--accent)/20'
+            : 'border border-dashed border-(--line-2) text-(--text-muted) opacity-0 group-hover:opacity-100 hover:text-(--text-primary) focus-visible:opacity-100'}"
+          >{kept === "first_install" ? "Sent once" : "Send once"}</button
+        >
+      {:else if on && kept === "first_install"}
         <span
           class="shrink-0 rounded-full bg-(--accent)/12 px-2 text-[12px] text-(--accent)"
-          title="Friends get your copy when they join. After that, their own changes stay."
+          title="Your settings, keys and video options: friends get your copy when they join, then keep their own."
           >Sent once</span
         >
       {:else if on && kept === "merged"}
@@ -226,30 +248,6 @@
         >
       {/if}
     </span>
-    <span class="text-[13px] text-(--text-muted)">{fileSize(f.sizeBytes)}</span>
-    <span class="truncate text-[13px] text-(--text-muted)"
-      >{when(f.modified)}</span
-    >
-    {#if on && canChooseFirstInstall(f.path)}
-      <Menu
-        label="Options for {f.path}"
-        items={[
-          kept === "first_install"
-            ? {
-                label: "Keep it in sync on every update",
-                onselect: () =>
-                  (rules = setFirstInstall(current, f.path, false)),
-              }
-            : {
-                label: "Send it once, then friends keep their own",
-                onselect: () =>
-                  (rules = setFirstInstall(current, f.path, true)),
-              },
-        ]}
-      />
-    {:else}
-      <span></span>
-    {/if}
   </div>
 {/snippet}
 
