@@ -495,6 +495,7 @@ async fn read_files(
 
 /// The latest rescan per instance: a read ahead waits for rescans to stop.
 static READ_AHEAD: LazyLock<Mutex<HashMap<String, u64>>> = LazyLock::new(Default::default);
+static ONE_READ_AHEAD: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// `read_ahead` once the instance has been quiet for a while: rescans come in bursts,
 /// and Share's own rescan shouldn't race Share's own read.
@@ -514,6 +515,8 @@ pub fn read_ahead_soon(state: &AppState, id: &str) {
             .get(&id)
             .copied();
         if current == Some(seen) {
+            // One at a time: after startup every instance asks at once.
+            let _one = ONE_READ_AHEAD.lock().await;
             read_ahead(&state, &id).await;
         }
     });
