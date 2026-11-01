@@ -35,10 +35,24 @@
   }
 
   const SIGN_IN: { id: AuthProvider; label: string }[] = [
-    { id: "minecraft", label: "Sign in with Minecraft" },
-    { id: "discord", label: "Sign in with Discord" },
+    { id: "minecraft", label: "Minecraft" },
+    { id: "discord", label: "Discord" },
   ];
 </script>
+
+<!-- This PC's settings (notifications, sound, start with Windows) need no account. -->
+{#snippet settingsRow()}
+  <div class="border-t border-(--line) px-2.5 py-2">
+    <button
+      type="button"
+      onclick={() => openDialog({ kind: "account" })}
+      class="flex h-8.5 w-full items-center gap-2.5 rounded-md px-2.5 text-left text-(--text-muted) transition-colors hover:bg-(--bg-hover) hover:text-(--text-primary)"
+    >
+      <Icon name="settings" />
+      Settings
+    </button>
+  </div>
+{/snippet}
 
 <aside class="flex min-h-0 flex-col border-r border-white/2.5 bg-(--bg-side)">
   <nav aria-label="Main" class="grid gap-px px-2.5 pt-3 pb-1.5">
@@ -162,59 +176,71 @@
       <Icon name="more" class="size-4 text-(--text-faint)" />
     </button>
   {:else if social.loaded && !social.hasServer}
-    <p class="px-5 pt-3 pb-4 text-center text-[13px] text-(--text-faint)">
+    <p class="px-5 pt-3 pb-1 text-center text-[13px] text-(--text-faint)">
       Friends and sharing aren't available in this copy of Atlas.
     </p>
+    {@render settingsRow()}
   {:else if social.loaded}
-    <div class="grid gap-1.5 px-5 pt-3 pb-4">
-      {#each SIGN_IN as p (p.id)}
-        <button
-          onclick={() => social.signIn(p.id)}
-          class="flex h-8 w-full items-center justify-center gap-2 rounded-md border border-(--line-2) bg-(--bg-raise-2) font-medium hover:bg-(--bg-hover) disabled:opacity-50"
-        >
-          <ProviderIcon provider={p.id} class="size-4" />
-          {social.signingIn === p.id ? "Waiting for your browser…" : p.label}
-        </button>
-      {/each}
+    <div class="border-t border-(--line) px-3.5 pt-3 pb-3">
+      <p class="text-[13px] font-semibold">Sign in to share with friends</p>
+      <div class="mt-2 grid gap-1.5">
+        {#each SIGN_IN as p (p.id)}
+          <button
+            onclick={() => social.signIn(p.id)}
+            aria-label="Sign in with {p.label}"
+            class="flex h-9 min-w-0 items-center justify-center gap-2 rounded-md border px-2 font-medium disabled:opacity-50
+              {social.signingIn === p.id
+              ? 'border-(--accent) bg-(--accent)/10'
+              : 'border-(--line-2) bg-(--bg-raise-2) hover:bg-(--bg-hover)'}"
+          >
+            {#if social.signingIn === p.id}
+              <Icon
+                name="refresh"
+                class="size-3.5 shrink-0 animate-spin text-(--accent)"
+              />
+              <span class="truncate">Waiting…</span>
+            {:else}
+              <ProviderIcon provider={p.id} class="size-4 shrink-0" />
+              <span class="truncate">{p.label}</span>
+            {/if}
+          </button>
+        {/each}
+      </div>
       {#if social.signingIn}
-        <p class="mt-0.5 text-center text-[13px] text-(--text-faint)">
-          Finish signing in there.
+        <p class="mt-2 text-[13px] text-(--text-muted)">
+          Finish in your browser.
+        </p>
+        <p class="flex gap-3 text-[13px] text-(--text-muted)">
           <button
             onclick={() => social.signingIn && social.signIn(social.signingIn)}
             class="underline hover:text-(--text-primary)">Start again</button
           >
-          ·
           <button
             onclick={() => social.cancelSignIn()}
             class="underline hover:text-(--text-primary)">Cancel</button
           >
         </p>
       {:else if social.signInError || legalError}
-        <p class="mt-0.5 text-center text-[13px] text-(--danger)" role="alert">
+        <p class="mt-2 text-[13px] text-(--danger)" role="alert">
           {social.signInError ?? legalError}
         </p>
+      {:else}
+        <p class="mt-2 text-[13px] leading-snug text-(--text-faint)">
+          By signing in you agree to the
+          <button
+            type="button"
+            class="underline hover:text-(--text-primary)"
+            onclick={() => openLegal("terms")}>Terms</button
+          >
+          and
+          <button
+            type="button"
+            class="underline hover:text-(--text-primary)"
+            onclick={() => openLegal("privacy")}>Privacy Policy</button
+          >.
+        </p>
       {/if}
-      <p class="mt-1 text-center text-[13px] leading-snug text-(--text-faint)">
-        By signing in you agree to the
-        <button
-          type="button"
-          class="underline hover:text-(--text-primary)"
-          onclick={() => openLegal("terms")}>Terms</button
-        >
-        and
-        <button
-          type="button"
-          class="underline hover:text-(--text-primary)"
-          onclick={() => openLegal("privacy")}>Privacy Policy</button
-        >.
-      </p>
-      <!-- This PC's settings (notifications, sound, start with Windows) need no account. -->
-      <button
-        type="button"
-        onclick={() => openDialog({ kind: "account" })}
-        class="mx-auto mt-1 rounded px-2 py-0.5 text-[13px] text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
-        >Settings</button
-      >
     </div>
+    {@render settingsRow()}
   {/if}
 </aside>
