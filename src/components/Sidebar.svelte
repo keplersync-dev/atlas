@@ -170,7 +170,7 @@
       {#each SIGN_IN as p (p.id)}
         <button
           onclick={() => social.signIn(p.id)}
-          class="flex h-8 w-full items-center justify-center gap-2 rounded-md border border-(--line-2) bg-(--bg-raise-2) font-medium hover:bg-[#252b33] disabled:opacity-50"
+          class="flex h-8 w-full items-center justify-center gap-2 rounded-md border border-(--line-2) bg-(--bg-raise-2) font-medium hover:bg-(--bg-hover) disabled:opacity-50"
         >
           <ProviderIcon provider={p.id} class="size-4" />
           {social.signingIn === p.id ? "Waiting for your browser…" : p.label}
@@ -208,6 +208,13 @@
           onclick={() => openLegal("privacy")}>Privacy Policy</button
         >.
       </p>
+      <!-- This PC's settings (notifications, sound, start with Windows) need no account. -->
+      <button
+        type="button"
+        onclick={() => openDialog({ kind: "account" })}
+        class="mx-auto mt-1 rounded px-2 py-0.5 text-[13px] text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+        >Settings</button
+      >
     </div>
   {/if}
 </aside>

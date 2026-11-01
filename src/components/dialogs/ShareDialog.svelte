@@ -299,7 +299,7 @@
   {/if}
 
   {#snippet footer()}
-    {#if mode === "share" && needsRights}
+    {#if mode === "share" && needsRights && social.signedIn}
       <RightsCheck
         bind:checked={rights}
         names={names(uploads)}

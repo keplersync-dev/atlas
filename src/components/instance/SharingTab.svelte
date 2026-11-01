@@ -124,6 +124,9 @@
 
 {#if shared.loading && !shared.data}
   <p class="py-6 text-(--text-muted)">Loading members…</p>
+{:else if !social.signedIn}
+  <!-- Not an error: members just need the account. -->
+  <p class="py-6 text-(--text-muted)">Sign in to see who has it.</p>
 {:else if shared.error}
   <p class="py-6 text-(--danger)">{shared.error}</p>
 {:else if shared.data}

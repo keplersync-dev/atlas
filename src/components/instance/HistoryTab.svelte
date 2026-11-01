@@ -4,6 +4,7 @@
   import { confirmAction } from "$lib/confirm.svelte";
   import { fileSize, plural, timeAgo } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
+  import { social } from "$lib/stores";
   import type { Backup, InstanceDetail, RevisionChanges } from "$lib/types";
   import Button from "../Button.svelte";
 
@@ -85,6 +86,8 @@
   </h2>
   {#if shared.loading && !shared.data}
     <p class="text-(--text-muted)">Loading history…</p>
+  {:else if !social.signedIn}
+    <p class="text-(--text-muted)">Sign in to see the versions.</p>
   {:else if shared.error}
     <p class="text-(--danger)">{shared.error}</p>
   {:else if shared.data}

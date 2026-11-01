@@ -214,18 +214,45 @@
   </h3>
 {/snippet}
 
+<!-- This PC: saves the moment you flip it, like Privacy. Signed in or not. -->
+{#snippet thisPc()}
+  {#if pc}
+    {@const settings = pc}
+    {@render section("This PC")}
+    {#each PC_SETTINGS as s (s.key)}
+      <div class="flex items-start gap-3 not-first:mt-3">
+        <div class="flex-1">
+          <b class="block font-medium">{s.title}</b>
+          <small class="text-[13px] text-(--text-faint)">{s.hint}</small>
+        </div>
+        <Switch
+          checked={settings[s.key]}
+          label={s.title}
+          disabled={busy === s.key}
+          onchange={(next) =>
+            act(s.key, async () => {
+              pc = await api.updateAppSettings({ [s.key]: next });
+            })}
+        />
+      </div>
+      {@render failed(s.key)}
+    {/each}
+  {/if}
+{/snippet}
+
 <Dialog
-  title={me?.displayName ?? "Account"}
+  title={me?.displayName ?? "Settings"}
   description={me ? `@${me.username}` : undefined}
   wide
   {onclose}
 >
   {#snippet header()}
-    {#if me}<Head user={me} size={40} ring="#15181d" />{/if}
+    {#if me}<Head user={me} size={40} ring="var(--bg-raise)" />{/if}
   {/snippet}
 
   {#if !me}
     <p class="py-4 text-[13px] text-(--text-muted)">You're signed out.</p>
+    {@render thisPc()}
   {:else}
     <!-- ── Profile (its own form with its own Save button) ── -->
     {@render section("Profile")}
@@ -365,29 +392,7 @@
     </div>
     {@render failed("export")}
 
-    <!-- ── This PC: saves the moment you flip it, like Privacy ── -->
-    {#if pc}
-      {@const settings = pc}
-      {@render section("This PC")}
-      {#each PC_SETTINGS as s (s.key)}
-        <div class="flex items-start gap-3 not-first:mt-3">
-          <div class="flex-1">
-            <b class="block font-medium">{s.title}</b>
-            <small class="text-[13px] text-(--text-faint)">{s.hint}</small>
-          </div>
-          <Switch
-            checked={settings[s.key]}
-            label={s.title}
-            disabled={busy === s.key}
-            onchange={(next) =>
-              act(s.key, async () => {
-                pc = await api.updateAppSettings({ [s.key]: next });
-              })}
-          />
-        </div>
-        {@render failed(s.key)}
-      {/each}
-    {/if}
+    {@render thisPc()}
 
     <!-- ── Sign-in methods ── -->
     {@render section("Sign in with")}
@@ -482,7 +487,7 @@
 
   <p class="mt-6 text-center text-[13px] text-(--text-faint)">
     {#each [{ page: "terms", label: "Terms of Service" }, { page: "privacy", label: "Privacy Policy" }] as const as l, i (l.page)}
-      {#if i}·{/if}
+      {#if i}<span aria-hidden="true"> · </span>{/if}
       <button
         type="button"
         class="hover:text-(--text-primary) hover:underline"
