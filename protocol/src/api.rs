@@ -47,6 +47,21 @@ pub struct Storage {
     pub max_file_bytes: u64,
 }
 
+/// `GET /me/uploads`: one file the user uploaded, and what still uses it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MyUpload {
+    pub sha256: String,
+    pub file_name: String,
+    pub size_bytes: u64,
+    pub uploaded_at: IsoDate,
+    /// Shared instances whose current versions (or picture) use it. Empty: nothing does,
+    /// and it can be removed (the server also removes it by itself after a day).
+    pub used_in: Vec<String>,
+    /// Taken down: it stays listed, so the same file can't be uploaded again.
+    pub blocked: bool,
+}
+
 /// The signed-in user, with private fields. `extends PublicUser` in types.ts.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

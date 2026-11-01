@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { openDialog } from "$lib/dialogs.svelte";
   import { fileSize } from "$lib/format";
   import { social } from "$lib/stores";
 
@@ -16,9 +17,17 @@
   <div>
     <div class="flex items-baseline justify-between">
       <b class="font-semibold">Upload space</b>
-      <span class="text-[13px] text-(--text-muted) tabular-nums"
-        >{fileSize(storage.usedBytes)} of {fileSize(storage.quotaBytes)}</span
-      >
+      <span class="flex items-baseline gap-2">
+        <span class="text-[13px] text-(--text-muted) tabular-nums"
+          >{fileSize(storage.usedBytes)} of {fileSize(storage.quotaBytes)}</span
+        >
+        <button
+          type="button"
+          onclick={() => openDialog({ kind: "storage" })}
+          class="rounded px-1 text-[13px] text-(--accent) hover:underline"
+          >See files</button
+        >
+      </span>
     </div>
     <div class="mt-2 h-2 overflow-hidden rounded-full bg-(--bg-raise-2)">
       <div class="h-full rounded-full {fill}" style="width: {pct}%"></div>

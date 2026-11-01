@@ -467,7 +467,9 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn modrinth_ids_on_this_pc() {
-        let root = crate::launchers::util::env_dir("APPDATA").unwrap().join("ModrinthApp");
+        let root = crate::launchers::util::env_dir("APPDATA")
+            .unwrap()
+            .join("ModrinthApp");
         for path in ["PPTools", "not there"] {
             println!("{path} -> {:?}", instance_id(&root, path).await);
         }

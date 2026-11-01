@@ -6,6 +6,7 @@
   import PublishDialog from "./dialogs/PublishDialog.svelte";
   import ReportDialog from "./dialogs/ReportDialog.svelte";
   import ShareDialog from "./dialogs/ShareDialog.svelte";
+  import StorageDialog from "./dialogs/StorageDialog.svelte";
   import StartWithWindowsDialog from "./dialogs/StartWithWindowsDialog.svelte";
   import TrackDialog from "./dialogs/TrackDialog.svelte";
 
@@ -33,6 +34,8 @@
     <TrackDialog onclose={closeDialog} />
   {:else if active?.kind === "account"}
     <AccountDialog onclose={closeDialog} />
+  {:else if active?.kind === "storage"}
+    <StorageDialog onclose={closeDialog} />
   {:else if active?.kind === "link"}
     <LinkDialog link={active.link} onclose={closeDialog} />
   {:else if active?.kind === "report"}

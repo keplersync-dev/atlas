@@ -8,6 +8,16 @@
 
   // Rendered once in the app shell. See $lib/toasts.svelte.ts.
 
+  // An open dialog sits in the browser's top layer, above everything else. The toasts go
+  // there too (a popover), shown again on each change so they stay above a newer dialog.
+  let host = $state<HTMLDivElement>();
+  $effect(() => {
+    const showing = toasts.items.length > 0;
+    if (!host) return;
+    if (host.matches(":popover-open")) host.hidePopover();
+    if (showing) host.showPopover();
+  });
+
   function open(id: number, target: NoticeTarget) {
     dismissToast(id);
     switch (target.kind) {
@@ -29,7 +39,9 @@
 </script>
 
 <div
-  class="pointer-events-none fixed right-4 bottom-4 z-50 grid w-[min(380px,calc(100vw-32px))] gap-2"
+  bind:this={host}
+  popover="manual"
+  class="pointer-events-none fixed inset-auto right-4 bottom-4 z-50 m-0 grid w-[min(380px,calc(100vw-32px))] gap-2 overflow-visible border-0 bg-transparent p-0"
 >
   {#each toasts.items as t (t.id)}
     <div

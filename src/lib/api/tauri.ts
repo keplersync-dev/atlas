@@ -132,6 +132,8 @@ export const tauriApi: AtlasApi = {
     call("report_file", { instanceId, contentId, reason, details }),
   openLegalPage: (page) => call("open_legal_page", { page }),
   exportMyData: () => call("export_my_data"),
+  listMyUploads: () => call("list_my_uploads"),
+  removeMyUpload: (sha256) => call("remove_my_upload", { sha256 }),
 
   getAppSettings: () => call("get_app_settings"),
   updateAppSettings: (patch) => call("update_app_settings", { patch }),

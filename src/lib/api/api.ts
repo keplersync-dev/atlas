@@ -1,4 +1,5 @@
 import type {
+  MyUpload,
   ActivityItem,
   AppSettings,
   AvailableUpdate,
@@ -223,6 +224,10 @@ export interface AtlasApi {
   openLegalPage(page: "terms" | "privacy"): Promise<void>;
   /** Everything the server stores about this account, saved as JSON in Downloads (shown in Explorer). Returns the file's path. */
   exportMyData(): Promise<string>;
+  /** The files you've uploaded to Atlas, biggest first. */
+  listMyUploads(): Promise<MyUpload[]>;
+  /** Removes an upload no pack uses; refused ("conflict") while one does. */
+  removeMyUpload(sha256: string): Promise<void>;
 
   // ── This PC ──────────────────────────────────────────────────────────
   getAppSettings(): Promise<AppSettings>;

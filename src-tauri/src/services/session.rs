@@ -147,3 +147,26 @@ fn open<R: Runtime>(app: &AppHandle<R>, url: &str) -> AppResult<()> {
         AppError::unknown("Couldn't open your browser")
     })
 }
+
+/// The files you've uploaded to Atlas, biggest first, with the packs still using each.
+pub async fn uploads(state: &AppState) -> AppResult<Vec<crate::dto::MyUpload>> {
+    state
+        .cloud
+        .call(Method::GET, "/me/uploads", None::<&()>)
+        .await
+}
+
+/// Remove an upload no pack uses, freeing its space now.
+pub async fn remove_upload(state: &AppState, sha256: &str) -> AppResult<()> {
+    if sha256.len() != 64 || !sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(AppError::invalid_input("That isn't one of your uploads"));
+    }
+    state
+        .cloud
+        .call::<()>(
+            Method::DELETE,
+            &format!("/me/uploads/{sha256}"),
+            None::<&()>,
+        )
+        .await
+}

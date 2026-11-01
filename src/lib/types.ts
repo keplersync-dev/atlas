@@ -730,3 +730,15 @@ export interface CreateGroupInviteInput {
   /** null = never expires */
   expiresInHours: number | null;
 }
+
+/** A file you uploaded to Atlas (not on Modrinth or CurseForge), and what still uses it. */
+export interface MyUpload {
+  sha256: string;
+  fileName: string;
+  sizeBytes: number;
+  uploadedAt: IsoDate;
+  /** Packs whose current versions (or picture) use it. Empty: it can be removed. */
+  usedIn: string[];
+  /** Taken down: it stays listed so the same file can't be uploaded again. */
+  blocked: boolean;
+}

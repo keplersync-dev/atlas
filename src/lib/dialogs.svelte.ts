@@ -8,6 +8,7 @@ export type ActiveDialog =
   | { kind: "accept"; sharedInstanceId: Id }
   | { kind: "track" }
   | { kind: "account" }
+  | { kind: "storage" }
   | { kind: "link"; link: OpenedLink }
   | { kind: "report"; about: ReportAbout }
   /** After the first accepted pack. `owner` names who sends the updates. */

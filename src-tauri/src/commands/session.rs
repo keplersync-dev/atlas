@@ -99,3 +99,13 @@ pub async fn report_file(
 ) -> AppResult<()> {
     session::report_file(&state, &instance_id, &content_id, reason, details).await
 }
+
+#[tauri::command]
+pub async fn list_my_uploads(state: State<'_, AppState>) -> AppResult<Vec<crate::dto::MyUpload>> {
+    session::uploads(&state).await
+}
+
+#[tauri::command]
+pub async fn remove_my_upload(state: State<'_, AppState>, sha256: String) -> AppResult<()> {
+    session::remove_upload(&state, &sha256).await
+}

@@ -2,6 +2,7 @@
   import { untrack } from "svelte";
   import { api } from "$lib/api";
   import { confirmAction } from "$lib/confirm.svelte";
+  import { openDialog } from "$lib/dialogs.svelte";
   import { fileSize, formatCode } from "$lib/format";
   import { social } from "$lib/stores";
   import type { AppSettings, AuthProvider } from "$lib/types";
@@ -511,7 +512,15 @@
         >
       </div>
       <div class="px-4 py-3.5">
-        <b class="mb-2 block font-medium">Storage</b>
+        <div class="mb-2 flex items-baseline justify-between gap-3">
+          <b class="font-medium">Storage</b>
+          <button
+            type="button"
+            onclick={() => openDialog({ kind: "storage" })}
+            class="rounded px-1 text-[13px] text-(--accent) hover:underline"
+            >See files</button
+          >
+        </div>
         <div class="h-1.5 overflow-hidden rounded-full bg-(--line)">
           <div
             class="h-full bg-(--accent)"

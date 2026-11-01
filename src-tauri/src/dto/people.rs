@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 pub use atlas_protocol::api::{
-    Friend, FriendRequest, LinkedIdentity, Me, Presence, PublicUser, Storage,
+    Friend, FriendRequest, LinkedIdentity, Me, MyUpload, Presence, PublicUser, Storage,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
