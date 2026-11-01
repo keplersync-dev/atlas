@@ -8,6 +8,7 @@
   } from "$lib/confirm.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
   import { openLabel, plural, versionLabel } from "$lib/format";
+  import { canPlay, play } from "$lib/play";
   import { resource } from "$lib/resource.svelte";
   import { instances, social } from "$lib/stores";
   import type { Id } from "$lib/types";
@@ -97,17 +98,17 @@
       : null,
   );
 
-  const stopTracking = { confirmLabel: "Stop tracking", danger: true };
+  const stopTracking = { confirmLabel: "Remove", danger: true };
 
   async function untrack() {
     if (!summary) return;
-    const forget = `Atlas forgets it and deletes its backups. The instance in ${summary.launcher.name} isn't touched.`;
+    const forget = `Atlas forgets it and deletes its backups. It stays in ${summary.launcher.name}, untouched.`;
     let choice: Choice | null;
     if (!sharedId) {
       choice = await chooseAction({
         ...stopTracking,
-        title: `Stop tracking ${summary.name}?`,
-        message: `${forget} You can track it again later.`,
+        title: `Remove ${summary.name} from Atlas?`,
+        message: `${forget} You can add it again later.`,
       });
     } else if (summary.sync?.role === "owner") {
       // Stopping tracking here never ends the sharing: you may have it on another PC.
@@ -118,7 +119,7 @@
         ).length ?? 0;
       choice = await chooseAction({
         ...stopTracking,
-        title: `Stop tracking ${summary.name}?`,
+        title: `Remove ${summary.name} from Atlas?`,
         message: `${forget} It stays shared${people ? ` with ${plural(people, "person", "people")}` : ""}, and you can add it back from Shared to send updates again.`,
         alternativeLabel: "Stop sharing too",
       });
@@ -136,9 +137,9 @@
     } else {
       choice = await chooseAction({
         ...stopTracking,
-        title: `Stop tracking ${summary.name}?`,
-        message: `${forget} You're still in it, so you can add it back from Shared.`,
-        alternativeLabel: "Leave too",
+        title: `Remove ${summary.name} from Atlas?`,
+        message: `${forget} You still get its updates, so you can add it back from Shared.`,
+        alternativeLabel: "Stop updates too",
       });
     }
     if (!choice) return;
@@ -204,14 +205,14 @@
       ...(s && s.role !== "owner"
         ? [
             {
-              label: "Leave shared instance",
+              label: "Stop getting updates",
+              hint: `Leave ${s.owner?.displayName ?? "the owner"}'s pack. Your files stay as they are.`,
               danger: true,
               onselect: async () => {
                 const ok = await confirmAction({
-                  title: `Leave ${summary.name}?`,
-                  message:
-                    "You stop getting its updates. The instance and its files stay here as they are.",
-                  confirmLabel: "Leave",
+                  title: `Stop getting updates for ${summary.name}?`,
+                  message: `You leave ${s.owner?.displayName ?? "the owner"}'s pack. Your copy stays here and keeps working, but won't change when they send updates. They'd have to invite you again.`,
+                  confirmLabel: "Stop updates",
                   danger: true,
                 });
                 if (ok) run(() => api.leaveSharedInstance(s.sharedInstanceId));
@@ -223,6 +224,7 @@
         ? [
             {
               label: "Stop sharing",
+              hint: "Friends keep their copy but get no more updates.",
               danger: true,
               onselect: async () => {
                 const ok = await confirmAction({
@@ -238,7 +240,12 @@
             },
           ]
         : []),
-      { label: "Stop tracking", danger: true, onselect: untrack },
+      {
+        label: "Remove from Atlas",
+        hint: `Atlas forgets it. It stays in ${summary.launcher.name}.`,
+        danger: true,
+        onselect: untrack,
+      },
       ...(s && s.role !== "owner"
         ? [
             "divider" as const,
@@ -336,16 +343,21 @@
           {:else}
             <span>Not shared</span>
           {/if}
-          {#if summary.totalPlaytimeSeconds}
+          {#if (summary.totalPlaytimeSeconds ?? 0) >= 1800}
             <span
-              >{plural(Math.round(summary.totalPlaytimeSeconds / 3600), "hour")} played</span
+              >{plural(
+                Math.round((summary.totalPlaytimeSeconds ?? 0) / 3600),
+                "hour",
+              )} played</span
             >
           {/if}
         </div>
       </div>
 
       <div class="flex items-center gap-2 pt-1.5">
-        {#if summary.status !== "missing" && summary.launcher.kind !== "folder"}
+        <!-- Only Prism and MultiMC start the game; elsewhere Play opens the launcher, so a
+             separate Open button would do the same thing. -->
+        {#if summary.status !== "missing" && (summary.launcher.kind === "prism" || summary.launcher.kind === "multimc")}
           <Button
             variant="ghost"
             disabled={busy}
@@ -354,6 +366,20 @@
             <Icon name="external" class="size-3.5" />{openLabel(
               summary.launcher,
             )}
+          </Button>
+        {/if}
+        {#if summary.launcher.kind !== "folder" && summary.status !== "missing"}
+          <Button
+            disabled={busy || !canPlay(summary)}
+            title={summary.isRunning
+              ? "Minecraft is running"
+              : `Play in ${summary.launcher.name}`}
+            onclick={() => play(summary)}
+          >
+            <Icon
+              name="play"
+              class="size-3.5 text-(--online)"
+            />{summary.isRunning ? "Playing" : "Play"}
           </Button>
         {/if}
 
@@ -409,7 +435,7 @@
     <Tabs
       bind:value={tab}
       tabs={[
-        { id: "content", label: "Content", count: summary.contentCount },
+        { id: "content", label: "Content" },
         { id: "sharing", label: "Sharing" },
         { id: "history", label: "History" },
       ]}

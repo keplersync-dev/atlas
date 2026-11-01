@@ -73,6 +73,30 @@ pub async fn preview_group_invite(
 }
 
 #[tauri::command]
+pub async fn invite_friends_to_group<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    group_id: Id,
+    friend_ids: Vec<Id>,
+) -> AppResult<()> {
+    groups::invite_friends(&state, &app, &group_id, friend_ids).await
+}
+
+#[tauri::command]
+pub async fn list_group_invites(state: State<'_, AppState>) -> AppResult<Vec<GroupInvitePreview>> {
+    groups::my_invites(&state).await
+}
+
+#[tauri::command]
+pub async fn decline_group_invite<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    code: String,
+) -> AppResult<()> {
+    groups::decline_invite(&state, &app, &code).await
+}
+
+#[tauri::command]
 pub async fn join_group<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,

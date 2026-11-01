@@ -20,7 +20,13 @@
   }: { sharedInstanceId: Id; onclose: () => void } = $props();
 
   const invite = $derived(social.shared.find((s) => s.id === sharedInstanceId));
-  const launchers = resource(() => api.listLaunchers());
+  // Look again: a launcher installed while Atlas runs is offered too.
+  const launchers = resource(() =>
+    api
+      .detectLaunchers()
+      .catch(() => null)
+      .then(() => api.listLaunchers()),
+  );
   // Launchers that can make a new instance on the invite's loader.
   const creatable = $derived(
     launchers.data?.filter(
@@ -48,17 +54,6 @@
   );
   const picked = (kind: Target["kind"], id: Id) =>
     target?.kind === kind && target.id === id;
-
-  const steps = $derived.by(() => {
-    const owner = invite?.owner?.displayName ?? "your friend";
-    const where =
-      pickedLauncher?.name ?? pickedInstance?.name ?? "your launcher";
-    return [
-      { what: "Atlas adds it", result: `to ${where}` },
-      { what: `${owner} changes mods`, result: "you get them too" },
-      { what: "You press Play", result: `same as ${owner}` },
-    ];
-  });
 
   // Optional extras the user ticks (none to begin with).
   let optional = $state<string[]>([]);
@@ -237,7 +232,7 @@
 <Dialog
   title={invite ? `Add ${invite.name}` : "Shared instance"}
   description={invite
-    ? `${versionLabel(invite.loader, invite.minecraftVersion)} · ${plural(invite.contentCount, "item")} · ${fileSize(invite.sizeBytes)}`
+    ? `${invite.owner && invite.owner.id !== social.session?.user?.id ? `From ${invite.owner.displayName} · ` : ""}${versionLabel(invite.loader, invite.minecraftVersion)} · ${plural(invite.contentCount, "item")} · ${fileSize(invite.sizeBytes)}`
     : undefined}
   {onclose}
   onsubmit={submit}
@@ -301,31 +296,6 @@
         </span>
       </p>
     {:else}
-      <!-- What happens, as a picture: where it goes, then it follows the owner. Not for
-           your own pack: you're the one who changes it. -->
-      {#if invite.owner?.id !== social.session?.user?.id}
-        <ol
-          class="mb-4 grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2"
-          aria-label="What happens"
-        >
-          {#each steps as step, i (i)}
-            {#if i}
-              <li aria-hidden="true" class="text-(--text-faint)">
-                <Icon name="chev" class="size-4" />
-              </li>
-            {/if}
-            <li
-              class="h-full rounded-lg bg-(--bg-raise-2) px-2 py-2.5 text-center text-[13px] text-(--text-muted)"
-            >
-              {step.what}
-              <b
-                class="mt-0.5 block text-[14px] font-semibold text-(--text-primary)"
-                >{step.result}</b
-              >
-            </li>
-          {/each}
-        </ol>
-      {/if}
       <h3 class="mt-1 mb-2 text-[14px] font-semibold">Where should it go?</h3>
 
       {#if creatable.length}

@@ -52,6 +52,7 @@ export const tauriApi: AtlasApi = {
   updateInstance: (id, patch) => call("update_instance", { id, patch }),
   rescanInstance: (id) => call("rescan_instance", { id }),
   openInLauncher: (id) => call("open_in_launcher", { id }),
+  playInstance: (id) => call("play_instance", { id }),
   openInstanceFolder: (id) => call("open_instance_folder", { id }),
   setContentEnabled: (instanceId, contentId, enabled) =>
     call("set_content_enabled", { instanceId, contentId, enabled }),
@@ -150,6 +151,10 @@ export const tauriApi: AtlasApi = {
     call("revoke_group_invite", { groupId, code }),
   previewGroupInvite: (code) => call("preview_group_invite", { code }),
   joinGroup: (code) => call("join_group", { code }),
+  inviteFriendsToGroup: (groupId, friendIds) =>
+    call("invite_friends_to_group", { groupId, friendIds }),
+  listGroupInvites: () => call("list_group_invites"),
+  declineGroupInvite: (code) => call("decline_group_invite", { code }),
   setGroupMemberRole: (groupId, userId, role) =>
     call("set_group_member_role", { groupId, userId, role }),
   removeGroupMember: (groupId, userId) =>

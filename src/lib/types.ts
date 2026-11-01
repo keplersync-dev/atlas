@@ -246,6 +246,8 @@ export interface DetectedInstance {
   minecraftVersion: string | null;
   loader: Loader | null;
   loaderVersion: string | null;
+  /** The launcher's picture, like InstanceSummary.icon; null draws a block. */
+  icon: string | null;
   /** Set when it's already tracked. */
   instanceId: Id | null;
 }

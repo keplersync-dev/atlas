@@ -26,6 +26,7 @@
   } from "$lib/format";
   import { go } from "$lib/nav.svelte";
   import { kindFor, wallPixels } from "$lib/pixel";
+  import { canPlay, play } from "$lib/play";
   import { instances, social } from "$lib/stores";
   import Button from "./Button.svelte";
   import Head from "./Head.svelte";
@@ -235,6 +236,16 @@
         class="absolute inset-0 bg-linear-to-b from-transparent from-40% to-(--bg-raise)/80"
       ></div>
     </button>
+    {#if canPlay(instance)}
+      <button
+        onclick={() => play(instance)}
+        aria-label="Play {instance.name}"
+        title="Play {instance.name}"
+        class="absolute right-3 bottom-3 grid size-10 place-items-center rounded-full bg-(--accent) text-(--accent-ink) shadow-[0_6px_18px_#0009] transition-transform hover:scale-105 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--accent)"
+      >
+        <Icon name="play" class="ml-0.5 size-4.5" />
+      </button>
+    {/if}
   </div>
 
   <div class="flex flex-1 flex-col px-3.5 pt-2.5 pb-3">

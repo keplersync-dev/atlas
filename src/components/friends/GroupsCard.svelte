@@ -18,6 +18,29 @@
   let joinCode = $state("");
   let busy = $state(false);
   let message = $state<{ text: string; ok: boolean } | null>(null);
+  // The group whose "Invite friends" picker is open, and who's ticked in it.
+  let inviting = $state<string | null>(null);
+  let picked = $state<string[]>([]);
+  const invitable = (g: Group) =>
+    social.friends.filter(
+      (f) => !g.members.some((m) => m.user.id === f.user.id),
+    );
+
+  function openInvite(g: Group) {
+    inviting = inviting === g.id ? null : g.id;
+    picked = [];
+    message = null;
+  }
+
+  function sendInvites(g: Group) {
+    run(async () => {
+      await api.inviteFriendsToGroup(g.id, picked);
+      const n = picked.length;
+      inviting = null;
+      picked = [];
+      return `Invited ${plural(n, "friend")} to ${g.name}. They'll see it on their Friends page.`;
+    });
+  }
 
   async function run(action: () => Promise<string>) {
     busy = true;
@@ -37,7 +60,9 @@
     run(async () => {
       const g = await social.createGroup(name.trim());
       name = "";
-      return `Created ${g.name}. Copy its invite link to add people.`;
+      // Straight on to the next step: who's in it.
+      if (social.friends.length) inviting = g.id;
+      return `Created ${g.name}. Pick friends to invite, or copy a link.`;
     });
   }
 
@@ -180,12 +205,67 @@
             size="sm"
             variant="ghost"
             disabled={busy}
+            title="For people who aren't your friends yet"
             onclick={() => copyInvite(g)}
           >
-            {clip.copied === g.id ? "Copied" : "Invite link"}
+            {clip.copied === g.id ? "Copied" : "Copy link"}
+          </Button>
+          <Button
+            size="sm"
+            aria-expanded={inviting === g.id}
+            disabled={busy}
+            onclick={() => openInvite(g)}
+          >
+            <Icon name="users" class="size-3.5" />Invite friends
           </Button>
         {/if}
       </div>
+      {#if inviting === g.id}
+        {@const people = invitable(g)}
+        <div class="mb-2 rounded-lg bg-(--bg) p-3">
+          {#if people.length}
+            <div class="grid gap-0.5">
+              {#each people as f (f.user.id)}
+                <label
+                  class="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-(--bg-hover)"
+                >
+                  <input
+                    type="checkbox"
+                    bind:group={picked}
+                    value={f.user.id}
+                    class="size-4 accent-(--accent)"
+                  />
+                  <Head user={f.user} size={24} ring="var(--bg)" />
+                  <span class="min-w-0 flex-1 truncate"
+                    >{f.user.displayName}</span
+                  >
+                </label>
+              {/each}
+            </div>
+            <div class="mt-2 flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="ghost"
+                onclick={() => (inviting = null)}>Cancel</Button
+              >
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={busy || !picked.length}
+                onclick={() => sendInvites(g)}
+                >{picked.length
+                  ? `Invite ${plural(picked.length, "friend")}`
+                  : "Invite"}</Button
+              >
+            </div>
+          {:else}
+            <p class="text-[13px] text-(--text-muted)">
+              All your friends are in {g.name}. Add friends with their code
+              above, or copy a link for anyone else.
+            </p>
+          {/if}
+        </div>
+      {/if}
     {:else}
       <p class="py-2 text-[13px] text-(--text-muted)">No groups yet.</p>
     {/each}

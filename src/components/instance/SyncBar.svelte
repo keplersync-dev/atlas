@@ -85,10 +85,10 @@
       >
     {:else if instance.status === "missing"}
       {#if onsetup}
-        <Button variant="ghost" onclick={onuntrack}>Stop tracking</Button>
+        <Button variant="ghost" onclick={onuntrack}>Remove from Atlas</Button>
         <Button variant="primary" onclick={onsetup}>Set it up again</Button>
       {:else}
-        <Button onclick={onuntrack}>Stop tracking</Button>
+        <Button onclick={onuntrack}>Remove from Atlas</Button>
       {/if}
     {:else if s?.state === "local_changes" && s.role === "viewer"}
       <Button disabled={busy} onclick={onrevert}>Undo changes</Button>

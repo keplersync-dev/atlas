@@ -30,6 +30,8 @@ pub struct DetectedInstance {
     pub minecraft_version: Option<String>,
     pub loader: Option<Loader>,
     pub loader_version: Option<String>,
+    /// The launcher's picture, cached like a tracked instance's; None draws a block.
+    pub icon: Option<String>,
     /// Set when it's already tracked.
     pub instance_id: Option<Id>,
 }

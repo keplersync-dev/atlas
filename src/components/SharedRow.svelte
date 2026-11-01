@@ -166,9 +166,9 @@
   async function decline() {
     if (leavable) {
       const ok = await confirmAction({
-        title: `Leave ${s.name}?`,
+        title: `Stop getting updates for ${s.name}?`,
         message: `You won't get its updates anymore. ${s.owner?.displayName ?? "The owner"} can share it with you again.`,
-        confirmLabel: "Leave",
+        confirmLabel: "Stop updates",
         danger: true,
       });
       if (!ok) return;
@@ -252,12 +252,15 @@
       <button
         onclick={decline}
         disabled={busy}
-        title={invited ? "Decline" : "Leave"}
-        aria-label="{invited ? 'Decline' : 'Leave'} {s.name}"
+        title={invited ? "Decline" : "Stop getting updates"}
+        aria-label="{invited ? 'Decline' : 'Stop getting updates for'} {s.name}"
         class="grid size-7 place-items-center rounded-md text-(--text-faint) hover:bg-(--bg-hover) hover:text-(--text-primary) disabled:opacity-40"
       >
         <Icon name="close" class="size-3.5" />
       </button>
+    {:else}
+      <!-- Same slot on every row, so the buttons line up. -->
+      <span class="size-7" aria-hidden="true"></span>
     {/if}
   </span>
 </div>

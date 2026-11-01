@@ -5,6 +5,7 @@ import type {
   Friend,
   FriendRequest,
   Group,
+  GroupInvitePreview,
   Id,
   Me,
   Session,
@@ -19,6 +20,8 @@ class SocialStore {
   requests = $state<FriendRequest[]>([]);
   shared = $state<SharedInstance[]>([]);
   groups = $state<Group[]>([]);
+  /** Groups friends invited me to from inside Atlas. */
+  groupInvites = $state<GroupInvitePreview[]>([]);
   /** Newest first. */
   activity = $state<ActivityItem[]>([]);
   loaded = $state(false);
@@ -57,24 +60,28 @@ class SocialStore {
       this.requests = [];
       this.shared = [];
       this.groups = [];
+      this.groupInvites = [];
       this.activity = [];
     } else {
       // Start all the requests at once instead of one after another. Each list is
       // kept as it was if its own request fails (offline, server error), so one
       // failure doesn't hide the others.
-      const [friends, requests, shared, groups, activity] =
+      const [friends, requests, shared, groups, activity, groupInvites] =
         await Promise.allSettled([
           api.listFriends(),
           api.listFriendRequests(),
           api.listSharedInstances(),
           api.listGroups(),
           api.listActivity(),
+          api.listGroupInvites(),
         ]);
       if (friends.status === "fulfilled") this.friends = friends.value;
       if (requests.status === "fulfilled") this.requests = requests.value;
       if (shared.status === "fulfilled") this.shared = shared.value;
       if (groups.status === "fulfilled") this.groups = groups.value;
       if (activity.status === "fulfilled") this.activity = activity.value;
+      if (groupInvites.status === "fulfilled")
+        this.groupInvites = groupInvites.value;
     }
   }
 
@@ -217,6 +224,14 @@ class SocialStore {
     // Joining can bring new shared instances with it (the group's invites).
     await this.load();
     return group;
+  }
+
+  async declineGroupInvite(code: string) {
+    await this.optimistic(
+      () =>
+        (this.groupInvites = this.groupInvites.filter((i) => i.code !== code)),
+      () => api.declineGroupInvite(code),
+    );
   }
 
   async leaveGroup(groupId: Id) {

@@ -347,6 +347,34 @@ pub fn import_pack(kind: LauncherKind, root: &Path, pack: &Path) -> Result<(), R
 
 /// Falls back to opening the install folder when the program can't be found.
 pub fn open(kind: LauncherKind, root: &Path, launcher_instance_id: &str) -> Result<(), OpenError> {
+    start(kind, root, open_args(kind, launcher_instance_id))
+}
+
+/// Play: start the game for this instance where the launcher allows it (Prism and
+/// MultiMC's `--launch`), else open the launcher. True when the game itself starts.
+/// shortcut: the Modrinth App's `modrinth://launch/…` isn't released yet
+/// (modrinth/code#6123); use it here once it ships.
+pub fn play(
+    kind: LauncherKind,
+    root: &Path,
+    launcher_instance_id: &str,
+) -> Result<bool, OpenError> {
+    match play_args(kind, launcher_instance_id) {
+        Some(args) => start(kind, root, args).map(|()| true),
+        None => open(kind, root, launcher_instance_id).map(|()| false),
+    }
+}
+
+fn play_args(kind: LauncherKind, launcher_instance_id: &str) -> Option<Vec<String>> {
+    match kind {
+        LauncherKind::Prism | LauncherKind::Multimc => {
+            Some(vec!["--launch".into(), launcher_instance_id.into()])
+        }
+        _ => None,
+    }
+}
+
+fn start(kind: LauncherKind, root: &Path, args: Vec<String>) -> Result<(), OpenError> {
     let program = match kind {
         LauncherKind::Prism => prism::program(prism::Flavor::Prism, root),
         LauncherKind::Multimc => prism::program(prism::Flavor::MultiMc, root),
@@ -359,7 +387,7 @@ pub fn open(kind: LauncherKind, root: &Path, launcher_instance_id: &str) -> Resu
         return Err(OpenError::NoProgram);
     };
     std::process::Command::new(&exe)
-        .args(open_args(kind, launcher_instance_id))
+        .args(args)
         .spawn()
         .map(|_| ())
         .map_err(OpenError::Spawn)
@@ -388,6 +416,22 @@ pub enum OpenError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_prism_and_multimc_start_the_game() {
+        assert_eq!(
+            play_args(LauncherKind::Prism, "SMP").unwrap(),
+            ["--launch", "SMP"]
+        );
+        assert!(play_args(LauncherKind::Multimc, "SMP").is_some());
+        for kind in [
+            LauncherKind::Modrinth,
+            LauncherKind::Curseforge,
+            LauncherKind::Official,
+        ] {
+            assert!(play_args(kind, "x").is_none(), "{kind:?}");
+        }
+    }
 
     #[test]
     fn opening_never_starts_the_game() {

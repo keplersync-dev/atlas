@@ -194,8 +194,22 @@ pub async fn detected_instances(state: &AppState) -> AppResult<Vec<DetectedInsta
                 .get(&(row.kind.clone(), found.launcher_instance_id.clone()))
                 .or_else(|| by_dir.get(&game_dir.to_lowercase()))
                 .cloned();
+            let icon = match found.icon {
+                Some(icon) => {
+                    let dir = state.paths.icons.clone();
+                    tokio::task::spawn_blocking(move || {
+                        crate::scan::icons::cache_instance_icon(&dir, &icon)
+                    })
+                    .await
+                    .ok()
+                    .flatten()
+                    .map(|stored| crate::util::asset::url(&stored))
+                }
+                None => None,
+            };
             out.push(DetectedInstance {
                 launcher_kind: kind,
+                icon,
                 launcher_instance_id: found.launcher_instance_id,
                 name: found.name,
                 game_dir,

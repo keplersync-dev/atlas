@@ -2,7 +2,14 @@
   // A `module` script runs once for the file, not per component instance.
   // It's where you export types (or constants) that other files import.
   export type MenuItem =
-    | { label: string; icon?: string; danger?: boolean; onselect: () => void }
+    | {
+        label: string;
+        /** One line under the label saying what happens. */
+        hint?: string;
+        icon?: string;
+        danger?: boolean;
+        onselect: () => void;
+      }
     | "divider";
 </script>
 
@@ -71,7 +78,16 @@
               {item.danger ? 'text-(--danger)' : ''}"
           >
             {#if item.icon}<Icon name={item.icon} class="size-4" />{/if}
-            {item.label}
+            {#if item.hint}
+              <span class="max-w-64">
+                {item.label}
+                <small class="block text-[13px] text-(--text-faint)"
+                  >{item.hint}</small
+                >
+              </span>
+            {:else}
+              {item.label}
+            {/if}
           </button>
         {/if}
       {/each}

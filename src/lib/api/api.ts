@@ -94,6 +94,8 @@ export interface AtlasApi {
   rescanInstance(id: Id): Promise<InstanceSummary>;
   /** Opens the launcher: Prism opens on the instance itself; the others just open. */
   openInLauncher(id: Id): Promise<void>;
+  /** Starts the game (Prism, MultiMC) or opens the launcher; true when the game starts. */
+  playInstance(id: Id): Promise<boolean>;
   openInstanceFolder(id: Id): Promise<void>;
   /** Renames the file to/from ".disabled". Fails with "conflict" while the game is running. */
   setContentEnabled(
@@ -251,6 +253,11 @@ export interface AtlasApi {
   revokeGroupInvite(groupId: Id, code: string): Promise<void>;
   previewGroupInvite(code: string): Promise<GroupInvitePreview>;
   joinGroup(code: string): Promise<Group>;
+  /** Invite friends by name: each sees it on their Friends page. */
+  inviteFriendsToGroup(groupId: Id, friendIds: Id[]): Promise<void>;
+  /** Groups friends invited me to from inside Atlas. */
+  listGroupInvites(): Promise<GroupInvitePreview[]>;
+  declineGroupInvite(code: string): Promise<void>;
   setGroupMemberRole(
     groupId: Id,
     userId: Id,

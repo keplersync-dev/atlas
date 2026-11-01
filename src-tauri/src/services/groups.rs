@@ -2,7 +2,9 @@
 //! need the server. After a change the UI hears `groups.changed`; when shared instances
 //! come or go with it, the server sends `shared.changed` too.
 
-use atlas_protocol::api::{CreateGroup, CreateGroupInvite, SetGroupRole, Transfer, UpdateGroup};
+use atlas_protocol::api::{
+    CreateGroup, CreateGroupInvite, InviteToGroup, SetGroupRole, Transfer, UpdateGroup,
+};
 use atlas_protocol::codes::{self, GROUP_CODE_LEN};
 use reqwest::Method;
 use tauri::{AppHandle, Runtime};
@@ -133,6 +135,44 @@ pub async fn revoke_invite(state: &AppState, group_id: &Id, code: &str) -> AppRe
 pub async fn preview_invite(state: &AppState, code: &str) -> AppResult<GroupInvitePreview> {
     let path = format!("/group-invites/{}", invite_code(code)?);
     state.cloud.call(Method::GET, &path, None::<&()>).await
+}
+
+/// Invite friends by name: each finds the invite in Atlas, on the Friends page.
+pub async fn invite_friends<R: Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    group_id: &Id,
+    friend_ids: Vec<Id>,
+) -> AppResult<()> {
+    let path = format!("{}/members/invite", group_path(group_id)?);
+    state
+        .cloud
+        .call::<()>(Method::POST, &path, Some(&InviteToGroup { friend_ids }))
+        .await?;
+    changed(app, Some(group_id));
+    Ok(())
+}
+
+/// Groups friends invited me to from inside Atlas.
+pub async fn my_invites(state: &AppState) -> AppResult<Vec<GroupInvitePreview>> {
+    state
+        .cloud
+        .call(Method::GET, "/me/group-invites", None::<&()>)
+        .await
+}
+
+pub async fn decline_invite<R: Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    code: &str,
+) -> AppResult<()> {
+    let path = format!("/group-invites/{}", invite_code(code)?);
+    state
+        .cloud
+        .call::<()>(Method::DELETE, &path, None::<&()>)
+        .await?;
+    changed(app, None);
+    Ok(())
 }
 
 /// Joining can bring shared instances with it: the group's invites.

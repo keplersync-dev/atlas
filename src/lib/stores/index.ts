@@ -11,6 +11,18 @@ export { instances, social, updates };
  * Loads every store and keeps them fresh from live events.
  * Call once, from the app shell. Returns a cleanup function.
  */
+/** Reload groups, and say so when a friend just invited you to one. */
+async function groupsChanged() {
+  const before = new Set(social.groupInvites.map((i) => i.code));
+  await social.load();
+  for (const i of social.groupInvites.filter((i) => !before.has(i.code)))
+    showNotice({
+      title: `${i.invitedBy?.displayName ?? "A friend"} invited you to ${i.groupName}`,
+      body: "Join to get what's shared with the group.",
+      target: { kind: "friends" },
+    });
+}
+
 export function connectStores() {
   instances.load();
   social.load();
@@ -65,8 +77,10 @@ export function connectStores() {
       case "notice":
         showNotice(e.notice);
         break;
-      case "friends.changed":
       case "groups.changed":
+        groupsChanged();
+        break;
+      case "friends.changed":
       case "session.changed":
       case "connection.changed":
         social.load();

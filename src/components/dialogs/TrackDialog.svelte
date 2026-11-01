@@ -6,32 +6,47 @@
   import { instances } from "$lib/stores";
   import type { DetectedInstance, LauncherKind } from "$lib/types";
   import Button from "../Button.svelte";
+  import ContentIcon from "../ContentIcon.svelte";
   import Dialog from "../Dialog.svelte";
+  import Icon from "../Icon.svelte";
+  import LauncherIcon from "../LauncherIcon.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
 
-  const detected = resource(() => api.listDetectedInstances());
-  const launchers = resource(() => api.listLaunchers());
-
-  const LAUNCHER_STYLE: Record<LauncherKind, { mark: string; color: string }> =
-    {
-      prism: { mark: "P", color: "#8fd16a" },
-      multimc: { mark: "M", color: "#8fd16a" },
-      modrinth: { mark: "M", color: "#1bd96a" },
-      curseforge: { mark: "C", color: "#f16436" },
-      official: { mark: "J", color: "#9aa3ad" },
-      folder: { mark: "F", color: "#6d7581" },
-    };
+  // Look for launchers again each time: one installed while Atlas runs shows up.
+  const looked = api.detectLaunchers().catch(() => null);
+  const detected = resource(() =>
+    looked.then(() => api.listDetectedInstances()),
+  );
+  const launchers = resource(() => looked.then(() => api.listLaunchers()));
 
   // bind:group needs simple values, so each instance gets a string key.
   const keyOf = (d: DetectedInstance) =>
     `${d.launcherKind}:${d.launcherInstanceId}`;
 
-  // Object.groupBy turns one flat list into { prism: [...], modrinth: [...] }.
+  let query = $state("");
+  const matches = (d: DetectedInstance) =>
+    d.name.toLowerCase().includes(query.trim().toLowerCase());
+  // Grouped by launcher; new ones first, ones already added at the end of each group.
   const byLauncher = $derived(
-    Object.entries(
-      Object.groupBy(detected.data ?? [], (d) => d.launcherKind),
-    ) as [LauncherKind, DetectedInstance[]][],
+    (
+      Object.entries(
+        Object.groupBy(
+          (detected.data ?? []).filter(matches),
+          (d) => d.launcherKind,
+        ),
+      ) as [LauncherKind, DetectedInstance[]][]
+    ).map(
+      ([kind, list]) =>
+        [
+          kind,
+          list.toSorted(
+            (a, b) =>
+              Number(!!a.instanceId) - Number(!!b.instanceId) ||
+              a.name.localeCompare(b.name),
+          ),
+        ] as const,
+    ),
   );
   const untracked = $derived(detected.data?.filter((d) => !d.instanceId) ?? []);
   const launcherName = (kind: LauncherKind) =>
@@ -161,60 +176,84 @@
       Launcher. Choose a folder instead.
     </p>
   {:else}
-    {#if untracked.length > 1}
-      <div class="mb-1 flex justify-end">
+    <div class="mb-3 flex items-center gap-3">
+      <label class="relative block min-w-0 flex-1">
+        <span
+          class="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2 text-(--text-faint)"
+        >
+          <Icon name="search" class="size-3.5" />
+        </span>
+        <input
+          bind:value={query}
+          placeholder="Search {plural(detected.data?.length ?? 0, 'instance')}"
+          aria-label="Search instances"
+          class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg) pr-2.5 pl-8 text-[13px] outline-none placeholder:text-(--text-faint) focus:border-(--accent)"
+        />
+      </label>
+      {#if untracked.length > 1}
         <button
           type="button"
-          class="text-[13px] text-(--accent) hover:underline"
+          class="shrink-0 rounded px-1.5 py-1 text-[13px] text-(--accent) hover:bg-(--bg-hover)"
           onclick={toggleAll}
         >
-          {allNewSelected
-            ? "Select none"
-            : `Select all ${untracked.length}`}
+          {allNewSelected ? "Select none" : `Select all ${untracked.length}`}
         </button>
-      </div>
-    {/if}
+      {/if}
+    </div>
 
     {#each byLauncher as [kind, list] (kind)}
-      <section class="mb-2">
-        <div
-          class="flex items-center gap-2.5 px-2 pt-2 pb-1 text-[13px] font-semibold"
-        >
-          <span
-            class="grid size-5 place-items-center rounded-[5px] text-[13px] font-bold text-[#0b0d10]"
-            style="background: {LAUNCHER_STYLE[kind].color}"
-            >{LAUNCHER_STYLE[kind].mark}</span
-          >
+      <section class="mb-4">
+        <h3 class="mb-1.5 flex items-center gap-2.5 text-[14px] font-semibold">
+          <LauncherIcon {kind} class="size-6" />
           {launcherName(kind)}
-          <small class="font-normal text-(--text-faint)"
-            >{plural(list.length, "instance")}</small
-          >
-        </div>
-        {#each list as d (keyOf(d))}
-          {@const tracked = !!d.instanceId}
-          <label
-            class="flex items-center gap-3 rounded-md py-1.5 pr-2 pl-9.5 {tracked
-              ? 'opacity-50'
-              : 'cursor-pointer hover:bg-(--bg-hover)'}"
-          >
-            <input
-              type="checkbox"
-              bind:group={selected}
-              value={keyOf(d)}
-              disabled={tracked}
-              class="size-3.75 accent-(--accent)"
-            />
-            <span class="min-w-0 flex-1">
-              <b class="block truncate font-medium">{d.name}</b>
-              <small class="block text-[13px] text-(--text-faint)">
+          <span class="font-normal text-(--text-faint)">{list.length}</span>
+        </h3>
+        <div class="grid gap-1">
+          {#each list as d (keyOf(d))}
+            {@const tracked = !!d.instanceId}
+            {@const on = selected.includes(keyOf(d))}
+            <label
+              class="flex items-center gap-3 rounded-lg border px-3 py-2 transition-colors
                 {tracked
-                  ? "Already tracked"
-                  : versionLabel(d.loader, d.minecraftVersion)}
-              </small>
-            </span>
-          </label>
-        {/each}
+                ? 'border-transparent opacity-60'
+                : on
+                  ? 'cursor-pointer border-(--accent)/60 bg-(--accent)/8'
+                  : 'cursor-pointer border-(--line) hover:bg-(--bg-hover)'}"
+            >
+              <input
+                type="checkbox"
+                bind:group={selected}
+                value={keyOf(d)}
+                disabled={tracked}
+                class="size-4 shrink-0 accent-(--accent) {tracked
+                  ? 'invisible'
+                  : ''}"
+              />
+              <ContentIcon
+                src={d.icon}
+                seed={d.gameDir}
+                class="size-9 rounded-md"
+              />
+              <span class="min-w-0 flex-1">
+                <b class="block truncate font-medium">{d.name}</b>
+                <small class="block truncate text-[13px] text-(--text-faint)">
+                  {versionLabel(d.loader, d.minecraftVersion)}
+                </small>
+              </span>
+              {#if tracked}
+                <span
+                  class="flex shrink-0 items-center gap-1 text-[13px] text-(--text-muted)"
+                  ><Icon name="check" class="size-3.5" />Already added</span
+                >
+              {/if}
+            </label>
+          {/each}
+        </div>
       </section>
+    {:else}
+      <p class="py-4 text-[13px] text-(--text-muted)">
+        No instances match “{query.trim()}”.
+      </p>
     {/each}
   {/if}
 
@@ -290,9 +329,10 @@
   </div>
 
   {#snippet footer()}
-    {#if error}<span class="mr-auto text-[13px] text-(--danger)" role="alert"
-        >{error}</span
-      >{/if}
+    <!-- Its own line, so a long message never pushes the buttons out of place. -->
+    {#if error}<p class="basis-full text-[13px] text-(--danger)" role="alert">
+        {error}
+      </p>{/if}
     <Button variant="ghost" onclick={onclose}>Cancel</Button>
     <Button
       type="submit"

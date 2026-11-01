@@ -171,9 +171,20 @@
       () => api.setOptionalInstalled(instance.id, item.id, next),
     );
 
+  // "Set all shown": every listed file the owner can still set, in small batches so
+  // hundreds of files don't flood the backend at once.
+  let settingAll = $state(false);
+  async function setAllShown(next: ShareMode) {
+    const items = visible.filter((c) => c.installed && c.shareMode !== next);
+    settingAll = true;
+    for (let i = 0; i < items.length; i += 20)
+      await Promise.all(items.slice(i, i + 20).map((c) => setMode(c, next)));
+    settingAll = false;
+  }
+
   function setMode(item: InstanceContent, next: ShareMode) {
     const before = item.shareMode;
-    change(
+    return change(
       () => (item.shareMode = next),
       () => (item.shareMode = before),
       () => api.setShareMode(instance.id, item.id, next),
@@ -193,6 +204,7 @@
           : 'text-(--text-muted) hover:bg-(--bg-hover)'}"
       >
         {chip.label}
+        <span class="ml-0.5 font-normal opacity-70">{chip.count}</span>
       </button>
     {/each}
   </div>
@@ -204,29 +216,66 @@
     <!-- bind:value keeps `query` and the input in sync both ways -->
     <input
       bind:value={query}
-      placeholder="Filter {instance.content.length} items"
+      placeholder="Search"
       class="w-full bg-transparent text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-faint)"
     />
   </label>
 </div>
 
 {#if canSetModes}
-  <p class="mb-1 text-[13px] text-(--text-faint)">
-    Choose how each file is shared. Friends get changes with your next update.
-  </p>
+  <div
+    class="mb-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-(--text-faint)"
+  >
+    <span class="mr-auto"
+      >Choose how each file is shared. Friends get changes with your next
+      update.</span
+    >
+    {#if visible.length > 1}
+      <span class="flex items-center gap-1">
+        Set all shown:
+        {#each [{ id: "required", label: "Required" }, { id: "optional", label: "Optional" }, { id: "private", label: "Only me" }] as const as m (m.id)}
+          <button
+            type="button"
+            disabled={settingAll || !!lockedReason}
+            onclick={() => setAllShown(m.id)}
+            class="rounded px-1.5 py-0.5 text-(--accent) hover:bg-(--bg-hover) disabled:opacity-40"
+            >{m.label}</button
+          >
+        {/each}
+      </span>
+    {/if}
+  </div>
 {/if}
 {#if lockedReason}
   <p class="mb-1 text-[13px] text-(--text-faint)">{lockedReason}</p>
 {/if}
 
 <div>
+  <!-- What each column is, so a version string reads as one. -->
+  {#if visible.length}
+    <div
+      class="grid items-center gap-3.5 border-b border-(--line) px-2 pb-1.5 text-[13px] text-(--text-faint)
+        {canSetModes
+        ? 'grid-cols-[28px_minmax(0,1fr)_minmax(0,140px)_224px_36px]'
+        : 'grid-cols-[28px_minmax(0,1fr)_minmax(0,150px)_minmax(0,130px)_36px]'}"
+      aria-hidden="true"
+    >
+      <span></span>
+      <span>Name</span>
+      <span>Version</span>
+      <span class={canSetModes ? "pl-3" : ""}
+        >{canSetModes ? "Friends get" : "From"}</span
+      >
+      <span class="text-right">On</span>
+    </div>
+  {/if}
   {#each visible as item (item.id)}
     {@const optionalExtra = isOptionalExtra(item)}
     {@const present = item.installed && item.enabled}
     <div
       class="grid items-center gap-3.5 rounded-md px-2 py-2.25 hover:bg-(--bg-hover)
         {canSetModes
-        ? 'grid-cols-[28px_minmax(0,1fr)_minmax(0,110px)_auto_36px]'
+        ? 'grid-cols-[28px_minmax(0,1fr)_minmax(0,140px)_224px_36px]'
         : 'grid-cols-[28px_minmax(0,1fr)_minmax(0,150px)_minmax(0,130px)_36px]'}"
     >
       <ContentIcon

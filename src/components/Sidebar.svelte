@@ -21,7 +21,8 @@
   /** Count shown next to a nav link: invites on Shared, friend requests on Friends. */
   function badge(view: View) {
     if (view.page === "shared") return social.invites.length;
-    if (view.page === "friends") return social.incomingRequests.length;
+    if (view.page === "friends")
+      return social.incomingRequests.length + social.groupInvites.length;
     return 0;
   }
 

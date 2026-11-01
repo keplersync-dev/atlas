@@ -2,7 +2,7 @@
 //!
 //! A rescan = launcher metadata + the file scan.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use tauri::{AppHandle, Runtime};
@@ -543,6 +543,32 @@ pub async fn rescan_all<R: Runtime>(state: &AppState, app: &AppHandle<R>, older_
 }
 
 pub async fn open_in_launcher(state: &AppState, id: &str) -> AppResult<()> {
+    let (kind, root, instance) = in_launcher(state, id).await?;
+    launchers::open(kind, &root, &instance).map_err(|e| open_error(kind, e))
+}
+
+/// Start the game for this instance, or open its launcher where that's all it allows.
+/// True when the game itself starts.
+pub async fn play(state: &AppState, id: &str) -> AppResult<bool> {
+    let (kind, root, instance) = in_launcher(state, id).await?;
+    launchers::play(kind, &root, &instance).map_err(|e| open_error(kind, e))
+}
+
+fn open_error(kind: LauncherKind, e: OpenError) -> AppError {
+    let name = launchers::display_name(kind);
+    match e {
+        OpenError::NoProgram => {
+            AppError::conflict(format!("Couldn't find {name}. Is it installed?"))
+        }
+        OpenError::Spawn(e) => {
+            tracing::warn!(error = %e, "couldn't start launcher");
+            AppError::unknown(format!("Couldn't start {name}"))
+        }
+    }
+}
+
+/// The launcher, its folder and the instance's key in it.
+async fn in_launcher(state: &AppState, id: &str) -> AppResult<(LauncherKind, PathBuf, String)> {
     let row = row(state, id).await?;
     if row.status() == InstanceStatus::Missing {
         return Err(AppError::conflict(
@@ -561,16 +587,8 @@ pub async fn open_in_launcher(state: &AppState, id: &str) -> AppResult<()> {
         None => None,
     }
     .ok_or_else(|| AppError::conflict(format!("Atlas can't find {name} on this PC anymore")))?;
-    let instance = row.launcher_instance_id.as_deref().unwrap_or_default();
-    launchers::open(kind, Path::new(&launcher.root_path), instance).map_err(|e| match e {
-        OpenError::NoProgram => {
-            AppError::conflict(format!("Couldn't find {name}. Is it installed?"))
-        }
-        OpenError::Spawn(e) => {
-            tracing::warn!(error = %e, "couldn't start launcher");
-            AppError::unknown(format!("Couldn't start {name}"))
-        }
-    })
+    let instance = row.launcher_instance_id.unwrap_or_default();
+    Ok((kind, PathBuf::from(launcher.root_path), instance))
 }
 
 pub async fn open_folder<R: Runtime>(

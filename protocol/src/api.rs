@@ -389,6 +389,13 @@ pub struct GroupInvitePreview {
     pub already_member: bool,
 }
 
+/// `POST /groups/{id}/members/invite`: invite friends by name; each sees it in Atlas.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InviteToGroup {
+    pub friend_ids: Vec<Id>,
+}
+
 /// `POST /groups`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
