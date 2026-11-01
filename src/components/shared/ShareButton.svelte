@@ -62,7 +62,9 @@
         </button>
       {:else}
         <p class="px-2.5 py-2 text-[13px] text-(--text-muted)">
-          Everything you track is already shared.
+          {instances.list.length
+            ? "Everything you've added is already shared."
+            : "Add an instance from your launcher first, then share it."}
         </p>
       {/each}
       <hr class="my-1 border-(--line)" />
@@ -74,7 +76,7 @@
         }}
         class="w-full rounded-[5px] px-2.5 py-1.75 text-left text-[13px] text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
       >
-        Track another instance…
+        {instances.list.length ? "Add another instance…" : "Add an instance…"}
       </button>
     </div>
   {/if}

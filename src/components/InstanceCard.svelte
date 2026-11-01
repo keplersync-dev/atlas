@@ -278,7 +278,7 @@
       <button
         onclick={open}
         tabindex="-1"
-        class="mt-1.5 flex w-full items-center gap-3 text-left text-[13px] text-(--text-faint)"
+        class="mt-1.5 flex w-full flex-wrap items-center gap-x-3 gap-y-0.5 text-left text-[13px] whitespace-nowrap text-(--text-faint)"
       >
         <span class="flex items-center gap-1">
           <Icon name="cube" class="size-3" />

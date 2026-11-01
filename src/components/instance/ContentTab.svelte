@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fuzzyFilter } from "$lib/fuzzy";
   import { showError } from "$lib/toasts.svelte";
   import { api } from "$lib/api";
   import { openDialog } from "$lib/dialogs.svelte";
@@ -121,16 +122,18 @@
     }
   });
 
-  const visible = $derived(
-    instance.content
-      .filter(
-        (c) =>
-          (kind === "all" || c.kind === kind) &&
-          c.name.toLowerCase().includes(query.trim().toLowerCase()),
-      )
-      // sort() keeps the original order within each group.
-      .sort((a, b) => Number(first.has(b.id)) - Number(first.has(a.id))),
-  );
+  const visible = $derived.by(() => {
+    const ofKind = instance.content.filter(
+      (c) => kind === "all" || c.kind === kind,
+    );
+    // Searching: best match first. Otherwise pending changes first; sort() keeps the
+    // original order within each group.
+    return query.trim()
+      ? fuzzyFilter(ofKind, query, (c) => [c.name])
+      : ofKind.sort(
+          (a, b) => Number(first.has(b.id)) - Number(first.has(a.id)),
+        );
+  });
 
   /** An uploaded file from someone else's shared version: it can be reported. Files from
    *  Modrinth or CurseForge are reported on those sites. */

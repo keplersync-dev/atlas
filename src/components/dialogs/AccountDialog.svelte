@@ -84,34 +84,48 @@
     .getAppSettings()
     .then((s) => (pc = s))
     .catch(() => {});
-  const PC_SETTINGS: { key: keyof AppSettings; title: string; hint: string }[] =
-    [
-      {
-        key: "autoUpdate",
-        title: "Keep new packs up to date automatically",
-        hint: "Where the switch starts when you add a pack. Change it for each pack on its Sharing tab.",
-      },
-      {
-        key: "notifications",
-        title: "Notifications",
-        hint: "Only when something needs you: a pack shared with you, a friend request, or an update that needs your say. Held until you close the game.",
-      },
-      {
-        key: "notificationSound",
-        title: "Notification sound",
-        hint: "A quiet sound with each one. Silent while Windows is set to Do not disturb.",
-      },
-      {
-        key: "closeToTray",
-        title: "Keep running in the tray",
-        hint: "Closing the window leaves Atlas in the tray, so it keeps your packs up to date.",
-      },
-      {
-        key: "startWithWindows",
-        title: "Start with Windows",
-        hint: "Atlas starts in the tray when you sign in to Windows.",
-      },
-    ];
+  const PC_SETTINGS: {
+    key: keyof AppSettings;
+    group: string;
+    title: string;
+    hint: string;
+  }[] = [
+    {
+      key: "autoUpdate",
+      group: "Updates",
+      title: "Keep new packs up to date automatically",
+      hint: "Where the switch starts when you add a pack. Change it for each pack on its Sharing tab.",
+    },
+    {
+      key: "notifications",
+      group: "Notifications",
+      title: "Notifications",
+      hint: "Only when something needs you: a pack shared with you, a friend request, or an update that needs your say. Held until you close the game.",
+    },
+    {
+      key: "notificationSound",
+      group: "Notifications",
+      title: "Notification sound",
+      hint: "A quiet sound with each one. Silent while Windows is set to Do not disturb.",
+    },
+    {
+      key: "closeToTray",
+      group: "Startup",
+      title: "Keep running in the tray",
+      hint: "Closing the window leaves Atlas in the tray, so it keeps your packs up to date.",
+    },
+    {
+      key: "startWithWindows",
+      group: "Startup",
+      title: "Start with Windows",
+      hint: "Atlas starts in the tray when you sign in to Windows.",
+    },
+  ];
+
+  // A section's card, and one setting in it: words on the left, the control on the right.
+  const CARD =
+    "divide-y divide-(--line) overflow-hidden rounded-lg border border-(--line) bg-(--bg)";
+  const ROW = "flex items-start gap-4 px-4 py-3.5";
 
   async function act(key: string, action: () => Promise<unknown>) {
     const mine = ++attempt;
@@ -207,9 +221,10 @@
   {/if}
 {/snippet}
 
+<!-- Each section: a title, then a card whose settings are rows with a line between. -->
 {#snippet section(title: string)}
   <h3
-    class="mt-5 mb-2 text-[13px] font-semibold text-(--text-muted) first:mt-1"
+    class="mt-6 mb-2 text-[13px] font-semibold text-(--text-muted) first:mt-1"
   >
     {title}
   </h3>
@@ -219,24 +234,30 @@
 {#snippet thisPc()}
   {#if pc}
     {@const settings = pc}
-    {@render section("This PC")}
-    {#each PC_SETTINGS as s (s.key)}
-      <div class="flex items-start gap-3 not-first:mt-3">
-        <div class="flex-1">
-          <b class="block font-medium">{s.title}</b>
-          <small class="text-[13px] text-(--text-faint)">{s.hint}</small>
-        </div>
-        <Switch
-          checked={settings[s.key]}
-          label={s.title}
-          disabled={busy === s.key}
-          onchange={(next) =>
-            act(s.key, async () => {
-              pc = await api.updateAppSettings({ [s.key]: next });
-            })}
-        />
+    {#each ["Updates", "Notifications", "Startup"] as group (group)}
+      {@render section(group)}
+      <div class={CARD}>
+        {#each PC_SETTINGS.filter((s) => s.group === group) as s (s.key)}
+          <div class={ROW}>
+            <div class="min-w-0 flex-1">
+              <b class="block font-medium">{s.title}</b>
+              <small class="block text-[13px] text-(--text-faint)"
+                >{s.hint}</small
+              >
+              {@render failed(s.key)}
+            </div>
+            <Switch
+              checked={settings[s.key]}
+              label={s.title}
+              disabled={busy === s.key}
+              onchange={(next) =>
+                act(s.key, async () => {
+                  pc = await api.updateAppSettings({ [s.key]: next });
+                })}
+            />
+          </div>
+        {/each}
       </div>
-      {@render failed(s.key)}
     {/each}
   {/if}
 {/snippet}
@@ -263,233 +284,249 @@
   {:else}
     <!-- ── Profile (its own form with its own Save button) ── -->
     {@render section("Profile")}
-    <!-- Save sits beside the fields (lined up with the inputs), not on a row of its own. -->
-    <form
-      onsubmit={saveProfile}
-      class="grid grid-cols-[1fr_1fr_auto] gap-x-3 gap-y-1.5"
-    >
-      <label class="text-[13px] text-(--text-muted)">
-        Display name
-        <input
-          bind:value={displayName}
-          maxlength="32"
-          class="mt-1 h-8.5 w-full rounded-md border border-(--line-2) bg-(--bg) px-3 text-[13px] text-(--text-primary) outline-none focus:border-(--accent)"
-        />
-        {#if displayNameError && displayName !== me.displayName}<span
-            class="mt-1 block text-(--danger)">{displayNameError}</span
-          >{/if}
-      </label>
-      <label class="text-[13px] text-(--text-muted)">
-        Username
-        <!-- oninput lowercases as you type; bind:value keeps `username` in sync -->
-        <input
-          bind:value={username}
-          oninput={() => (username = username.toLowerCase())}
-          maxlength="16"
-          disabled={!!usernameLockedUntil}
-          class="mt-1 h-8.5 w-full rounded-md border border-(--line-2) bg-(--bg) px-3 text-[13px] text-(--text-primary) outline-none focus:border-(--accent) disabled:opacity-50"
-        />
-        {#if usernameLockedUntil}
-          <span class="mt-1 block text-(--text-faint)"
-            >You can change it again on {usernameLockedUntil.toLocaleDateString()}.</span
-          >
-        {:else if usernameError && username !== me.username}
-          <span class="mt-1 block text-(--danger)">{usernameError}</span>
-        {:else}
-          <span class="mt-1 block text-(--text-faint)"
-            >Can be changed once every 30 days.</span
+    <div class={CARD}>
+      <!-- Save sits beside the fields (lined up with the inputs), not on a row of its own. -->
+      <form
+        onsubmit={saveProfile}
+        class="grid grid-cols-[1fr_1fr_auto] gap-x-3 gap-y-1.5 px-4 py-3.5"
+      >
+        <label class="text-[13px] text-(--text-muted)">
+          Display name
+          <input
+            bind:value={displayName}
+            maxlength="32"
+            class="mt-1 h-8.5 w-full rounded-md border border-(--line-2) bg-(--bg) px-3 text-[13px] text-(--text-primary) outline-none focus:border-(--accent)"
+          />
+          {#if displayNameError && displayName !== me.displayName}<span
+              class="mt-1 block text-(--danger)">{displayNameError}</span
+            >{/if}
+        </label>
+        <label class="text-[13px] text-(--text-muted)">
+          Username
+          <!-- oninput lowercases as you type; bind:value keeps `username` in sync -->
+          <input
+            bind:value={username}
+            oninput={() => (username = username.toLowerCase())}
+            maxlength="16"
+            disabled={!!usernameLockedUntil}
+            class="mt-1 h-8.5 w-full rounded-md border border-(--line-2) bg-(--bg) px-3 text-[13px] text-(--text-primary) outline-none focus:border-(--accent) disabled:opacity-50"
+          />
+          {#if usernameLockedUntil}
+            <span class="mt-1 block text-(--text-faint)"
+              >You can change it again on {usernameLockedUntil.toLocaleDateString()}.</span
+            >
+          {:else if usernameError && username !== me.username}
+            <span class="mt-1 block text-(--danger)">{usernameError}</span>
+          {:else}
+            <span class="mt-1 block text-(--text-faint)"
+              >Can be changed once every 30 days.</span
+            >
+          {/if}
+        </label>
+        <Button
+          type="submit"
+          size="sm"
+          variant="primary"
+          class="mt-6 self-start"
+          disabled={!canSave || saving}
+          >{saving
+            ? "Saving…"
+            : profileMessage?.ok && !dirty
+              ? "Saved"
+              : "Save"}</Button
+        >
+        {#if profileMessage && !profileMessage.ok}
+          <span class="col-span-3 text-[13px] text-(--danger)" role="alert"
+            >{profileMessage.text}</span
           >
         {/if}
-      </label>
-      <Button
-        type="submit"
-        size="sm"
-        variant="primary"
-        class="mt-6 self-start"
-        disabled={!canSave || saving}
-        >{saving
-          ? "Saving…"
-          : profileMessage?.ok && !dirty
-            ? "Saved"
-            : "Save"}</Button
-      >
-      {#if profileMessage && !profileMessage.ok}
-        <span class="col-span-3 text-[13px] text-(--danger)" role="alert"
-          >{profileMessage.text}</span
-        >
-      {/if}
-    </form>
+      </form>
 
-    <!-- ── Picture: saves the moment you pick one ── -->
-    {@render section("Picture")}
-    <div class="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Picture">
-      {#each pictures as pic (pic.id)}
-        {@const chosen = me.avatarSource === pic.id}
-        <button
-          type="button"
-          role="radio"
-          aria-checked={chosen}
-          disabled={!pic.available || busy === "picture"}
-          onclick={() =>
-            act("picture", () =>
-              social.updateProfile({ avatarSource: pic.id }),
-            )}
-          class="flex items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors disabled:cursor-default
-            {chosen && pic.available
-            ? 'border-(--accent) bg-(--accent)/8'
-            : 'border-(--line-2) enabled:hover:bg-(--bg-hover)'}"
+      <!-- ── Picture: saves the moment you pick one ── -->
+      <div class="px-4 py-3.5">
+        <b class="mb-2 block font-medium">Picture</b>
+        <div
+          class="grid grid-cols-2 gap-2"
+          role="radiogroup"
+          aria-label="Picture"
         >
-          {#if pic.available}
-            <Head user={pic.user} size={32} />
-          {:else}
-            <ProviderIcon provider={pic.id} class="size-8 opacity-40" />
-          {/if}
-          <span class="min-w-0">
-            <b class="block font-medium {pic.available ? '' : 'opacity-60'}"
-              >{pic.label}</b
+          {#each pictures as pic (pic.id)}
+            {@const chosen = me.avatarSource === pic.id}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={chosen}
+              disabled={!pic.available || busy === "picture"}
+              onclick={() =>
+                act("picture", () =>
+                  social.updateProfile({ avatarSource: pic.id }),
+                )}
+              class="flex items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors disabled:cursor-default
+            {chosen && pic.available
+                ? 'border-(--accent) bg-(--accent)/8'
+                : 'border-(--line-2) enabled:hover:bg-(--bg-hover)'}"
             >
-            <small class="block text-[13px] text-(--text-faint)"
-              >{pic.available
-                ? chosen
-                  ? "Showing now"
-                  : "Use this one"
-                : pic.missing}</small
-            >
-          </span>
-        </button>
-      {/each}
+              {#if pic.available}
+                <Head user={pic.user} size={32} />
+              {:else}
+                <ProviderIcon provider={pic.id} class="size-8 opacity-40" />
+              {/if}
+              <span class="min-w-0">
+                <b class="block font-medium {pic.available ? '' : 'opacity-60'}"
+                  >{pic.label}</b
+                >
+                <small class="block text-[13px] text-(--text-faint)"
+                  >{pic.available
+                    ? chosen
+                      ? "Showing now"
+                      : "Use this one"
+                    : pic.missing}</small
+                >
+              </span>
+            </button>
+          {/each}
+        </div>
+        {@render failed("picture")}
+      </div>
     </div>
-    {@render failed("picture")}
 
     <!-- ── Privacy: saves the moment you flip it ── -->
     {@render section("Privacy")}
-    <div class="flex items-start gap-3">
-      <div class="flex-1">
-        <b class="block font-medium">Appear offline</b>
-        <small class="text-[13px] text-(--text-faint)"
-          >Friends see you as offline and can't see what you're playing.</small
+    <div class={CARD}>
+      <div class={ROW}>
+        <div class="flex-1">
+          <b class="block font-medium">Appear offline</b>
+          <small class="text-[13px] text-(--text-faint)"
+            >Friends see you as offline and can't see what you're playing.</small
+          >
+        </div>
+        <Switch
+          checked={me.appearOffline}
+          label="Appear offline"
+          disabled={busy === "offline"}
+          onchange={(next) =>
+            act("offline", () => social.updateProfile({ appearOffline: next }))}
+        />
+      </div>
+      {@render failed("offline")}
+      <div class={ROW}>
+        <div class="flex-1">
+          <b class="block font-medium">Your data</b>
+          <small class="text-[13px] text-(--text-faint)"
+            >{exported
+              ? `Saved to ${exported}`
+              : "A copy of everything Atlas stores about you, as a file."}</small
+          >
+        </div>
+        <Button
+          size="sm"
+          disabled={busy !== null}
+          onclick={() =>
+            act("export", async () => {
+              exported = await api.exportMyData();
+            })}>{busy === "export" ? "Saving…" : "Download"}</Button
         >
       </div>
-      <Switch
-        checked={me.appearOffline}
-        label="Appear offline"
-        disabled={busy === "offline"}
-        onchange={(next) =>
-          act("offline", () => social.updateProfile({ appearOffline: next }))}
-      />
+      {@render failed("export")}
     </div>
-    {@render failed("offline")}
-    <div class="mt-3 flex items-center gap-3">
-      <div class="flex-1">
-        <b class="block font-medium">Your data</b>
-        <small class="text-[13px] text-(--text-faint)"
-          >{exported
-            ? `Saved to ${exported}`
-            : "A copy of everything Atlas stores about you, as a file."}</small
-        >
-      </div>
-      <Button
-        size="sm"
-        disabled={busy !== null}
-        onclick={() =>
-          act("export", async () => {
-            exported = await api.exportMyData();
-          })}>{busy === "export" ? "Saving…" : "Download"}</Button
-      >
-    </div>
-    {@render failed("export")}
 
     {@render thisPc()}
 
     <!-- ── Sign-in methods ── -->
     {@render section("Sign in with")}
-    {#each PROVIDERS as p (p.id)}
-      {@const linked = me.identities.find((i) => i.provider === p.id)}
-      <div class="flex items-center gap-3 py-1.5">
-        <ProviderIcon provider={p.id} />
-        <div class="min-w-0 flex-1">
-          <b class="block font-medium">{p.label}</b>
-          <small class="text-[13px] text-(--text-faint)"
-            >{linked ? linked.username : "Not linked"}</small
-          >
-        </div>
-        {#if linked}
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={busy !== null || me.identities.length === 1}
-            title={me.identities.length === 1
-              ? "You need at least one way to sign in"
-              : undefined}
-            onclick={async () => {
-              const ok = await confirmAction({
-                title: `Unlink ${p.label}?`,
-                message: `You won't be able to sign in with ${p.label} anymore. You can link it again later.`,
-                confirmLabel: "Unlink",
-                danger: true,
-              });
-              if (ok) act(p.id, () => social.unlinkIdentity(p.id));
-            }}>Unlink</Button
-          >
-        {:else}
-          {#if busy === p.id}
-            <Button size="sm" variant="ghost" onclick={cancelLink}
-              >Cancel</Button
+    <div class={CARD}>
+      {#each PROVIDERS as p (p.id)}
+        {@const linked = me.identities.find((i) => i.provider === p.id)}
+        <div class="{ROW} items-center!">
+          <ProviderIcon provider={p.id} />
+          <div class="min-w-0 flex-1">
+            <b class="block font-medium">{p.label}</b>
+            <small class="text-[13px] text-(--text-faint)"
+              >{linked ? linked.username : "Not linked"}</small
+            >
+          </div>
+          {#if linked}
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy !== null || me.identities.length === 1}
+              title={me.identities.length === 1
+                ? "You need at least one way to sign in"
+                : undefined}
+              onclick={async () => {
+                const ok = await confirmAction({
+                  title: `Unlink ${p.label}?`,
+                  message: `You won't be able to sign in with ${p.label} anymore. You can link it again later.`,
+                  confirmLabel: "Unlink",
+                  danger: true,
+                });
+                if (ok) act(p.id, () => social.unlinkIdentity(p.id));
+              }}>Unlink</Button
+            >
+          {:else}
+            {#if busy === p.id}
+              <Button size="sm" variant="ghost" onclick={cancelLink}
+                >Cancel</Button
+              >
+            {/if}
+            <Button
+              size="sm"
+              disabled={busy !== null && !linking}
+              onclick={() => act(p.id, () => social.linkIdentity(p.id))}
+              >{busy === p.id ? "Start again" : "Link"}</Button
             >
           {/if}
-          <Button
-            size="sm"
-            disabled={busy !== null && !linking}
-            onclick={() => act(p.id, () => social.linkIdentity(p.id))}
-            >{busy === p.id ? "Start again" : "Link"}</Button
+        </div>
+        {@render failed(p.id)}
+      {/each}
+    </div>
+
+    <!-- ── Friend code and storage ── -->
+    {@render section("Account")}
+    <div class={CARD}>
+      <div class="{ROW} items-center!">
+        <div class="min-w-0 flex-1">
+          <b class="block font-medium">Friend code</b>
+          <span class="font-mono font-semibold tracking-[2px] select-text"
+            >{formatCode(me.friendCode)}</span
           >
-        {/if}
+          <small class="block text-[13px] text-(--text-faint)"
+            >Reset it if your code was posted somewhere public.</small
+          >
+          {@render failed("code")}
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy !== null}
+          onclick={async () => {
+            const ok = await confirmAction({
+              title: "Reset your friend code?",
+              message:
+                "Your old code and link stop working right away. You'll get a new one to share.",
+              confirmLabel: "Reset code",
+            });
+            if (ok) act("code", () => social.resetFriendCode());
+          }}>Reset code</Button
+        >
       </div>
-      {@render failed(p.id)}
-    {/each}
-
-    <!-- ── Friend code ── -->
-    {@render section("Friend code")}
-    <div class="flex items-center gap-3">
-      <span
-        class="flex-1 font-mono text-base font-semibold tracking-[2px] select-text"
-        >{formatCode(me.friendCode)}</span
-      >
-      <Button
-        size="sm"
-        variant="ghost"
-        disabled={busy !== null}
-        onclick={async () => {
-          const ok = await confirmAction({
-            title: "Reset your friend code?",
-            message:
-              "Your old code and link stop working right away. You'll get a new one to share.",
-            confirmLabel: "Reset code",
-          });
-          if (ok) act("code", () => social.resetFriendCode());
-        }}>Reset code</Button
-      >
+      <div class="px-4 py-3.5">
+        <b class="mb-2 block font-medium">Storage</b>
+        <div class="h-1.5 overflow-hidden rounded-full bg-(--line)">
+          <div
+            class="h-full bg-(--accent)"
+            style="width: {Math.min(
+              100,
+              (me.storage.usedBytes / me.storage.quotaBytes) * 100,
+            )}%"
+          ></div>
+        </div>
+        <small class="mt-1.5 block text-[13px] text-(--text-faint)">
+          {fileSize(me.storage.usedBytes)} of {fileSize(me.storage.quotaBytes)} used
+          by files you've uploaded
+        </small>
+      </div>
     </div>
-    <small class="text-[13px] text-(--text-faint)"
-      >Reset it if your code was posted somewhere public.</small
-    >
-    {@render failed("code")}
-
-    <!-- ── Storage ── -->
-    {@render section("Storage")}
-    <div class="h-1.5 overflow-hidden rounded-full bg-(--line)">
-      <div
-        class="h-full bg-(--accent)"
-        style="width: {Math.min(
-          100,
-          (me.storage.usedBytes / me.storage.quotaBytes) * 100,
-        )}%"
-      ></div>
-    </div>
-    <small class="mt-1.5 block text-[13px] text-(--text-faint)">
-      {fileSize(me.storage.usedBytes)} of {fileSize(me.storage.quotaBytes)} used by
-      files you've uploaded
-    </small>
   {/if}
 
   <p class="mt-6 text-center text-[13px] text-(--text-faint)">

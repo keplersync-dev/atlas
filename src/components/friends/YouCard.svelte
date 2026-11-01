@@ -3,6 +3,8 @@
   // box for theirs. Everything about adding people is here.
   import { api } from "$lib/api";
   import { copier } from "$lib/clipboard.svelte";
+  import { confirmAction } from "$lib/confirm.svelte";
+  import { showError } from "$lib/toasts.svelte";
   import { formatCode, normalizeCode } from "$lib/format";
   import { social } from "$lib/stores";
   import type { PublicUser } from "$lib/types";
@@ -196,6 +198,23 @@
             />{/if}
           Copy link
         </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          title="Make a new code; the old code and link stop working"
+          onclick={async () => {
+            const ok = await confirmAction({
+              title: "Reset your friend code?",
+              message:
+                "Your old code and link stop working right away. Friends you already have stay friends.",
+              confirmLabel: "Reset code",
+            });
+            if (ok)
+              social
+                .resetFriendCode()
+                .catch((e) => showError((e as Error).message));
+          }}>Reset</Button
+        >
       </div>
     </div>
 

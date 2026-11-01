@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fuzzyFilter } from "$lib/fuzzy";
   import {
     blocked,
     buildTree,
@@ -87,14 +88,16 @@
 
   const matches = $derived(
     query.trim()
-      ? visible
-          .filter((f) => f.path.toLowerCase().includes(query.toLowerCase()))
-          .slice(0, 300)
+      ? fuzzyFilter(visible, query, (f) => [
+          f.path.split("/").pop(),
+          f.path,
+        ]).slice(0, 300)
       : [],
   );
   const searching = $derived(!!query.trim());
   const rowFolders = $derived(searching ? [] : sorted(folder.folders));
-  const rowFiles = $derived(sorted(searching ? matches : folder.files));
+  // Search results stay best match first; folders follow the chosen sort.
+  const rowFiles = $derived(searching ? matches : sorted(folder.files));
 
   // The header checkbox covers what's listed: this folder, or the search results.
   const scope = $derived(

@@ -57,6 +57,7 @@
 </script>
 
 <script lang="ts">
+  import { fuzzyFilter } from "$lib/fuzzy";
   import { untrack } from "svelte";
   import { fileSize, plural } from "$lib/format";
   import type { ContentKind, PublishPlan } from "$lib/types";
@@ -120,11 +121,7 @@
       (i) => kind === "all" || i.kind === kind,
     ),
   );
-  const shown = $derived(
-    ofKind.filter((i) =>
-      i.name.toLowerCase().includes(query.trim().toLowerCase()),
-    ),
-  );
+  const shown = $derived(fuzzyFilter(ofKind, query, (i) => [i.name]));
 
   function setMode(item: PublishItem, mode: ShareMode) {
     // Reassign (not mutate) so the parent's bound object updates too.

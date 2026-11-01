@@ -8,6 +8,7 @@
 </script>
 
 <script lang="ts">
+  import { fuzzy } from "$lib/fuzzy";
   import { showError } from "$lib/toasts.svelte";
   import { confirmAction } from "$lib/confirm.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
@@ -46,15 +47,8 @@
     test: (f: Friend) => boolean;
   }[];
 
-  const matchesQuery = (f: Friend) => {
-    const q = query.trim().toLowerCase();
-    return (
-      !q ||
-      [f.user.displayName, f.user.username].some((t) =>
-        t.toLowerCase().includes(q),
-      )
-    );
-  };
+  const matchesQuery = (f: Friend) =>
+    fuzzy(query, f.user.displayName, f.user.username) !== null;
   const shown = $derived(
     social.friends.filter(
       (f) => matchesQuery(f) && FILTERS.find((x) => x.key === filter)!.test(f),
@@ -136,8 +130,11 @@
   </div>
 {:else}
   <YouCard />
+  <!-- Requests and group invites: a strip above both columns, only when there are any. -->
+  <div class="mt-4 empty:hidden"><RequestsCard /></div>
+  <!-- Friends and groups get equal room side by side; stacked when that's too narrow. -->
   <div
-    class="mt-6 grid grid-cols-[minmax(0,1fr)_320px] items-start gap-10 max-[1150px]:grid-cols-1"
+    class="mt-6 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-start gap-8 max-[1400px]:grid-cols-1"
   >
     <div>
       <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-3">
@@ -286,9 +283,6 @@
       {/each}
     </div>
 
-    <aside class="flex flex-col gap-4">
-      <RequestsCard />
-      <GroupsCard />
-    </aside>
+    <GroupsCard />
   </div>
 {/if}

@@ -5,6 +5,7 @@
 </script>
 
 <script lang="ts">
+  import { fuzzy } from "$lib/fuzzy";
   import { api } from "$lib/api";
   import { plural } from "$lib/format";
   import { social } from "$lib/stores";
@@ -43,13 +44,14 @@
     test: (s: SharedInstance) => boolean;
   }[];
 
-  const matchesQuery = (s: SharedInstance) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return true;
-    return [s.name, s.owner?.displayName, s.description, s.minecraftVersion]
-      .filter(Boolean)
-      .some((t) => t!.toLowerCase().includes(q));
-  };
+  const matchesQuery = (s: SharedInstance) =>
+    fuzzy(
+      query,
+      s.name,
+      s.owner?.displayName,
+      s.description,
+      s.minecraftVersion,
+    ) !== null;
   const shown = $derived(
     all.filter(
       (s) => matchesQuery(s) && FILTERS.find((f) => f.key === filter)!.test(s),

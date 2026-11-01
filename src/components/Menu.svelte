@@ -14,10 +14,24 @@
 </script>
 
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import Icon from "./Icon.svelte";
 
-  let { items, label = "More actions" }: { items: MenuItem[]; label?: string } =
-    $props();
+  // `trigger` replaces the ⋯ button's content (a member chip, say); `align` picks the
+  // side the list lines up with.
+  let {
+    items,
+    label = "More actions",
+    trigger,
+    triggerClass = "grid size-8 place-items-center rounded-md text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)",
+    align = "right",
+  }: {
+    items: MenuItem[];
+    label?: string;
+    trigger?: Snippet;
+    triggerClass?: string;
+    align?: "left" | "right";
+  } = $props();
 
   // Dividers only between items: none first, last or twice, whatever was left out.
   const shown = $derived(
@@ -63,20 +77,23 @@
 
 <div class="relative" bind:this={root}>
   <button
+    type="button"
     aria-label={label}
     aria-haspopup="menu"
     aria-expanded={open}
     onclick={() => (open = !open)}
-    class="grid size-8 place-items-center rounded-md text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+    class={triggerClass}
   >
-    <Icon name="more" />
+    {#if trigger}{@render trigger()}{:else}<Icon name="more" />{/if}
   </button>
 
   {#if open}
     <div
       role="menu"
       bind:this={list}
-      class="absolute right-0 z-30 min-w-52 {up
+      class="absolute {align === 'left'
+        ? 'left-0'
+        : 'right-0'} z-30 min-w-52 {up
         ? 'bottom-full mb-1.5'
         : 'top-full mt-1.5'} rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-[0_16px_40px_#0009]"
     >
@@ -85,6 +102,7 @@
           <hr class="my-1 border-(--line)" />
         {:else}
           <button
+            type="button"
             role="menuitem"
             onclick={() => choose(item)}
             class="flex w-full items-center gap-2.5 rounded-[5px] px-2.5 py-1.75 text-left text-[13px] hover:bg-(--bg-hover)

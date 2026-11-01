@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { fuzzy } from "$lib/fuzzy";
   import { api, type ApiError } from "$lib/api";
   import { plural, versionLabel } from "$lib/format";
   import { go } from "$lib/nav.svelte";
@@ -25,8 +26,7 @@
     `${d.launcherKind}:${d.launcherInstanceId}`;
 
   let query = $state("");
-  const matches = (d: DetectedInstance) =>
-    d.name.toLowerCase().includes(query.trim().toLowerCase());
+  const matches = (d: DetectedInstance) => fuzzy(query, d.name) !== null;
   // Grouped by launcher; new ones first, ones already added at the end of each group.
   const byLauncher = $derived(
     (

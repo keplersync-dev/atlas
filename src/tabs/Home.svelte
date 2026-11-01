@@ -6,6 +6,7 @@
 </script>
 
 <script lang="ts">
+  import { fuzzy, fuzzyFilter } from "$lib/fuzzy";
   import type { InstanceSummary } from "$lib/types";
   import { instances, social } from "$lib/stores";
   import { openDialog } from "$lib/dialogs.svelte";
@@ -53,8 +54,7 @@
     "Minecraft Launcher",
   ];
 
-  const matches = (name: string) =>
-    name.toLowerCase().includes(query.trim().toLowerCase());
+  const matches = (name: string) => fuzzy(query, name) !== null;
 
   // Attention first (updates, changes to share, problems), then the chosen order.
   const ORDER = {
@@ -65,18 +65,19 @@
     added: (a: InstanceSummary, b: InstanceSummary) =>
       b.trackedAt.localeCompare(a.trackedAt),
   };
-  const shown = $derived(
-    instances.list
-      .filter(
-        (i) =>
-          matches(i.name) && FILTERS.find((f) => f.key === filter)!.test(i),
-      )
-      .toSorted(
-        (a, b) =>
-          Number(needsAttention(b)) - Number(needsAttention(a)) ||
-          ORDER[sort](a, b),
-      ),
-  );
+  const shown = $derived.by(() => {
+    const kept = instances.list.filter(
+      (i) => matches(i.name) && FILTERS.find((f) => f.key === filter)!.test(i),
+    );
+    // Searching: best match first. Otherwise attention first, then the chosen order.
+    return query.trim()
+      ? fuzzyFilter(kept, query, (i) => [i.name])
+      : kept.toSorted(
+          (a, b) =>
+            Number(needsAttention(b)) - Number(needsAttention(a)) ||
+            ORDER[sort](a, b),
+        );
+  });
   // Under All, cards that need the player get their own section above the rest.
   const attention = $derived(
     filter === "all" ? shown.filter(needsAttention) : [],
@@ -136,7 +137,8 @@
           </div>
         </section>
       {/if}
-      <div class="max-w-2xl pt-10">
+      <!-- Centred on big windows rather than stuck to the top left. -->
+      <div class="mx-auto max-w-3xl pt-[max(2.5rem,14vh)]">
         <h1
           class="font-(family-name:--font-display) text-3xl font-semibold tracking-tight"
         >

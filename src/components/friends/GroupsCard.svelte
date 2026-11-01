@@ -16,8 +16,8 @@
   let name = $state("");
   let busy = $state(false);
   let message = $state<{ text: string; ok: boolean } | null>(null);
-  // One panel open at a time, under its group: friends to invite, or the members.
-  let open = $state<{ id: string; panel: "invite" | "members" } | null>(null);
+  // The group whose "Invite friends" picker is open.
+  let open = $state<{ id: string; panel: "invite" } | null>(null);
   let picked = $state<string[]>([]);
 
   const ROLE: Record<GroupRole, string> = {
@@ -32,7 +32,7 @@
     );
   const me = $derived(social.session?.user?.id);
 
-  function show(g: Group, panel: "invite" | "members") {
+  function show(g: Group, panel: "invite") {
     open =
       open?.id === g.id && open.panel === panel ? null : { id: g.id, panel };
     picked = [];
@@ -151,7 +151,6 @@
 
   function menu(g: Group): MenuItem[] {
     return [
-      { label: "Members", icon: "users", onselect: () => show(g, "members") },
       ...(manages(g)
         ? [
             {
@@ -177,6 +176,35 @@
           },
     ];
   }
+
+  /** What I can do to a member, as a menu: owners hand over and remove anyone, admins
+   *  remove members. Empty when there's nothing to do (then the chip isn't a button). */
+  function memberMenu(g: Group, m: GroupMember): MenuItem[] {
+    return [
+      ...(g.myRole === "owner" && m.user.id !== me
+        ? [
+            {
+              label: "Make owner",
+              hint: "You stay in the group as an admin",
+              onselect: () => handOver(g, m),
+            },
+          ]
+        : []),
+      ...(canRemove(g, m)
+        ? [
+            {
+              label: `Remove ${m.user.displayName}`,
+              danger: true,
+              onselect: () => remove(g, m),
+            },
+          ]
+        : []),
+    ];
+  }
+
+  /** Packs shared with the group that this PC knows about, by name. */
+  const packsOf = (g: Group) =>
+    social.shared.filter((s) => g.sharedInstanceIds.includes(s.id));
 
   /** What I can do to this member: owners remove anyone and hand over; admins remove members. */
   const canRemove = (g: Group, m: GroupMember) =>
@@ -236,13 +264,6 @@
         <!-- Wraps: in the narrow column the button drops under the name. -->
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
           <div class="flex min-w-40 flex-1 items-center gap-3">
-            <span class="flex shrink-0">
-              {#each g.members.slice(0, 3) as m, i (m.user.id)}
-                <span class={i ? "-ml-1.5" : ""}
-                  ><Head user={m.user} size={22} ring="var(--bg-raise)" /></span
-                >
-              {/each}
-            </span>
             <div class="min-w-0 flex-1">
               <b class="block truncate font-medium">{g.name}</b>
               <small class="block truncate text-[13px] text-(--text-faint)">
@@ -267,6 +288,44 @@
             <Menu items={menu(g)} label="More for {g.name}" />
           </div>
         </div>
+
+        <!-- Members, always in view; click one for what you can do. -->
+        <div class="mt-2.5 flex flex-wrap gap-1.5">
+          {#each g.members as m (m.user.id)}
+            {@const items = memberMenu(g, m)}
+            {#snippet chip()}
+              <Head user={m.user} size={20} ring="var(--bg-raise)" />
+              <span class="max-w-36 truncate">{m.user.displayName}</span>
+              {#if m.role !== "member"}<span class="text-(--text-faint)"
+                  >{ROLE[m.role]}</span
+                >{/if}
+            {/snippet}
+            {#if items.length}
+              <Menu
+                {items}
+                align="left"
+                label="{m.user.displayName}: options"
+                trigger={chip}
+                triggerClass="flex h-7 items-center gap-1.5 rounded-full border border-(--line) bg-(--bg) py-0.5 pr-2.5 pl-1 text-[13px] hover:border-(--line-2) hover:bg-(--bg-hover)"
+              />
+            {:else}
+              <span
+                class="flex h-7 items-center gap-1.5 rounded-full border border-(--line) bg-(--bg) py-0.5 pr-2.5 pl-1 text-[13px]"
+                >{@render chip()}{#if m.user.id === me}<span
+                    class="text-(--text-faint)">(you)</span
+                  >{/if}</span
+              >
+            {/if}
+          {/each}
+        </div>
+        {#if packsOf(g).length}
+          <p class="mt-2 truncate text-[13px] text-(--text-faint)">
+            Packs:
+            {#each packsOf(g) as p, i (p.id)}{#if i}{", "}{/if}<span
+                class="text-(--text-muted)">{p.name}</span
+              >{/each}
+          </p>
+        {/if}
 
         {#if open?.id === g.id && open.panel === "invite"}
           {@const people = invitable(g)}
@@ -310,45 +369,6 @@
                 above, or copy a link for anyone else from the ⋯ menu.
               </p>
             {/if}
-          </div>
-        {:else if open?.id === g.id && open.panel === "members"}
-          <div class="mt-2 grid gap-0.5 rounded-lg bg-(--bg) p-2">
-            {#each g.members as m (m.user.id)}
-              <!-- Actions sit under the name, so the row fits the narrow column. -->
-              <div class="flex items-start gap-2.5 rounded-md px-2 py-1.5">
-                <Head user={m.user} size={24} ring="var(--bg)" />
-                <div class="min-w-0 flex-1">
-                  <span class="block truncate">
-                    {m.user.displayName}{m.user.id === me ? " (you)" : ""}
-                    <small class="ml-1 text-[13px] text-(--text-faint)"
-                      >{ROLE[m.role]}</small
-                    >
-                  </span>
-                  {#if (g.myRole === "owner" && m.user.id !== me) || canRemove(g, m)}
-                    <span class="-ml-1.5 flex flex-wrap gap-1">
-                      {#if g.myRole === "owner" && m.user.id !== me}
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onclick={() => handOver(g, m)}
-                          class="rounded px-1.5 py-0.5 text-[13px] text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
-                          >Make owner</button
-                        >
-                      {/if}
-                      {#if canRemove(g, m)}
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onclick={() => remove(g, m)}
-                          class="rounded px-1.5 py-0.5 text-[13px] text-(--danger) hover:bg-(--bg-hover)"
-                          >Remove</button
-                        >
-                      {/if}
-                    </span>
-                  {/if}
-                </div>
-              </div>
-            {/each}
           </div>
         {/if}
       </div>
