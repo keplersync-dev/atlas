@@ -208,6 +208,8 @@ export interface Group {
 export interface GroupDetail extends Group {
   /** Only filled for owner/admins. */
   invites: GroupInvite[];
+  /** Friends with an invite sent in Atlas they haven't answered. Owner/admins only. */
+  invited: Id[];
 }
 
 /** What someone sees after opening a group invite link, before joining. */

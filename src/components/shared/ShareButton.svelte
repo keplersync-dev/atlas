@@ -5,16 +5,24 @@
   import Button from "../Button.svelte";
   import Icon from "../Icon.svelte";
 
-  // "Share an instance" without opening the instance first: a dropdown of
-  // tracked instances that aren't shared yet. Picking one opens the Share dialog.
+  // "Share an instance" without opening the instance first: a dropdown of every
+  // tracked instance, the ones that can't be shared greyed with why. Picking one opens
+  // the Share dialog.
 
   let { class: className = "" }: { class?: string } = $props();
 
-  const unshared = $derived(
-    instances.list
-      .filter((i) => !i.sync && i.status === "ready")
-      .toSorted((a, b) => a.name.localeCompare(b.name)),
+  const all = $derived(
+    instances.list.toSorted((a, b) => a.name.localeCompare(b.name)),
   );
+  /** Why this one can't be picked, or null when it can. */
+  const blocked = (i: (typeof all)[number]) =>
+    i.sync
+      ? "Already shared"
+      : i.status === "missing"
+        ? "Folder not found"
+        : i.status === "syncing"
+          ? "Updating"
+          : null;
 
   let open = $state(false);
   let root: HTMLDivElement;
@@ -46,27 +54,31 @@
       role="menu"
       class="absolute top-full right-0 z-30 mt-1.5 w-72 rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-[0_16px_40px_#0009]"
     >
-      {#each unshared as i (i.id)}
-        <button
-          role="menuitem"
-          onclick={() => pick(i.id)}
-          class="flex w-full items-center gap-2.5 rounded-[5px] px-2 py-1.5 text-left hover:bg-(--bg-hover)"
-        >
-          <ContentIcon src={i.icon} seed={i.id} class="size-7 rounded-md" />
-          <span class="min-w-0 flex-1">
-            <b class="block truncate text-[13px] font-medium">{i.name}</b>
-            <small class="block truncate text-[13px] text-(--text-faint)"
-              >{i.launcher.name}</small
-            >
-          </span>
-        </button>
-      {:else}
-        <p class="px-2.5 py-2 text-[13px] text-(--text-muted)">
-          {instances.list.length
-            ? "Everything you've added is already shared."
-            : "Add an instance from your launcher first, then share it."}
-        </p>
-      {/each}
+      <div class="max-h-80 overflow-y-auto">
+        {#each all as i (i.id)}
+          {@const why = blocked(i)}
+          <button
+            role="menuitem"
+            disabled={!!why}
+            onclick={() => pick(i.id)}
+            class="flex w-full items-center gap-2.5 rounded-[5px] px-2 py-1.5 text-left {why
+              ? 'opacity-50'
+              : 'hover:bg-(--bg-hover)'}"
+          >
+            <ContentIcon src={i.icon} seed={i.id} class="size-7 rounded-md" />
+            <span class="min-w-0 flex-1">
+              <b class="block truncate text-[13px] font-medium">{i.name}</b>
+              <small class="block truncate text-[13px] text-(--text-faint)"
+                >{why ? `${i.launcher.name} · ${why}` : i.launcher.name}</small
+              >
+            </span>
+          </button>
+        {:else}
+          <p class="px-2.5 py-2 text-[13px] text-(--text-muted)">
+            Add an instance from your launcher first, then share it.
+          </p>
+        {/each}
+      </div>
       <hr class="my-1 border-(--line)" />
       <button
         role="menuitem"

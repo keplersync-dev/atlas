@@ -389,6 +389,10 @@ pub struct GroupDetail {
     pub group: Group,
     /// Only filled for the owner and admins.
     pub invites: Vec<GroupInvite>,
+    /// Friends with an invite sent in Atlas they haven't answered. Only filled for the
+    /// owner and admins; missing from older servers.
+    #[serde(default)]
+    pub invited: Vec<Id>,
 }
 
 /// `GET /group-invites/{code}`: what an invite leads to, before joining.

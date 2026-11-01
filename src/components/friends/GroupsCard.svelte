@@ -4,7 +4,7 @@
   import { confirmAction } from "$lib/confirm.svelte";
   import { plural } from "$lib/format";
   import { social } from "$lib/stores";
-  import type { Group, GroupMember, GroupRole } from "$lib/types";
+  import type { Group, GroupMember } from "$lib/types";
   import Button from "../Button.svelte";
   import Head from "../Head.svelte";
   import Icon from "../Icon.svelte";
@@ -19,24 +19,34 @@
   // The group whose "Invite friends" picker is open.
   let open = $state<{ id: string; panel: "invite" } | null>(null);
   let picked = $state<string[]>([]);
+  // Friends with an invite to the open group they haven't answered yet.
+  let pending = $state<string[]>([]);
 
-  const ROLE: Record<GroupRole, string> = {
-    owner: "Owner",
-    admin: "Admin",
-    member: "Member",
-  };
+  // Atlas only knows owners and members. "admin" can still come from the server's API;
+  // it shows as a plain member here.
   const manages = (g: Group) => g.myRole === "owner" || g.myRole === "admin";
-  const invitable = (g: Group) =>
-    social.friends.filter(
-      (f) => !g.members.some((m) => m.user.id === f.user.id),
-    );
   const me = $derived(social.session?.user?.id);
 
-  function show(g: Group, panel: "invite") {
+  /** Why a friend can't be picked for this group, or null when they can. */
+  const taken = (g: Group, id: string) =>
+    g.members.some((m) => m.user.id === id)
+      ? `In ${g.name}`
+      : pending.includes(id)
+        ? "Invite pending"
+        : null;
+
+  async function show(g: Group, panel: "invite") {
     open =
       open?.id === g.id && open.panel === panel ? null : { id: g.id, panel };
     picked = [];
+    pending = [];
     message = null;
+    if (!open) return;
+    try {
+      pending = (await api.getGroup(g.id)).invited ?? [];
+    } catch {
+      // Without it, pending friends are pickable; the server skips them anyway.
+    }
   }
 
   async function run(action: () => Promise<string>) {
@@ -58,7 +68,8 @@
       name = "";
       creating = false;
       // Straight on to the next step: who's in it.
-      if (social.friends.length) open = { id: g.id, panel: "invite" };
+      open = { id: g.id, panel: "invite" };
+      pending = [];
       return `Created ${g.name}. Pick friends to invite, or copy a link.`;
     });
   }
@@ -121,7 +132,7 @@
     const ok = await confirmAction({
       title: `Make ${m.user.displayName} the owner of ${g.name}?`,
       message:
-        "They can then delete the group or remove anyone. You stay in it as an admin, and can leave.",
+        "They can then delete the group or remove anyone. You stay in it as a member, and can leave.",
       confirmLabel: "Make owner",
     });
     if (!ok) return;
@@ -136,7 +147,7 @@
     const others = g.members.length - 1;
     const ok = await confirmAction({
       title: `Delete ${g.name}?`,
-      message: `${others ? `${plural(others, "person", "people")} leave with it. ` : ""}Packs shared with the group stop updating for those who only had them through it. Nobody's files are touched.`,
+      message: `${others ? `${plural(others, "person", "people")} ${others === 1 ? "leaves" : "leave"} with it. ` : ""}Packs shared with the group stop updating for those who only had them through it. Nobody's files are touched.`,
       confirmLabel: "Delete group",
       danger: true,
     });
@@ -177,19 +188,22 @@
     ];
   }
 
-  /** What I can do to a member, as a menu: owners hand over and remove anyone, admins
-   *  remove members. Empty when there's nothing to do (then the chip isn't a button). */
+  /** What I can do to a member, as a menu: the owner hands over and removes anyone.
+   *  Empty when there's nothing to do (then the chip isn't a button). */
   function memberMenu(g: Group, m: GroupMember): MenuItem[] {
     return [
       ...(g.myRole === "owner" && m.user.id !== me
         ? [
             {
               label: "Make owner",
-              hint: "You stay in the group as an admin",
+              hint: "You stay in the group as a member",
+              icon: "crown",
+              accent: true,
               onselect: () => handOver(g, m),
             },
           ]
         : []),
+      "divider",
       ...(canRemove(g, m)
         ? [
             {
@@ -206,15 +220,29 @@
   const packsOf = (g: Group) =>
     social.shared.filter((s) => g.sharedInstanceIds.includes(s.id));
 
-  /** What I can do to this member: owners remove anyone and hand over; admins remove members. */
+  /** Owners remove anyone; admins (from the API only) remove members. */
   const canRemove = (g: Group, m: GroupMember) =>
     m.user.id !== me &&
     (g.myRole === "owner" || (g.myRole === "admin" && m.role === "member"));
 </script>
 
-<div class="rounded-xl border border-(--line) bg-(--bg-raise) p-4.5">
-  <div class="flex flex-wrap items-center justify-between gap-2">
-    <h2 class="font-semibold">Groups</h2>
+<!-- The section card the Shared page uses, so Friends and Groups read as one page. -->
+<section class="rounded-xl border border-(--line) bg-(--bg-raise)">
+  <header
+    class="flex flex-wrap items-center gap-3 border-b border-(--line) px-4 py-3.5"
+  >
+    <span
+      class="grid size-8 place-items-center rounded-lg bg-(--bg-raise-2) text-(--text-muted)"
+    >
+      <Icon name="group" class="size-4" />
+    </span>
+    <span class="min-w-40 flex-1">
+      <b class="font-semibold">Groups</b>
+      <span class="ml-1 text-(--text-faint)">{social.groups.length}</span>
+      <small class="block text-[13px] text-(--text-faint)"
+        >Share a pack with everyone in one, new members too.</small
+      >
+    </span>
     <Button
       size="sm"
       aria-pressed={creating}
@@ -224,19 +252,19 @@
       <Icon name="plus" class="size-3.5" />
       New group
     </Button>
-  </div>
-  <p class="mt-1 mb-1.5 text-[13px] text-(--text-muted)">
-    Share a pack with a whole group at once. New members get it automatically.
-  </p>
+  </header>
 
   {#if creating}
-    <form onsubmit={create} class="my-2 flex gap-2">
+    <form
+      onsubmit={create}
+      class="flex gap-2 border-b border-(--line) px-4 py-3"
+    >
       <input
         bind:value={name}
         maxlength="32"
         placeholder="Group name"
         aria-label="Group name"
-        class="h-8 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 outline-none focus:border-(--accent)"
+        class="h-8 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 text-[13px] outline-none placeholder:text-(--text-faint) focus:border-(--accent)"
       />
       <Button
         type="submit"
@@ -249,7 +277,7 @@
 
   {#if message}
     <p
-      class="my-1.5 text-[13px] {message.ok
+      class="border-b border-(--line) px-4 py-2.5 text-[13px] {message.ok
         ? 'text-(--online)'
         : 'text-(--danger)'}"
       role="status"
@@ -260,19 +288,17 @@
 
   <div class="divide-y divide-(--line)">
     {#each social.groups as g (g.id)}
-      <div class="py-2.5">
-        <!-- Wraps: in the narrow column the button drops under the name. -->
+      <div class="px-4 py-3">
+        <!-- Wraps: when narrow the buttons drop under the name. -->
         <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <div class="flex min-w-40 flex-1 items-center gap-3">
-            <div class="min-w-0 flex-1">
-              <b class="block truncate font-medium">{g.name}</b>
-              <small class="block truncate text-[13px] text-(--text-faint)">
-                {plural(g.members.length, "member")} · {plural(
-                  g.sharedInstanceIds.length,
-                  "pack",
-                )} · {ROLE[g.myRole]}
-              </small>
-            </div>
+          <div class="min-w-40 flex-1">
+            <b class="block truncate font-medium">{g.name}</b>
+            <small class="block truncate text-[13px] text-(--text-faint)">
+              {plural(g.members.length, "member")} · {plural(
+                g.sharedInstanceIds.length,
+                "pack",
+              )}{g.myRole === "owner" ? " · You own it" : ""}
+            </small>
           </div>
           <div class="ml-auto flex items-center gap-1">
             {#if manages(g)}
@@ -296,8 +322,11 @@
             {#snippet chip()}
               <Head user={m.user} size={20} ring="var(--bg-raise)" />
               <span class="max-w-36 truncate">{m.user.displayName}</span>
-              {#if m.role !== "member"}<span class="text-(--text-faint)"
-                  >{ROLE[m.role]}</span
+              {#if m.role === "owner"}<span class="text-(--text-faint)"
+                  >Owner</span
+                >{/if}
+              {#if m.user.id === me}<span class="text-(--text-faint)"
+                  >(you)</span
                 >{/if}
             {/snippet}
             {#if items.length}
@@ -311,9 +340,7 @@
             {:else}
               <span
                 class="flex h-7 items-center gap-1.5 rounded-full border border-(--line) bg-(--bg) py-0.5 pr-2.5 pl-1 text-[13px]"
-                >{@render chip()}{#if m.user.id === me}<span
-                    class="text-(--text-faint)">(you)</span
-                  >{/if}</span
+                >{@render chip()}</span
               >
             {/if}
           {/each}
@@ -327,55 +354,74 @@
           </p>
         {/if}
 
-        {#if open?.id === g.id && open.panel === "invite"}
-          {@const people = invitable(g)}
-          <div class="mt-2 rounded-lg bg-(--bg) p-3">
-            {#if people.length}
-              <div class="grid gap-0.5">
-                {#each people as f (f.user.id)}
-                  <label
-                    class="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-(--bg-hover)"
+        {#if manages(g) && open?.id === g.id && open.panel === "invite"}
+          <!-- Every friend: those already in or invited are ticked and greyed, so an
+               empty choice is plain to see rather than a message. -->
+          {@const free = social.friends.filter((f) => !taken(g, f.user.id))}
+          <div class="mt-3 rounded-lg bg-(--bg) p-2">
+            {#each social.friends as f (f.user.id)}
+              {@const why = taken(g, f.user.id)}
+              <label
+                class="flex items-center gap-2.5 rounded-md px-2 py-1.5 {why
+                  ? 'opacity-50'
+                  : 'cursor-pointer hover:bg-(--bg-hover)'}"
+              >
+                {#if why}
+                  <input
+                    type="checkbox"
+                    checked
+                    disabled
+                    class="size-3.75 accent-(--accent)"
+                  />
+                {:else}
+                  <input
+                    type="checkbox"
+                    bind:group={picked}
+                    value={f.user.id}
+                    class="size-3.75 accent-(--accent)"
+                  />
+                {/if}
+                <Head user={f.user} size={28} ring="var(--bg)" />
+                <span class="min-w-0 flex-1">
+                  <b class="block truncate font-medium">{f.user.displayName}</b>
+                  <small class="block truncate text-[13px] text-(--text-faint)"
+                    >{why ?? `@${f.user.username}`}</small
                   >
-                    <input
-                      type="checkbox"
-                      bind:group={picked}
-                      value={f.user.id}
-                      class="size-4 accent-(--accent)"
-                    />
-                    <Head user={f.user} size={24} ring="var(--bg)" />
-                    <span class="min-w-0 flex-1 truncate"
-                      >{f.user.displayName}</span
-                    >
-                  </label>
-                {/each}
-              </div>
-              <div class="mt-2 flex flex-wrap justify-end gap-2">
-                <Button size="sm" variant="ghost" onclick={() => (open = null)}
-                  >Cancel</Button
-                >
-                <Button
-                  size="sm"
-                  variant="primary"
-                  disabled={busy || !picked.length}
-                  onclick={() => sendInvites(g)}
-                  >{picked.length
-                    ? `Invite ${plural(picked.length, "friend")}`
-                    : "Invite"}</Button
-                >
-              </div>
+                </span>
+              </label>
             {:else}
-              <p class="text-[13px] text-(--text-muted)">
-                All your friends are in {g.name}. Add friends with their code
-                above, or copy a link for anyone else from the ⋯ menu.
+              <p class="px-2 py-1.5 text-[13px] text-(--text-muted)">
+                No friends yet. Add one with their friend code above, or copy an
+                invite link from ⋯.
+              </p>
+            {/each}
+            {#if social.friends.length && !free.length}
+              <p class="px-2 pt-2 text-[13px] text-(--text-muted)">
+                Everyone's in or invited. For anyone else, copy an invite link
+                from ⋯.
               </p>
             {/if}
+            <div class="mt-2 flex flex-wrap justify-end gap-2 px-1 pb-1">
+              <Button size="sm" variant="ghost" onclick={() => (open = null)}
+                >{free.length ? "Cancel" : "Close"}</Button
+              >
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={busy || !picked.length}
+                onclick={() => sendInvites(g)}
+                >{picked.length
+                  ? `Invite ${plural(picked.length, "friend")}`
+                  : "Invite"}</Button
+              >
+            </div>
           </div>
         {/if}
       </div>
     {:else}
-      <p class="py-2 text-[13px] text-(--text-muted)">
-        No groups yet. Make one, and invite friends to it from here.
+      <p class="px-4 py-6 text-[13px] text-(--text-muted)">
+        No groups yet. Make one, then invite friends to it from here.
       </p>
     {/each}
   </div>
-</div>
+</section>

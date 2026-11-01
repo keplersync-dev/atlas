@@ -7,6 +7,8 @@
         /** One line under the label saying what happens. */
         hint?: string;
         icon?: string;
+        /** The one important action in the menu (handing a group over, say). */
+        accent?: boolean;
         danger?: boolean;
         onselect: () => void;
       }
@@ -42,6 +44,11 @@
           items.slice(i + 1).some((x) => x !== "divider") &&
           items[i + 1] !== "divider"),
     ),
+  );
+
+  // When some items have an icon, the others keep its space so every label lines up.
+  const iconGap = $derived(
+    shown.some((item) => item !== "divider" && item.icon),
   );
 
   let open = $state(false);
@@ -93,7 +100,7 @@
       bind:this={list}
       class="absolute {align === 'left'
         ? 'left-0'
-        : 'right-0'} z-30 min-w-52 {up
+        : 'right-0'} z-30 w-max max-w-80 min-w-52 {up
         ? 'bottom-full mb-1.5'
         : 'top-full mt-1.5'} rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-[0_16px_40px_#0009]"
     >
@@ -105,14 +112,19 @@
             type="button"
             role="menuitem"
             onclick={() => choose(item)}
-            class="flex w-full items-center gap-2.5 rounded-[5px] px-2.5 py-1.75 text-left text-[13px] hover:bg-(--bg-hover)
-              {item.danger ? 'text-(--danger)' : ''}"
+            class="flex w-full items-center gap-2.5 rounded-[5px] px-2.5 py-1.75 text-left text-[13px]
+              {item.accent
+              ? 'bg-(--accent)/8 font-medium text-(--accent) hover:bg-(--accent)/15'
+              : `hover:bg-(--bg-hover) ${item.danger ? 'text-(--danger)' : ''}`}"
           >
-            {#if item.icon}<Icon name={item.icon} class="size-4" />{/if}
+            {#if item.icon}<Icon
+                name={item.icon}
+                class="size-4"
+              />{:else if iconGap}<span class="size-4 shrink-0"></span>{/if}
             {#if item.hint}
-              <span class="max-w-64">
+              <span>
                 {item.label}
-                <small class="block text-[13px] text-(--text-faint)"
+                <small class="block text-[13px] font-normal text-(--text-faint)"
                   >{item.hint}</small
                 >
               </span>

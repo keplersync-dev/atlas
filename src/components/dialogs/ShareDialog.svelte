@@ -202,13 +202,22 @@
           ? 'opacity-50'
           : 'cursor-pointer hover:bg-(--bg-hover)'}"
       >
-        <input
-          type="checkbox"
-          bind:group={friendIds}
-          value={f.user.id}
-          disabled={member}
-          class="size-3.75 accent-(--accent)"
-        />
+        <!-- Ticked and greyed: they already have it, so there's nothing to pick. -->
+        {#if member}
+          <input
+            type="checkbox"
+            checked
+            disabled
+            class="size-3.75 accent-(--accent)"
+          />
+        {:else}
+          <input
+            type="checkbox"
+            bind:group={friendIds}
+            value={f.user.id}
+            class="size-3.75 accent-(--accent)"
+          />
+        {/if}
         <Head user={f.user} size={28} ring="var(--bg-raise)" />
         <span class="min-w-0 flex-1">
           <b class="block font-medium">{f.user.displayName}</b>
@@ -238,13 +247,21 @@
             ? 'opacity-50'
             : 'cursor-pointer hover:bg-(--bg-hover)'}"
         >
-          <input
-            type="checkbox"
-            bind:group={groupIds}
-            value={g.id}
-            disabled={linked}
-            class="size-3.75 accent-(--accent)"
-          />
+          {#if linked}
+            <input
+              type="checkbox"
+              checked
+              disabled
+              class="size-3.75 accent-(--accent)"
+            />
+          {:else}
+            <input
+              type="checkbox"
+              bind:group={groupIds}
+              value={g.id}
+              class="size-3.75 accent-(--accent)"
+            />
+          {/if}
           <span class="flex">
             {#each g.members.slice(0, 3) as m, i (m.user.id)}
               <span class={i ? "-ml-1.5" : ""}
