@@ -352,7 +352,7 @@ async fn plan_configs<R: Runtime>(
     }
     let in_pack = |rel: &str| index.as_ref().is_some_and(|i| i.contains_key(rel));
     let progress = |done, total| work.report(WorkStage::Reading, done, total);
-    let (listed, hashed) = read_files(state, row, &rules, index.as_ref(), &progress).await?;
+    let (listed, hashed) = read_files(state, row, &rules, index.as_ref(), &progress, false).await?;
     let files: Vec<ShareFile> = listed
         .iter()
         .map(|l| ShareFile {
@@ -463,6 +463,7 @@ async fn read_files(
     rules: &FileRules,
     index: Option<&pack::PackIndex>,
     progress: &(dyn Fn(u64, u64) + Sync),
+    background: bool,
 ) -> AppResult<(Vec<share_files::Listed>, Vec<FileHash>)> {
     let in_pack = |rel: &str| index.is_some_and(|i| i.contains_key(rel));
     let game = PathBuf::from(&row.game_dir);
@@ -476,8 +477,10 @@ async fn read_files(
     let count = wanted.len() as u64;
     let done = Arc::new(AtomicU64::new(0));
     let (counter, known) = (Arc::clone(&done), Arc::clone(&saved));
-    let hashing =
-        tokio::task::spawn_blocking(move || share_files::hashes(wanted, &known, &counter));
+    let hashing = tokio::task::spawn_blocking(move || {
+        let _quiet = background.then(BackgroundPriority::start);
+        share_files::hashes(wanted, &known, &counter)
+    });
     tokio::pin!(hashing);
     let mut tick = tokio::time::interval(std::time::Duration::from_millis(200));
     let hashed = loop {
@@ -491,6 +494,37 @@ async fn read_files(
         db::file_hashes::replace(&state.db, &row.id, &hashed).await?;
     }
     Ok((listed, hashed))
+}
+
+/// Windows' background mode for this thread while it lives: lower CPU and disk priority,
+/// so reading ahead doesn't slow the game or the PC down.
+struct BackgroundPriority;
+
+impl BackgroundPriority {
+    fn start() -> Self {
+        #[cfg(windows)]
+        // SAFETY: changes only the calling thread's own priority; undone in drop.
+        unsafe {
+            use windows_sys::Win32::System::Threading::{
+                GetCurrentThread, SetThreadPriority, THREAD_MODE_BACKGROUND_BEGIN,
+            };
+            SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_BEGIN);
+        }
+        BackgroundPriority
+    }
+}
+
+impl Drop for BackgroundPriority {
+    fn drop(&mut self) {
+        #[cfg(windows)]
+        // SAFETY: as in start; the thread returns to the blocking pool at normal priority.
+        unsafe {
+            use windows_sys::Win32::System::Threading::{
+                GetCurrentThread, SetThreadPriority, THREAD_MODE_BACKGROUND_END,
+            };
+            SetThreadPriority(GetCurrentThread(), THREAD_MODE_BACKGROUND_END);
+        }
+    }
 }
 
 /// The latest rescan per instance: a read ahead waits for rescans to stop.
@@ -547,7 +581,7 @@ pub async fn read_ahead(state: &AppState, id: &str) {
         Ok(rules) => rules,
         Err(e) => return tracing::debug!(error = %e, "couldn't read share rules"),
     };
-    match read_files(state, &row, &rules, index.as_ref(), &|_, _| {}).await {
+    match read_files(state, &row, &rules, index.as_ref(), &|_, _| {}, true).await {
         Ok((_, hashed)) => tracing::debug!(
             instance = %row.name,
             files = hashed.len(),
