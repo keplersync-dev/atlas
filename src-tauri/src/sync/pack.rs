@@ -106,7 +106,7 @@ fn index_file(paths: &AppPaths, base: &PackBase) -> PathBuf {
     paths
         .cache
         .join("packs")
-        .join(format!("{}.2.json", base.sha1))
+        .join(format!("{}.4.json", base.sha1))
 }
 
 /// Whether the pack still has to be downloaded (for the size an update shows).

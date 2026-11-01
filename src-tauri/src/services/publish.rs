@@ -5,7 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use reqwest::Method;
@@ -152,13 +152,38 @@ pub async fn prepare<R: Runtime>(
         .map(|r| r.sha256.clone())
         .collect();
     lap("look up again");
-    let stored: HashSet<String> = match state.cloud.stored(to_check).await {
-        Ok(found) => found.into_iter().collect(),
-        Err(e) => {
-            tracing::info!(error = %e, "couldn't check which files are uploaded");
-            HashSet::new()
+    // The server's answers and the file read don't depend on each other: at once.
+    let stored = async {
+        match state.cloud.stored(to_check).await {
+            Ok(found) => found.into_iter().collect::<HashSet<String>>(),
+            Err(e) => {
+                tracing::info!(error = %e, "couldn't check which files are uploaded");
+                HashSet::new()
+            }
         }
     };
+    let storage = async {
+        match state
+            .cloud
+            .call(Method::GET, "/me/storage", None::<&()>)
+            .await
+        {
+            Ok(storage) => Ok(storage),
+            Err(_) => state.cloud.session().await.map(|s| {
+                s.user.map(|me| me.storage).unwrap_or(Storage {
+                    used_bytes: 0,
+                    quota_bytes: 0,
+                    max_file_bytes: 0,
+                })
+            }),
+        }
+    };
+    let work = Reporter::new(app, id);
+    let (stored, storage, configs) =
+        tokio::join!(stored, storage, plan_configs(state, &row, &work));
+    let (storage, configs) = (storage?, configs?);
+    lap("server and other files");
+    tracing::info!(instance = %row.name, ?took, "prepared a share (ms since start)");
     let items = live(&rows)
         .map(|r| {
             let dto = r.to_dto();
@@ -191,28 +216,6 @@ pub async fn prepare<R: Runtime>(
             }
         }
     }
-    lap("uploaded check");
-    let configs = plan_configs(state, &row, &Reporter::new(app, id)).await?;
-    lap("other files");
-    tracing::info!(instance = %row.name, ?took, "prepared a share (ms since start)");
-    let storage = match state
-        .cloud
-        .call(Method::GET, "/me/storage", None::<&()>)
-        .await
-    {
-        Ok(storage) => storage,
-        Err(_) => state
-            .cloud
-            .session()
-            .await?
-            .user
-            .map(|me| me.storage)
-            .unwrap_or(Storage {
-                used_bytes: 0,
-                quota_bytes: 0,
-                max_file_bytes: 0,
-            }),
-    };
     Ok(PublishPlan {
         base_revision: row.synced_revision.map(|r| r.max(0) as u32),
         items,
@@ -473,22 +476,44 @@ async fn read_files(
         .filter(|l| share_files::shared(rules, &l.path, in_pack(&l.path)))
         .cloned()
         .collect();
+    // Share reads now: a read ahead of this instance stops (what it read is in
+    // Windows' file cache, so reading it again is quick). A read ahead registers itself.
+    let stop = {
+        let mut reading = READING.lock().unwrap_or_else(|e| e.into_inner());
+        if background {
+            let stop = Arc::new(AtomicBool::new(false));
+            reading.insert(row.id.clone(), Arc::clone(&stop));
+            Some(stop)
+        } else {
+            if let Some(ahead) = reading.get(&row.id) {
+                ahead.store(true, Ordering::Relaxed);
+            }
+            None
+        }
+    };
     let saved = Arc::new(db::file_hashes::list(&state.db, &row.id).await?);
     let count = wanted.len() as u64;
     let done = Arc::new(AtomicU64::new(0));
     let (counter, known) = (Arc::clone(&done), Arc::clone(&saved));
     let hashing = tokio::task::spawn_blocking(move || {
         let _quiet = background.then(BackgroundPriority::start);
-        share_files::hashes(wanted, &known, &counter)
+        share_files::hashes(wanted, &known, &counter, stop.as_deref())
     });
     tokio::pin!(hashing);
     let mut tick = tokio::time::interval(std::time::Duration::from_millis(200));
     let hashed = loop {
         tokio::select! {
-            hashed = &mut hashing => break hashed??,
+            hashed = &mut hashing => break hashed?,
             _ = tick.tick() => progress(done.load(Ordering::Relaxed), count),
         }
     };
+    if background {
+        READING
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&row.id);
+    }
+    let hashed = hashed?;
     let same = hashed.len() == saved.len() && hashed.iter().all(|h| saved.get(&h.path) == Some(h));
     if !same {
         db::file_hashes::replace(&state.db, &row.id, &hashed).await?;
@@ -530,6 +555,8 @@ impl Drop for BackgroundPriority {
 /// The latest rescan per instance: a read ahead waits for rescans to stop.
 static READ_AHEAD: LazyLock<Mutex<HashMap<String, u64>>> = LazyLock::new(Default::default);
 static ONE_READ_AHEAD: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+/// Read aheads running, by instance: setting the flag stops one.
+static READING: LazyLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = LazyLock::new(Default::default);
 
 /// `read_ahead` once the instance has been quiet for a while: rescans come in bursts,
 /// and Share's own rescan shouldn't race Share's own read.

@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use sha2::{Digest, Sha256};
 
@@ -72,19 +72,27 @@ pub fn list(game: &Path) -> Vec<Listed> {
 }
 
 /// Each file's sha256 and settings, reusing `saved` ones whose size and modified time
-/// still match, so only changed files are read. `done` counts files, for progress.
-/// Blocking: call it from a blocking thread.
+/// still match, so only changed files are read. `done` counts files, for progress;
+/// setting `stop` ends it early with an `Interrupted` error. Blocking: call it from a
+/// blocking thread.
 pub fn hashes(
     files: Vec<Listed>,
     saved: &HashMap<String, FileHash>,
     done: &AtomicU64,
+    stop: Option<&AtomicBool>,
 ) -> std::io::Result<Vec<FileHash>> {
     files
         .into_iter()
         .map(|l| {
-            let known = saved
-                .get(&l.path)
-                .filter(|h| l.modified == Some(h.modified_ms) && l.size == h.size_bytes);
+            if stop.is_some_and(|s| s.load(Ordering::Relaxed)) {
+                return Err(std::io::ErrorKind::Interrupted.into());
+            }
+            // Saved before its kind was compared by settings: read once more.
+            let known = saved.get(&l.path).filter(|h| {
+                l.modified == Some(h.modified_ms)
+                    && l.size == h.size_bytes
+                    && (h.settings.is_some() || !crate::sync::settings::compared(&l.path))
+            });
             let hash = match known {
                 Some(h) => h.clone(),
                 None => {
@@ -213,12 +221,12 @@ mod tests {
             })
             .collect();
         let t = Instant::now();
-        let read = hashes(wanted.clone(), &HashMap::new(), &AtomicU64::new(0)).unwrap();
+        let read = hashes(wanted.clone(), &HashMap::new(), &AtomicU64::new(0), None).unwrap();
         println!("read and hash {} files: {:?}", read.len(), t.elapsed());
         let saved: HashMap<String, FileHash> =
             read.into_iter().map(|h| (h.path.clone(), h)).collect();
         let t = Instant::now();
-        hashes(wanted, &saved, &AtomicU64::new(0)).unwrap();
+        hashes(wanted, &saved, &AtomicU64::new(0), None).unwrap();
         println!("again, from saved hashes: {:?}", t.elapsed());
     }
 
@@ -227,7 +235,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("atlas-hashes-{}", crate::util::ids::new_id()));
         std::fs::create_dir_all(dir.join("config")).unwrap();
         std::fs::write(dir.join("config/a.toml"), "a = 1").unwrap();
-        let first = hashes(list(&dir), &HashMap::new(), &AtomicU64::new(0)).unwrap();
+        let first = hashes(list(&dir), &HashMap::new(), &AtomicU64::new(0), None).unwrap();
         assert_eq!(first.len(), 1);
         assert!(first[0].settings.is_some());
         // Same size and date: the saved hash is used without reading the file.
@@ -235,13 +243,17 @@ mod tests {
         saved.sha256 = "saved".into();
         let saved = HashMap::from([(saved.path.clone(), saved)]);
         assert_eq!(
-            hashes(list(&dir), &saved, &AtomicU64::new(0)).unwrap()[0].sha256,
+            hashes(list(&dir), &saved, &AtomicU64::new(0), None).unwrap()[0].sha256,
             "saved"
         );
+        // Stopped (Share took over from a read ahead): nothing comes back.
+        let stop = AtomicBool::new(true);
+        let stopped = hashes(list(&dir), &HashMap::new(), &AtomicU64::new(0), Some(&stop));
+        assert_eq!(stopped.unwrap_err().kind(), std::io::ErrorKind::Interrupted);
         // Changed: read again.
         std::fs::write(dir.join("config/a.toml"), "a = 22").unwrap();
         assert_eq!(
-            hashes(list(&dir), &saved, &AtomicU64::new(0)).unwrap()[0]
+            hashes(list(&dir), &saved, &AtomicU64::new(0), None).unwrap()[0]
                 .sha256
                 .len(),
             64

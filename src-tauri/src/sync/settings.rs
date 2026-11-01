@@ -4,20 +4,27 @@
 
 use sha2::{Digest, Sha256};
 
+/// Whether files of this kind are compared by their settings.
+pub fn compared(path: &str) -> bool {
+    path.rsplit_once('.').is_some_and(|(_, ext)| {
+        matches!(
+            ext.to_ascii_lowercase().as_str(),
+            "json" | "jsonc" | "json5" | "mcmeta" | "toml" | "properties" | "ini" | "cfg"
+        )
+    })
+}
+
 /// A hash of the settings in a config file, or None when its kind isn't understood or
 /// it doesn't parse (then only the bytes can be compared).
 pub fn fingerprint(path: &str, bytes: &[u8]) -> Option<String> {
-    let ext = path.rsplit_once('.')?.1.to_ascii_lowercase();
-    if !matches!(
-        ext.as_str(),
-        "json" | "jsonc" | "mcmeta" | "toml" | "properties" | "ini" | "cfg"
-    ) {
+    if !compared(path) {
         return None;
     }
+    let ext = path.rsplit_once('.')?.1.to_ascii_lowercase();
     let text = std::str::from_utf8(bytes).ok()?;
     let text = text.strip_prefix('\u{feff}').unwrap_or(text);
     let canonical = match ext.as_str() {
-        "json" | "jsonc" | "mcmeta" => {
+        "json" | "jsonc" | "json5" | "mcmeta" => {
             let value: serde_json::Value = serde_json::from_str(&strip_json(text)).ok()?;
             canonical_json(&value)
         }
@@ -31,7 +38,8 @@ pub fn fingerprint(path: &str, bytes: &[u8]) -> Option<String> {
     Some(hex::encode(Sha256::digest(format!("{ext}\n{canonical}"))))
 }
 
-/// JSONC to JSON: comments and trailing commas removed, strings left alone.
+/// JSONC and JSON5 to JSON: comments and trailing commas removed, bare keys and
+/// single-quoted strings put in double quotes, other strings left alone.
 fn strip_json(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
@@ -47,6 +55,43 @@ fn strip_json(text: &str) -> String {
                         _ => {}
                     }
                 }
+            }
+            '\'' => {
+                out.push('"');
+                while let Some(c) = chars.next() {
+                    match c {
+                        '\\' if chars.peek() == Some(&'\'') => out.extend(chars.next()),
+                        '\\' => {
+                            out.push(c);
+                            out.extend(chars.next());
+                        }
+                        '"' => out.push_str("\\\""),
+                        '\'' => break,
+                        _ => out.push(c),
+                    }
+                }
+                out.push('"');
+            }
+            // A bare word followed by ':' is a JSON5 key; anything else (true, null) stays.
+            c if c.is_ascii_alphabetic() || c == '_' || c == '$' => {
+                let mut word = String::from(c);
+                while let Some(c) =
+                    chars.next_if(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '$')
+                {
+                    word.push(c);
+                }
+                let mut gap = String::new();
+                while let Some(c) = chars.next_if(|c| c.is_whitespace()) {
+                    gap.push(c);
+                }
+                if chars.peek() == Some(&':') {
+                    out.push('"');
+                    out.push_str(&word);
+                    out.push('"');
+                } else {
+                    out.push_str(&word);
+                }
+                out.push_str(&gap);
             }
             '/' if chars.peek() == Some(&'/') => while chars.next_if(|&c| c != '\n').is_some() {},
             '/' if chars.peek() == Some(&'*') => {
@@ -144,6 +189,25 @@ mod tests {
         let pack = r#"{"a": 1, "b": {"c": [1, 2], "d": "x // not a comment"}}"#;
         let mine = "{\n  // the mod wrote this\n  \"b\": { \"d\": \"x // not a comment\", \"c\": [1, 2,], },\n  /* two */ \"a\": 1\n}";
         assert!(same("config/a.jsonc", pack, mine));
+        // JSON5 as mods write it: JSON with comments.
+        assert!(same("config/collective.json5", pack, mine));
+        // True JSON5 (bare keys, single quotes) equals the same settings rewritten as JSON.
+        let json5 = "{
+  // Colours
+  possible: 'a,\"b\"',
+  count_2: 4, flag: true,
+}";
+        let rewritten = "{
+	\"count_2\": 4,
+	\"possible\": \"a,\\\"b\\\"\",
+	\"flag\": true
+}";
+        assert!(same("config/random.json5", json5, rewritten));
+        assert!(!same(
+            "config/random.json5",
+            json5,
+            "{ possible: 'a', count_2: 4, flag: true }"
+        ));
         assert!(!same(
             "config/a.json",
             pack,
