@@ -662,6 +662,14 @@ pub struct CreateWorld {
     pub shared_with: Vec<Id>,
 }
 
+/// `POST /worlds/{id}/restore`: make an old snapshot the latest again (a new snapshot with its
+/// contents), or keep one of a split world's versions. Either way the split is settled.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Restore {
+    pub snapshot_id: Id,
+}
+
 /// `PUT /worlds/{id}/members/{user}/operator`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
