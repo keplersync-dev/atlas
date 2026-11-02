@@ -217,7 +217,9 @@
       {/each}
     </div>
   {/if}
-  {#if canSetModes}
+  {#if lockedReason}
+    <span class="min-w-0 truncate text-[13px] text-(--text-faint)">{lockedReason}</span>
+  {:else if canSetModes}
     <span class="min-w-0 truncate text-[13px] text-(--text-faint)"
       >Friends get changes with your next update.</span
     >
@@ -256,10 +258,6 @@
     </label>
   </div>
 </div>
-
-{#if lockedReason}
-  <p class="mb-1 text-[13px] text-(--text-faint)">{lockedReason}</p>
-{/if}
 
 <div>
   <!-- What each column is, so a version string reads as one. -->
