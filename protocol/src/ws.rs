@@ -76,6 +76,13 @@ pub enum ServerMessage {
     /// Someone invited you to their game (Tandem's Just play). Fetch `/play/invites`.
     #[serde(rename = "invite.received", rename_all = "camelCase")]
     InviteReceived { session_id: Id },
+    /// Your invites changed: one was withdrawn, or its game ended. Fetch `/play/invites` again.
+    #[serde(rename = "invites.changed")]
+    InvitesChanged {},
+    /// The host of a synced world is handing it to `to_id`: they take over, and everyone else
+    /// joins them once they're hosting.
+    #[serde(rename = "world.handoff", rename_all = "camelCase")]
+    WorldHandoff { world_id: Id, from_id: Id, to_id: Id },
     #[serde(rename = "notification.new")]
     NotificationNew { item: Box<ActivityItem> },
     #[serde(rename = "session.revoked")]

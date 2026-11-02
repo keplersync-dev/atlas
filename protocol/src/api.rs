@@ -612,6 +612,9 @@ pub struct World {
     pub lease: Option<Lease>,
     /// Sessions kept beside the head after racing it (two versions, C1).
     pub branches: Vec<Id>,
+    /// Members who are operators in the game, whoever hosts. The owner always is.
+    #[serde(default)]
+    pub operators: Vec<Id>,
     pub created_at: IsoDate,
     #[serde(default)]
     pub ends_at: Option<IsoDate>,
@@ -657,6 +660,21 @@ pub struct CreateWorld {
     /// Friends to share it with.
     #[serde(default)]
     pub shared_with: Vec<Id>,
+}
+
+/// `PUT /worlds/{id}/members/{user}/operator`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetOperator {
+    pub operator: bool,
+}
+
+/// `POST /worlds/{id}/handoff`: the host hands the world to `to`, who gets the lease once
+/// the host's upload is done.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Handoff {
+    pub to: Id,
 }
 
 /// `POST /worlds/{id}/lease` and `…/lease/heartbeat`.

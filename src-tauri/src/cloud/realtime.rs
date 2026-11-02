@@ -241,6 +241,8 @@ impl Cloud {
             | ServerMessage::Pong {}
             | ServerMessage::WorldChanged { .. }
             | ServerMessage::InviteReceived { .. }
+            | ServerMessage::InvitesChanged {}
+            | ServerMessage::WorldHandoff { .. }
             | ServerMessage::Unknown => return,
         };
         self.emit(event);
