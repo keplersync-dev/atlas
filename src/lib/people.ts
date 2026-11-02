@@ -10,7 +10,20 @@ import type { MenuItem } from "../components/MenuList.svelte";
 export function personItems(user: PublicUser): MenuItem[] {
   if (user.id === social.session?.user?.id) return [];
   const friend = social.friends.some((f) => f.user.id === user.id);
+  const asked = social.outgoingRequests.some((r) => r.user.id === user.id);
   return [
+    // Only group members show up here without being friends.
+    ...(friend || asked
+      ? []
+      : [
+          {
+            label: "Add friend",
+            icon: "plus",
+            accent: true,
+            onselect: () => addFriend(user),
+          },
+          "divider" as const,
+        ]),
     {
       label: "Report…",
       icon: "flag",
@@ -32,6 +45,22 @@ export function personItems(user: PublicUser): MenuItem[] {
       : []),
     { label: "Block", danger: true, onselect: () => unfriend(user, true) },
   ];
+}
+
+async function addFriend(user: PublicUser) {
+  const name = user.displayName;
+  // Asking someone who already asked you makes you friends straight away.
+  const incoming = social.incomingRequests.some((r) => r.user.id === user.id);
+  try {
+    await social.sendFriendRequestTo(user.id);
+    showDone(
+      incoming
+        ? `You and ${name} are now friends`
+        : `Friend request sent to ${name}`,
+    );
+  } catch (e) {
+    showError((e as Error).message);
+  }
 }
 
 async function unfriend(user: PublicUser, block: boolean) {

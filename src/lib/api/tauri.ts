@@ -120,6 +120,7 @@ export const tauriApi: AtlasApi = {
   listFriendRequests: () => call("list_friend_requests"),
   previewFriendCode: (code) => call("preview_friend_code", { code }),
   sendFriendRequest: (code) => call("send_friend_request", { code }),
+  sendFriendRequestTo: (userId) => call("send_friend_request_to", { userId }),
   respondToFriendRequest: (userId, accept) =>
     call("respond_to_friend_request", { userId, accept }),
   cancelFriendRequest: (userId) => call("cancel_friend_request", { userId }),

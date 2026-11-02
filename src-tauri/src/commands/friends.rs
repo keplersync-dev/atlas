@@ -34,6 +34,15 @@ pub async fn send_friend_request<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn send_friend_request_to<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    user_id: Id,
+) -> AppResult<FriendRequest> {
+    friends::send_request_to(&state, &app, &user_id).await
+}
+
+#[tauri::command]
 pub async fn respond_to_friend_request<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,

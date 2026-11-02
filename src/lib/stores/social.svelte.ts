@@ -168,6 +168,12 @@ class SocialStore {
     return request;
   }
 
+  async sendFriendRequestTo(userId: Id) {
+    const request = await api.sendFriendRequestTo(userId);
+    await this.load();
+    return request;
+  }
+
   respondToRequest(userId: Id, accept: boolean) {
     return this.optimistic(
       () => (this.requests = this.requests.filter((r) => r.user.id !== userId)),

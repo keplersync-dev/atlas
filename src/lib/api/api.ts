@@ -204,6 +204,8 @@ export interface AtlasApi {
   /** Who a friend code belongs to, shown before sending the request. */
   previewFriendCode(code: string): Promise<PublicUser>;
   sendFriendRequest(code: string): Promise<FriendRequest>;
+  /** Ask someone you share a group with, no code needed. */
+  sendFriendRequestTo(userId: Id): Promise<FriendRequest>;
   respondToFriendRequest(userId: Id, accept: boolean): Promise<void>;
   cancelFriendRequest(userId: Id): Promise<void>;
   removeFriend(userId: Id): Promise<void>;

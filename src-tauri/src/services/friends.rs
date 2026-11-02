@@ -61,6 +61,18 @@ pub async fn send_request<R: Runtime>(
     Ok(request)
 }
 
+/// Ask someone you share a group with, no code needed.
+pub async fn send_request_to<R: Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    user_id: &Id,
+) -> AppResult<FriendRequest> {
+    let path = format!("/friends/requests/{}", segment(user_id)?);
+    let request = state.cloud.call(Method::POST, &path, None::<&()>).await?;
+    emit(app, AtlasEvent::FriendsChanged {});
+    Ok(request)
+}
+
 pub async fn respond<R: Runtime>(
     state: &AppState,
     app: &AppHandle<R>,
