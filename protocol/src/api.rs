@@ -915,6 +915,10 @@ pub struct MinecraftVerify {
     pub server_id: String,
     /// The Minecraft name the app joined with.
     pub username: String,
+    /// Which program is signing in: Tandem signs in from inside the game. Ignored when
+    /// linking.
+    #[serde(default)]
+    pub client: crate::enums::Client,
 }
 
 // ── Errors ─────────────────────────────────────────────────────────────

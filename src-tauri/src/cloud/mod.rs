@@ -259,6 +259,7 @@ impl Cloud {
         Ok(MinecraftVerify {
             server_id: challenge.server_id,
             username: player.name.clone(),
+            client: Default::default(),
         })
     }
 
