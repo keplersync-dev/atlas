@@ -235,9 +235,11 @@ impl Cloud {
             ServerMessage::GroupsChanged { group_id } => AtlasEvent::GroupsChanged {
                 group_id: Some(group_id),
             },
+            // Tandem's worlds don't concern Atlas.
             ServerMessage::Hello { .. }
             | ServerMessage::SessionRevoked {}
             | ServerMessage::Pong {}
+            | ServerMessage::WorldChanged { .. }
             | ServerMessage::Unknown => return,
         };
         self.emit(event);

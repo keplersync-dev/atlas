@@ -588,6 +588,164 @@ pub struct UploadsDone {
     pub sha256: Vec<String>,
 }
 
+// ── Tandem worlds ──────────────────────────────────────────────────────
+
+/// Most files in one `blobs/check`, `blobs/complete` or `file-links` for a world.
+pub const MAX_WORLD_BATCH: usize = 500;
+
+/// A synced world, as its owner and members see it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct World {
+    pub id: Id,
+    pub name: String,
+    pub minecraft_version: String,
+    /// `id@version` of every mod that isn't client-only, as it was last played.
+    pub mods: Vec<String>,
+    /// None once the owner deleted their account: the world then ends at `ends_at`.
+    pub owner: Option<PublicUser>,
+    /// Everyone it's shared with, the owner not included.
+    pub members: Vec<PublicUser>,
+    /// The current snapshot; None until the first upload is committed.
+    pub head: Option<Id>,
+    /// Who's hosting, getting or saving it right now.
+    pub lease: Option<Lease>,
+    /// Sessions kept beside the head after racing it (two versions, C1).
+    pub branches: Vec<Id>,
+    pub created_at: IsoDate,
+    #[serde(default)]
+    pub ends_at: Option<IsoDate>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LeaseState {
+    Downloading,
+    Hosting,
+    Uploading,
+}
+
+impl LeaseState {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Downloading => "downloading",
+            Self::Hosting => "hosting",
+            Self::Uploading => "uploading",
+        }
+    }
+}
+
+/// "Alex is hosting this world": one at a time, and it runs out unless renewed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Lease {
+    pub holder_id: Id,
+    pub state: LeaseState,
+    /// 0 to 1, while uploading.
+    pub progress: f32,
+    pub expires_at: IsoDate,
+}
+
+/// `POST /worlds`: turn on sync. The caller owns it and holds its lease, uploading.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateWorld {
+    pub name: String,
+    pub minecraft_version: String,
+    #[serde(default)]
+    pub mods: Vec<String>,
+    /// Friends to share it with.
+    #[serde(default)]
+    pub shared_with: Vec<Id>,
+}
+
+/// `POST /worlds/{id}/lease` and `…/lease/heartbeat`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeaseRequest {
+    pub state: LeaseState,
+    #[serde(default)]
+    pub progress: f32,
+}
+
+/// One file of a world: its contents' hash and size.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorldFile {
+    pub sha256: String,
+    pub size_bytes: u64,
+}
+
+/// `POST /worlds/{id}/blobs/check`: answered with `UploadTickets` in the same order;
+/// `alreadyExists` when this world has the file already.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorldBlobCheck {
+    pub files: Vec<WorldFile>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SnapshotKind {
+    Checkpoint,
+    Session,
+    Restore,
+    Import,
+}
+
+impl SnapshotKind {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Checkpoint => "checkpoint",
+            Self::Session => "session",
+            Self::Restore => "restore",
+            Self::Import => "import",
+        }
+    }
+}
+
+/// `POST /worlds/{id}/snapshots`: the world at one moment, built on `parent`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewSnapshot {
+    pub parent: Option<Id>,
+    pub kind: SnapshotKind,
+    /// Path inside the world folder (`/` separators) → its file.
+    pub manifest: BTreeMap<String, WorldFile>,
+    #[serde(default)]
+    pub mods: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SnapshotInfo {
+    pub id: Id,
+    pub parent: Option<Id>,
+    pub author_id: Option<Id>,
+    pub kind: SnapshotKind,
+    pub total_bytes: u64,
+    pub created_at: IsoDate,
+}
+
+/// `GET /worlds/{id}/snapshots/{sid}`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Snapshot {
+    #[serde(flatten)]
+    pub info: SnapshotInfo,
+    pub manifest: BTreeMap<String, WorldFile>,
+    pub mods: Vec<String>,
+}
+
+/// The answer to a commit. `head` is false when another session got there first: both
+/// are kept, this one beside the head as a branch.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Committed {
+    pub snapshot: SnapshotInfo,
+    pub head: bool,
+}
+
 // ── CurseForge ─────────────────────────────────────────────────────────
 
 /// `POST /curseforge/fingerprints`: look files up by CurseForge fingerprint (murmur2).

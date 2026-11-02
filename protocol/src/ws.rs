@@ -70,6 +70,9 @@ pub enum ServerMessage {
     },
     #[serde(rename = "groups.changed", rename_all = "camelCase")]
     GroupsChanged { group_id: Id },
+    /// A synced world changed: its lease, head, branches or members. Fetch it again.
+    #[serde(rename = "world.changed", rename_all = "camelCase")]
+    WorldChanged { world_id: Id },
     #[serde(rename = "notification.new")]
     NotificationNew { item: Box<ActivityItem> },
     #[serde(rename = "session.revoked")]
