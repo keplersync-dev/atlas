@@ -746,6 +746,71 @@ pub struct Committed {
     pub head: bool,
 }
 
+// ── Tandem: Just play ──────────────────────────────────────────────────
+
+/// Where a game reaches the relay, and the ticket that lets it in (it runs out in a few minutes).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RelayTicket {
+    pub address: String,
+    pub ticket: String,
+}
+
+/// `POST /play`: start hosting.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartPlay {
+    pub world_name: String,
+    /// The synced world being hosted, if it is one: its members can join without an invite.
+    #[serde(default)]
+    pub world_id: Option<Id>,
+    pub minecraft_version: String,
+    #[serde(default)]
+    pub mods: Vec<String>,
+    /// host:port a friend's game can try before the relay.
+    #[serde(default)]
+    pub direct: Vec<String>,
+}
+
+/// `POST /play/{id}/direct`: a port the router opened later.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdatePlay {
+    pub direct: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaySession {
+    pub id: Id,
+    /// None when this server has no relay: friends can then only connect directly.
+    pub relay: Option<RelayTicket>,
+}
+
+/// `GET /play/invites`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlayInvite {
+    pub session_id: Id,
+    pub host: PublicUser,
+    pub world_name: String,
+    pub minecraft_version: String,
+    pub invited_at: IsoDate,
+}
+
+/// `POST /play/{id}/join`: everything a game needs to connect.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JoinInfo {
+    pub session_id: Id,
+    pub host: PublicUser,
+    pub world_name: String,
+    pub minecraft_version: String,
+    pub mods: Vec<String>,
+    pub direct: Vec<String>,
+    pub relay: Option<RelayTicket>,
+}
+
 // ── CurseForge ─────────────────────────────────────────────────────────
 
 /// `POST /curseforge/fingerprints`: look files up by CurseForge fingerprint (murmur2).

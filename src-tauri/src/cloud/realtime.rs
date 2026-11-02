@@ -240,6 +240,7 @@ impl Cloud {
             | ServerMessage::SessionRevoked {}
             | ServerMessage::Pong {}
             | ServerMessage::WorldChanged { .. }
+            | ServerMessage::InviteReceived { .. }
             | ServerMessage::Unknown => return,
         };
         self.emit(event);

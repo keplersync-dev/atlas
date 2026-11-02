@@ -73,6 +73,9 @@ pub enum ServerMessage {
     /// A synced world changed: its lease, head, branches or members. Fetch it again.
     #[serde(rename = "world.changed", rename_all = "camelCase")]
     WorldChanged { world_id: Id },
+    /// Someone invited you to their game (Tandem's Just play). Fetch `/play/invites`.
+    #[serde(rename = "invite.received", rename_all = "camelCase")]
+    InviteReceived { session_id: Id },
     #[serde(rename = "notification.new")]
     NotificationNew { item: Box<ActivityItem> },
     #[serde(rename = "session.revoked")]
