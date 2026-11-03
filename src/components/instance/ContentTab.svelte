@@ -181,22 +181,28 @@
   }
 </script>
 
-<!-- One row: kinds (when there's more than one), what the choices do, then bulk
-     setting and search on the right. -->
+<!-- One row: search, kinds (when there's more than one), why it's locked, then bulk
+     setting on the right. -->
 <div class="mt-4 mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-2">
+  <label
+    class="flex h-7.5 w-56 max-w-full items-center gap-2 rounded-md bg-(--bg-raise) px-2.5 text-(--text-faint)"
+  >
+    <Icon name="search" class="size-3.5" />
+    <input
+      bind:value={query}
+      placeholder="Search {plural(instance.content.length, 'file')}"
+      class="w-full bg-transparent text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-faint)"
+    />
+  </label>
   <KindChips items={instance.content} bind:kind counts />
   {#if lockedReason}
     <span class="min-w-0 truncate text-[13px] text-(--text-faint)"
       >{lockedReason}</span
     >
-  {:else if canSetModes}
-    <span class="min-w-0 truncate text-[13px] text-(--text-faint)"
-      >Friends get changes with your next update.</span
-    >
   {/if}
 
-  <div class="ml-auto flex items-center gap-1.5">
-    {#if canSetModes && visible.length > 1 && !lockedReason}
+  {#if canSetModes && visible.length > 1 && !lockedReason}
+    <div class="ml-auto flex items-center gap-1.5">
       <Menu
         label="Set every file shown"
         items={[
@@ -214,18 +220,8 @@
           <Icon name="chev" class="size-3 rotate-90" />
         {/snippet}
       </Menu>
-    {/if}
-    <label
-      class="flex h-7.5 w-56 max-w-full items-center gap-2 rounded-md bg-(--bg-raise) px-2.5 text-(--text-faint)"
-    >
-      <Icon name="search" class="size-3.5" />
-      <input
-        bind:value={query}
-        placeholder="Search {plural(instance.content.length, 'file')}"
-        class="w-full bg-transparent text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-faint)"
-      />
-    </label>
-  </div>
+    </div>
+  {/if}
 </div>
 
 <div>
