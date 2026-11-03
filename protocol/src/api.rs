@@ -615,6 +615,21 @@ pub struct World {
     /// Members who are operators in the game, whoever hosts. The owner always is.
     #[serde(default)]
     pub operators: Vec<Id>,
+    /// "keplersync", or "own": the owner's own R2 bucket.
+    #[serde(default = "keplersync")]
+    pub storage: String,
+    /// A move to the other storage, while it runs.
+    #[serde(default)]
+    pub moving: Option<StorageMove>,
+    /// The owner's own storage stopped working, in words for whoever reads it.
+    #[serde(default)]
+    pub storage_problem: Option<String>,
+    /// The owner stopped syncing it: read-only until `ends_at`, when it's deleted, unless they resume.
+    #[serde(default)]
+    pub stopped_at: Option<IsoDate>,
+    /// It stops once whoever is hosting lets go.
+    #[serde(default)]
+    pub stop_when_free: bool,
     pub created_at: IsoDate,
     #[serde(default)]
     pub ends_at: Option<IsoDate>,
@@ -660,6 +675,27 @@ pub struct CreateWorld {
     /// Friends to share it with.
     #[serde(default)]
     pub shared_with: Vec<Id>,
+}
+
+fn keplersync() -> String {
+    "keplersync".into()
+}
+
+/// A world's files moving between KeplerSync storage and the owner's own bucket.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StorageMove {
+    pub to: String,
+    pub done_bytes: u64,
+    pub total_bytes: u64,
+}
+
+/// `POST /worlds/{id}/stop`: stop syncing. With `when_free`, once whoever is hosting lets go.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StopSyncing {
+    #[serde(default)]
+    pub when_free: bool,
 }
 
 /// `POST /worlds/{id}/restore`: make an old snapshot the latest again (a new snapshot with its
