@@ -122,6 +122,9 @@ pub struct PublishItem {
     pub already_uploaded: bool,
     /// Modrinth and CurseForge couldn't be asked about it: not an upload until they can.
     pub unchecked: bool,
+    /// Shared already, but this file's contents differ from the shared version's (a jar
+    /// replaced by a build with the same name).
+    pub contents_changed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -144,4 +147,7 @@ pub struct PublishPlan {
     /// The launcher runs other Minecraft or loader versions than the shared ones: `from`
     /// is shared now, `to` is what this version will say. `automatic` is unused here.
     pub versions: Option<LauncherChange>,
+    /// Other files whose shared copy would change, with the ticks as saved: edited,
+    /// newly shared or no longer shared.
+    pub files_changed: Vec<String>,
 }

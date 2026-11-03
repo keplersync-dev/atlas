@@ -1,11 +1,8 @@
 <script lang="ts" module>
   import type { Id, PublishItem, ShareMode } from "$lib/types";
+  import { modeOf } from "$lib/publishChanges";
 
   // Plain helpers, exported so the Share/Publish dialogs use exactly the same rules.
-
-  /** The setting the user picked in this dialog, or the item's saved one. */
-  export const modeOf = (item: PublishItem, modes: Record<Id, ShareMode>) =>
-    modes[item.contentId] ?? item.shareMode;
 
   /** Unknown files that will be shared, so they have to be uploaded. */
   export const uploadsOf = (
@@ -36,24 +33,6 @@
     items: PublishItem[],
     modes: Record<Id, ShareMode>,
   ) => uploadsOf(items, modes).reduce((n, i) => n + i.sizeBytes, 0);
-
-  /** Files whose sharing differs from the last published version. */
-  export function differences(
-    items: PublishItem[],
-    modes: Record<Id, ShareMode>,
-  ) {
-    const added: PublishItem[] = [];
-    const changed: PublishItem[] = [];
-    for (const i of items) {
-      const mode = modeOf(i, modes);
-      if (i.publishedShareMode === null || i.publishedShareMode === "private") {
-        if (mode !== "private") added.push(i);
-      } else if (mode !== i.publishedShareMode) {
-        changed.push(i);
-      }
-    }
-    return { added, changed };
-  }
 </script>
 
 <script lang="ts">

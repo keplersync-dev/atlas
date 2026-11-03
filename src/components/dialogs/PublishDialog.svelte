@@ -10,8 +10,8 @@
   import Dialog from "../Dialog.svelte";
   import FileTree from "./FileTree.svelte";
   import RightsCheck from "./RightsCheck.svelte";
+  import { publishChanges } from "$lib/publishChanges";
   import SharePicker, {
-    differences,
     names,
     uncheckedOf,
     uploadBytes,
@@ -34,17 +34,12 @@
   let submitting = $state(false);
   let error = $state<string | null>(null);
 
-  const diff = $derived(
-    plan.data
-      ? differences(plan.data.items, modes)
-      : { added: [], changed: [] },
+  const changes = $derived(
+    plan.data ? publishChanges(plan.data, modes, fileRules) : null,
   );
-  const removedCount = $derived(plan.data?.removed.length ?? 0);
+  const total = $derived(changes?.total ?? 0);
   // The launcher moved to other Minecraft or loader versions: one change.
   const versions = $derived(plan.data?.versions ?? null);
-  const total = $derived(
-    diff.added.length + diff.changed.length + removedCount + (versions ? 1 : 0),
-  );
   const uploads = $derived(plan.data ? uploadsOf(plan.data.items, modes) : []);
   const needsRights = $derived(uploads.length > 0);
   // A file Modrinth and CurseForge couldn't be asked about: sharing waits for them.
@@ -149,17 +144,28 @@
           launcher.</span
         >
       {:else}
-        {#if diff.added.length}<span
-            ><b class="text-(--online)">+{diff.added.length}</b>
-            {diff.added.length === 1 ? "new file" : "new files"} shared</span
+        {@const { added, changed, updated, ticks } = changes!}
+        {@const others = plan.data.filesChanged.length}
+        {@const removed = plan.data.removed.length}
+        {#if added.length}<span
+            ><b class="text-(--online)">+{added.length}</b>
+            {added.length === 1 ? "new file" : "new files"} shared</span
           >{/if}
-        {#if diff.changed.length}<span
-            ><b class="text-(--accent)">{diff.changed.length}</b>
-            {diff.changed.length === 1 ? "setting" : "settings"} changed</span
+        {#if changed.length}<span
+            ><b class="text-(--accent)">{changed.length}</b>
+            {changed.length === 1 ? "setting" : "settings"} changed</span
           >{/if}
-        {#if removedCount}<span title={plan.data.removed.join(", ")}
-            ><b class="text-(--danger)">−{removedCount}</b> removed (disabled in your
-            launcher)</span
+        {#if updated.length}<span title={names(updated)}
+            ><b class="text-(--accent)">{updated.length}</b>
+            {updated.length === 1 ? "file" : "files"} updated</span
+          >{/if}
+        {#if others}<span title={plan.data.filesChanged.join(", ")}
+            ><b class="text-(--accent)">{others}</b>
+            {others === 1 ? "other file" : "other files"} changed</span
+          >{/if}
+        {#if ticks}<span>Shared files picked differently</span>{/if}
+        {#if removed}<span title={plan.data.removed.join(", ")}
+            ><b class="text-(--danger)">−{removed}</b> removed (disabled in your launcher)</span
           >{/if}
         {#if versions?.minecraftVersion}<span
             >Minecraft <b>{versions.minecraftVersion.from}</b> →

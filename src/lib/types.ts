@@ -506,6 +506,8 @@ export interface PublishItem {
   alreadyUploaded: boolean;
   /** Modrinth and CurseForge couldn't be asked about it: not an upload until they can. */
   unchecked: boolean;
+  /** Shared already, but its contents differ from the shared version's (a jar replaced by a build with the same name). */
+  contentsChanged: boolean;
 }
 
 /** Built before sharing or publishing: every file with its setting, plus removals. */
@@ -560,6 +562,8 @@ export interface PublishPlan {
     minecraftVersion: { from: string; to: string } | null;
     loaderVersion: { from: string; to: string } | null;
   } | null;
+  /** Other files whose shared copy would change, with the ticks as saved: edited, newly shared or no longer shared. */
+  filesChanged: string[];
 }
 
 // ── Activity ───────────────────────────────────────────────────────────

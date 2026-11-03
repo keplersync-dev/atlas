@@ -28,7 +28,7 @@ use crate::events::{AtlasEvent, emit};
 use crate::state::AppState;
 use crate::sync::adopt;
 use crate::sync::manifest::{
-    self, Entry, MAX_ICON_BYTES, MAX_OVERRIDES, MAX_OVERRIDES_TOTAL, Manifest, MinecraftSpec,
+    self, Entry, Keep, MAX_ICON_BYTES, MAX_OVERRIDES, MAX_OVERRIDES_TOTAL, Manifest, MinecraftSpec,
     Override, PackBase, Refusal, SCHEMA_VERSION,
 };
 use crate::sync::pack;
@@ -184,6 +184,17 @@ pub async fn prepare<R: Runtime>(
     let (storage, configs) = (storage?, configs?);
     lap("server and other files");
     tracing::info!(instance = %row.name, ?took, "prepared a share (ms since start)");
+    let synced = row.synced_manifest();
+    let replaced: HashSet<&str> =
+        crate::sync::state::local_changes(MemberRole::Owner, &rows, synced.as_ref(), false)
+            .changed
+            .iter()
+            .map(|r| r.id.as_str())
+            .collect();
+    let files_changed = synced
+        .as_ref()
+        .map(|m| configs_changed(&m.overrides, &configs.shared))
+        .unwrap_or_default();
     let items = live(&rows)
         .map(|r| {
             let dto = r.to_dto();
@@ -201,6 +212,7 @@ pub async fn prepare<R: Runtime>(
                 needs_upload: is_upload(r),
                 already_uploaded: stored.contains(&r.sha256),
                 unchecked: not_checked(r),
+                contents_changed: replaced.contains(r.id.as_str()),
             }
         })
         .collect();
@@ -209,7 +221,7 @@ pub async fn prepare<R: Runtime>(
         .filter(|r| r.is_managed && r.installed && !r.enabled)
         .map(|r| r.name.clone())
         .collect();
-    if let Some(synced) = row.synced_manifest() {
+    if let Some(synced) = &synced {
         for e in &synced.content {
             if e.required && !rows.iter().any(|r| r.path.eq_ignore_ascii_case(&e.path)) {
                 removed.push(e.name.clone());
@@ -234,10 +246,35 @@ pub async fn prepare<R: Runtime>(
         left_out: configs.left_out,
         files: configs.files,
         rules: file_rules(state, id).await?,
-        versions: row
-            .synced_manifest()
-            .and_then(|m| crate::sync::state::version_change(&row, &m)),
+        versions: synced
+            .as_ref()
+            .and_then(|m| crate::sync::state::version_change(&row, m)),
+        files_changed,
     })
+}
+
+/// Config and other files whose shared copy would differ from the shared version's.
+fn configs_changed(before: &[Override], now: &[(Override, PathBuf)]) -> Vec<String> {
+    let old: HashMap<&str, (&str, Option<Keep>)> = before
+        .iter()
+        .map(|o| (o.path.as_str(), (o.sha256.as_str(), o.keep)))
+        .collect();
+    let new: HashMap<&str, (&str, Option<Keep>)> = now
+        .iter()
+        .map(|(o, _)| (o.path.as_str(), (o.sha256.as_str(), o.keep)))
+        .collect();
+    let mut out: Vec<String> = new
+        .iter()
+        .filter(|(path, file)| old.get(*path) != Some(file))
+        .map(|(path, _)| path.to_string())
+        .chain(
+            old.keys()
+                .filter(|path| !new.contains_key(*path))
+                .map(|path| path.to_string()),
+        )
+        .collect();
+    out.sort();
+    out
 }
 
 /// The settings that will be published: each file's own, overridden by the dialog's.
@@ -1083,4 +1120,51 @@ async fn publish_now<R: Runtime>(
         },
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file(path: &str, sha: &str, keep: Option<Keep>) -> Override {
+        Override {
+            path: path.into(),
+            sha256: sha.into(),
+            size_bytes: 1,
+            in_pack: false,
+            keep,
+        }
+    }
+
+    #[test]
+    fn config_changes_against_the_shared_version() {
+        let before = [
+            file("config/a.json", "1", None),
+            file("config/b.json", "2", None),
+            file("options.txt", "3", Some(Keep::FirstInstall)),
+            file("config/gone.json", "4", None),
+        ];
+        let now = [
+            file("config/a.json", "1", None),
+            file("config/b.json", "9", None),
+            file("options.txt", "3", None),
+            file("config/new.json", "5", None),
+        ]
+        .map(|o| (o, PathBuf::new()));
+        assert_eq!(
+            configs_changed(&before, &now),
+            [
+                "config/b.json",
+                "config/gone.json",
+                "config/new.json",
+                "options.txt"
+            ]
+        );
+        let same: Vec<(Override, PathBuf)> = before
+            .iter()
+            .cloned()
+            .map(|o| (o, PathBuf::new()))
+            .collect();
+        assert!(configs_changed(&before, &same).is_empty());
+    }
 }
