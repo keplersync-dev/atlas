@@ -1,8 +1,13 @@
-//! Where the refresh token lives: Windows Credential Manager, never SQLite or logs.
+//! Where the refresh token lives: Windows Credential Manager or the macOS Keychain, never
+//! SQLite or logs.
 
 use std::sync::{Arc, Mutex};
 
+#[cfg(target_os = "macos")]
+use apple_native_keyring_store::keychain::Store;
 use keyring_core::api::CredentialStoreApi;
+#[cfg(windows)]
+use windows_native_keyring_store::Store;
 
 const SERVICE: &str = "dev.keplerhaloxx.atlas";
 const USER: &str = "refresh_token";
@@ -16,14 +21,14 @@ pub trait TokenStore: Send + Sync {
 /// The real store: one generic credential named after the app (and the development
 /// profile, if any, so each profile keeps its own sign-in).
 pub struct CredentialManager {
-    store: Option<Arc<windows_native_keyring_store::Store>>,
+    store: Option<Arc<Store>>,
     service: String,
 }
 
 impl CredentialManager {
     pub fn new(profile: Option<&str>) -> Self {
-        let store = windows_native_keyring_store::Store::new()
-            .inspect_err(|e| tracing::error!(error = %e, "Credential Manager unavailable"))
+        let store = Store::new()
+            .inspect_err(|e| tracing::error!(error = %e, "the credential store is unavailable"))
             .ok();
         let service = match profile {
             Some(p) => format!("{SERVICE}.profile-{p}"),

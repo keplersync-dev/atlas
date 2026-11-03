@@ -353,6 +353,13 @@ pub fn run() {
         .setup(setup)
         .on_window_event(on_window_event)
         .invoke_handler(invoke_handler())
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while running tauri application")
+        .run(|_app, _event| {
+            // macOS: clicking the Dock icon brings back a window closed to the tray.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = _event {
+                links::show_window(_app);
+            }
+        });
 }

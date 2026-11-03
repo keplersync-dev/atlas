@@ -137,7 +137,12 @@ pub fn close_to_tray<R: Runtime>(window: &tauri::Window<R>) -> bool {
         notify(
             window.app_handle(),
             "Atlas is still running",
-            "It keeps your packs up to date. Quit it from the tray icon.",
+            if cfg!(target_os = "macos") {
+                "It keeps your packs up to date. Quit it from the menu bar icon."
+            } else {
+                "It keeps your packs up to date. Quit it from the tray icon."
+            },
+            false,
         );
         let db = state.db.clone();
         tauri::async_runtime::spawn(async move {
@@ -291,12 +296,13 @@ fn summary(mut held: Vec<Notice>) -> Option<Notice> {
 }
 
 fn show<R: Runtime>(app: &AppHandle<R>, state: &AppState, notice: Notice) {
+    let sound = state.prefs.notification_sound.load(Ordering::Relaxed);
     if window_visible(app) {
         emit(app, AtlasEvent::Notice { notice });
     } else {
-        notify(app, &notice.title, &notice.body);
+        notify(app, &notice.title, &notice.body, sound);
     }
-    if state.prefs.notification_sound.load(Ordering::Relaxed) {
+    if sound {
         play_sound();
     }
 }
@@ -337,8 +343,14 @@ fn play_sound() {
     }
 }
 
-fn notify<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str) {
-    if let Err(e) = app.notification().builder().title(title).body(body).show() {
+/// `sound`: macOS plays its own notification sound (and keeps quiet during a Focus);
+/// Windows' comes from `play_sound`.
+fn notify<R: Runtime>(app: &AppHandle<R>, title: &str, body: &str, sound: bool) {
+    let mut builder = app.notification().builder().title(title).body(body);
+    if sound && cfg!(target_os = "macos") {
+        builder = builder.sound("NSUserNotificationDefaultSoundName");
+    }
+    if let Err(e) = builder.show() {
         tracing::warn!(error = %e, "couldn't show a notification");
     }
 }
@@ -450,7 +462,7 @@ pub async fn update_settings<R: Runtime>(
     if let Some(on) = patch.start_with_windows {
         let manager = app
             .try_state::<AutoLaunchManager>()
-            .ok_or_else(|| AppError::unknown("Starting with Windows isn't available here"))?;
+            .ok_or_else(|| AppError::unknown("Starting Atlas at sign-in isn't available here"))?;
         let done = if on {
             manager.enable()
         } else {
@@ -458,7 +470,7 @@ pub async fn update_settings<R: Runtime>(
         };
         done.map_err(|e| {
             tracing::warn!(error = %e, "couldn't change starting with Windows");
-            AppError::unknown("Windows didn't let Atlas change that. Try again.")
+            AppError::unknown("Atlas couldn't change that. Try again.")
         })?;
     }
     Ok(settings(app, state))

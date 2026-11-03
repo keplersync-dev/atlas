@@ -13,20 +13,53 @@ pub fn env_dir(var: &str) -> Option<PathBuf> {
     std::env::var_os(var).map(PathBuf::from)
 }
 
+/// Where launchers keep their data: %APPDATA% on Windows, ~/Library/Application Support
+/// on macOS.
+pub fn app_data() -> Option<PathBuf> {
+    if cfg!(windows) {
+        env_dir("APPDATA")
+    } else {
+        home().map(|h| h.join("Library").join("Application Support"))
+    }
+}
+
+/// The user's home folder.
+pub fn home() -> Option<PathBuf> {
+    env_dir("USERPROFILE").or_else(|| env_dir("HOME"))
+}
+
+/// A macOS app's program: `binary` inside `bundle` (like "Prism Launcher.app"), in
+/// /Applications or ~/Applications.
+pub fn mac_app(bundle: &str, binary: &str) -> Option<PathBuf> {
+    let user = home().map(|h| h.join("Applications"));
+    first_existing(
+        [Some(PathBuf::from("/Applications")), user]
+            .into_iter()
+            .flatten()
+            .map(|d| d.join(bundle).join("Contents").join("MacOS").join(binary)),
+    )
+}
+
 /// The first of these paths that exists.
 pub fn first_existing(paths: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
     paths.into_iter().find(|p| p.exists())
 }
 
-/// Is a program with one of these exe names (lowercase) running?
-pub fn any_running(exes: &[&str]) -> bool {
+/// A process name to compare: lowercase, without Windows' ".exe".
+pub fn program_name(name: &std::ffi::OsStr) -> String {
+    let name = name.to_string_lossy().to_lowercase();
+    name.strip_suffix(".exe").unwrap_or(&name).to_owned()
+}
+
+/// Is a program with one of these names (lowercase, no ".exe") running?
+pub fn any_running(names: &[&str]) -> bool {
     use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
     let mut system = System::new();
     system.refresh_processes_specifics(ProcessesToUpdate::All, true, ProcessRefreshKind::nothing());
     system
         .processes()
         .values()
-        .any(|p| exes.contains(&p.name().to_string_lossy().to_lowercase().as_str()))
+        .any(|p| names.contains(&program_name(p.name()).as_str()))
 }
 
 /// A folder name for a new instance in `dir`: the name with the characters Windows
@@ -171,6 +204,13 @@ mod tests {
             "2026-06-23T09:22:25.000Z"
         );
         assert_eq!(from_unix_millis(0), None);
+    }
+
+    #[test]
+    fn program_names_without_exe() {
+        assert_eq!(program_name("Modrinth App.exe".as_ref()), "modrinth app");
+        assert_eq!(program_name("java".as_ref()), "java");
+        assert_eq!(program_name("JAVAW.EXE".as_ref()), "javaw");
     }
 
     #[test]

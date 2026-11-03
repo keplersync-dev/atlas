@@ -14,7 +14,9 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
-use super::util::{env_dir, first_existing, free_folder, from_unix_millis, image_ext, parse_ini};
+use super::util::{
+    app_data, env_dir, first_existing, free_folder, from_unix_millis, image_ext, mac_app, parse_ini,
+};
 use super::{FoundInstance, NewInstance, ReadResult};
 use crate::dto::Loader;
 
@@ -41,7 +43,7 @@ impl Flavor {
 
 pub fn default_roots(flavor: Flavor) -> Vec<PathBuf> {
     match flavor {
-        Flavor::Prism => env_dir("APPDATA")
+        Flavor::Prism => app_data()
             .map(|d| d.join("PrismLauncher"))
             .into_iter()
             .collect(),
@@ -55,7 +57,14 @@ pub fn is_root(flavor: Flavor, path: &Path) -> bool {
 }
 
 /// The program to start: next to the config for portable installs, else the default install.
+/// On macOS, Prism's app (MultiMC has no usual place there).
 pub fn program(flavor: Flavor, root: &Path) -> Option<PathBuf> {
+    if cfg!(target_os = "macos") {
+        return match flavor {
+            Flavor::Prism => mac_app("Prism Launcher.app", "prismlauncher"),
+            Flavor::MultiMc => None,
+        };
+    }
     let installed = env_dir("LOCALAPPDATA")
         .map(|d| d.join("Programs").join("PrismLauncher").join(flavor.exe()));
     first_existing(
@@ -68,7 +77,7 @@ pub fn program(flavor: Flavor, root: &Path) -> Option<PathBuf> {
 /// Have Prism install a Modrinth pack as a new instance (its `--import`).
 pub fn import(root: &Path, pack: &Path) -> std::io::Result<()> {
     let program = program(Flavor::Prism, root).ok_or_else(|| {
-        std::io::Error::new(std::io::ErrorKind::NotFound, "prismlauncher.exe not found")
+        std::io::Error::new(std::io::ErrorKind::NotFound, "Prism Launcher not found")
     })?;
     std::process::Command::new(program)
         .arg("--import")

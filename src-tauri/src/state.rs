@@ -123,8 +123,9 @@ pub fn dev_profile() -> Option<String> {
     valid.then_some(profile)
 }
 
-/// Atlas's own folders under `%APPDATA%\dev.keplerhaloxx.atlas` (or, with a development
-/// profile, `…\profiles\<profile>`).
+/// Atlas's own folders under `%APPDATA%\dev.keplerhaloxx.atlas` on Windows,
+/// `~/Library/Application Support/dev.keplerhaloxx.atlas` on macOS (or, with a development
+/// profile, `…/profiles/<profile>`).
 #[derive(Debug, Clone)]
 pub struct AppPaths {
     pub root: PathBuf,
@@ -150,8 +151,8 @@ impl AppPaths {
             backups: root.join("backups"),
             manifests: root.join("manifests"),
             logs: root.join("logs"),
-            downloads: std::env::var_os("USERPROFILE")
-                .map(|h| PathBuf::from(h).join("Downloads"))
+            downloads: crate::launchers::home()
+                .map(|h| h.join("Downloads"))
                 .unwrap_or_else(|| root.join("downloads")),
         }
     }

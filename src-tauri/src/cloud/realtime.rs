@@ -121,12 +121,7 @@ impl Cloud {
                 .map_err(|_| AppError::unknown("Atlas can't find its server. Reinstall Atlas."))?;
             let headers = req.headers_mut();
             headers.insert(AUTHORIZATION, bearer(&token)?);
-            headers.insert(
-                USER_AGENT,
-                concat!("Atlas/", env!("CARGO_PKG_VERSION"), " (Windows)")
-                    .parse()
-                    .expect("valid header"),
-            );
+            headers.insert(USER_AGENT, super::AGENT.parse().expect("valid header"));
             match tokio_tungstenite::connect_async(req).await {
                 Ok((socket, _)) => return Ok(socket),
                 Err(tokio_tungstenite::tungstenite::Error::Http(res))

@@ -65,6 +65,13 @@ pub struct Cloud {
     presence: watch::Sender<PresenceUpdate>,
 }
 
+/// The User-Agent on every request to the server, which reads the version from it.
+const AGENT: &str = if cfg!(windows) {
+    concat!("Atlas/", env!("CARGO_PKG_VERSION"), " (Windows)")
+} else {
+    concat!("Atlas/", env!("CARGO_PKG_VERSION"), " (macOS)")
+};
+
 impl Cloud {
     pub fn new(db: SqlitePool, mut base: Option<Url>, tokens: Arc<dyn TokenStore>) -> Self {
         // "https://host/atlas" → "https://host/atlas/", so "v1/…" joins under it.
@@ -74,12 +81,12 @@ impl Cloud {
             url.set_path(&format!("{}/", url.path()));
         }
         let http = reqwest::Client::builder()
-            .user_agent(concat!("Atlas/", env!("CARGO_PKG_VERSION"), " (Windows)"))
+            .user_agent(AGENT)
             .timeout(Duration::from_secs(20))
             .build()
             .expect("http client");
         let blob_http = reqwest::Client::builder()
-            .user_agent(concat!("Atlas/", env!("CARGO_PKG_VERSION"), " (Windows)"))
+            .user_agent(AGENT)
             .connect_timeout(Duration::from_secs(15))
             .redirect(reqwest::redirect::Policy::none())
             .build()

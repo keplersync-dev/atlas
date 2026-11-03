@@ -15,7 +15,7 @@ mod util;
 
 use std::path::{Path, PathBuf};
 
-pub use util::file_stem;
+pub use util::{file_stem, home, program_name};
 
 use crate::dto::{LauncherKind, Loader};
 use crate::error::AppError;

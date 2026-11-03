@@ -100,8 +100,8 @@ fn java_game_dirs(system: &mut System) -> HashSet<String> {
     );
     let mut dirs = HashSet::new();
     for process in system.processes().values() {
-        let name = process.name().to_string_lossy().to_lowercase();
-        if name != "java.exe" && name != "javaw.exe" {
+        let name = crate::launchers::program_name(process.name());
+        if name != "java" && name != "javaw" {
             continue;
         }
         let args: Vec<String> = process
@@ -130,7 +130,8 @@ fn game_dir_arg(args: &[String]) -> Option<String> {
     })
 }
 
-/// Paths compared the way Windows does: canonical when possible, ignoring case.
+/// Paths compared the way Windows and macOS do by default: canonical when possible,
+/// ignoring case.
 fn key(path: &Path) -> String {
     let p = dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
     p.to_string_lossy()

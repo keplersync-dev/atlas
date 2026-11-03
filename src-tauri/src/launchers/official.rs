@@ -19,14 +19,21 @@ use base64::Engine;
 use serde::Deserialize;
 use serde_json::{Value, json};
 
-use super::util::{any_running, env_dir, first_existing, free_folder, parse_time};
+use super::util::{
+    any_running, app_data, env_dir, first_existing, free_folder, mac_app, parse_time,
+};
 use super::{FoundInstance, NewInstance, ReadError, ReadResult};
 use crate::dto::Loader;
 
 pub fn default_roots() -> Vec<PathBuf> {
     let mut roots = Vec::new();
-    if let Some(appdata) = env_dir("APPDATA") {
-        roots.push(appdata.join(".minecraft"));
+    if let Some(appdata) = app_data() {
+        // No dot on macOS: ~/Library/Application Support/minecraft.
+        roots.push(appdata.join(if cfg!(windows) {
+            ".minecraft"
+        } else {
+            "minecraft"
+        }));
     }
     // Microsoft Store / Xbox app version of the launcher.
     if let Some(local) = env_dir("LOCALAPPDATA") {
@@ -44,6 +51,9 @@ pub fn is_root(path: &Path) -> bool {
 }
 
 pub fn program() -> Option<PathBuf> {
+    if cfg!(target_os = "macos") {
+        return mac_app("Minecraft.app", "launcher");
+    }
     let x86 =
         env_dir("ProgramFiles(x86)").map(|d| d.join(r"Minecraft Launcher\MinecraftLauncher.exe"));
     first_existing(
@@ -234,7 +244,7 @@ fn neoforge_minecraft(version: &str) -> Option<String> {
 /// Is the launcher open? It keeps profiles in memory and saves them over the file, so
 /// a profile added meanwhile would be lost.
 pub fn running() -> bool {
-    any_running(&["minecraft.exe", "minecraftlauncher.exe"])
+    any_running(&["minecraft", "minecraftlauncher"])
 }
 
 /// "NeoForge", for messages.
@@ -474,16 +484,37 @@ fn find_java(root: &Path) -> Option<PathBuf> {
     });
     let runtimes = [Some(root.join("runtime")), store];
     let launcher_java = RUNTIMES.iter().flat_map(|name| {
-        runtimes.iter().flatten().map(move |dir| {
-            dir.join(name)
-                .join("windows-x64")
-                .join(name)
-                .join("bin")
-                .join("javaw.exe")
-        })
+        runtimes
+            .iter()
+            .flatten()
+            .flat_map(move |dir| runtime_javas(dir, name))
     });
-    let java_home = env_dir("JAVA_HOME").map(|d| d.join("bin").join("javaw.exe"));
+    let exe = if cfg!(windows) { "javaw.exe" } else { "java" };
+    let java_home = env_dir("JAVA_HOME").map(|d| d.join("bin").join(exe));
     first_existing(launcher_java.chain(java_home))
+}
+
+/// Where the launcher's runtime `name` keeps its Java in `runtime`. Apple Silicon Macs can
+/// also have the Intel runtime, which runs through Rosetta.
+fn runtime_javas(runtime: &Path, name: &str) -> Vec<PathBuf> {
+    let platforms: &[&str] = if cfg!(windows) {
+        &["windows-x64"]
+    } else if cfg!(target_arch = "aarch64") {
+        &["mac-os-arm64", "mac-os"]
+    } else {
+        &["mac-os"]
+    };
+    platforms
+        .iter()
+        .map(|platform| {
+            let home = runtime.join(name).join(platform).join(name);
+            if cfg!(windows) {
+                home.join("bin").join("javaw.exe")
+            } else {
+                home.join("jre.bundle/Contents/Home/bin/java")
+            }
+        })
+        .collect()
 }
 
 /// Version ids end up in URLs and folder names: letters, digits and `.-_+` only.
@@ -818,19 +849,18 @@ mod tests {
     #[test]
     fn java_from_the_launchers_runtimes_newest_first() {
         let root = std::env::temp_dir().join(format!("atlas-java-{}", crate::util::ids::new_id()));
-        let java = |name: &str| {
-            root.join("runtime")
-                .join(name)
-                .join("windows-x64")
-                .join(name)
-                .join("bin")
-                .join("javaw.exe")
-        };
+        let java = |name: &str| runtime_javas(&root.join("runtime"), name).remove(0);
         for name in ["java-runtime-gamma", "java-runtime-delta"] {
             std::fs::create_dir_all(java(name).parent().unwrap()).unwrap();
             std::fs::write(java(name), b"").unwrap();
         }
         assert_eq!(find_java(&root), Some(java("java-runtime-delta")));
+        let end = if cfg!(windows) {
+            r"windows-x64\java-runtime-delta\bin\javaw.exe"
+        } else {
+            "java-runtime-delta/jre.bundle/Contents/Home/bin/java"
+        };
+        assert!(java("java-runtime-delta").ends_with(end));
         std::fs::remove_dir_all(&root).ok();
     }
 

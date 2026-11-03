@@ -21,13 +21,14 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection, SqliteRow};
 use sqlx::{Connection, FromRow};
 
 use super::util::{
-    any_running, env_dir, file_stem, first_existing, from_unix_seconds, image_ext, loader_from,
+    any_running, app_data, env_dir, file_stem, first_existing, from_unix_seconds, image_ext,
+    loader_from, mac_app,
 };
 use super::{FoundInstance, NewInstance, ReadError, ReadResult};
 use crate::dto::Loader;
 
 pub fn default_roots() -> Vec<PathBuf> {
-    let Some(appdata) = env_dir("APPDATA") else {
+    let Some(appdata) = app_data() else {
         return vec![];
     };
     vec![
@@ -41,6 +42,9 @@ pub fn is_root(path: &Path) -> bool {
 }
 
 pub fn program() -> Option<PathBuf> {
+    if cfg!(target_os = "macos") {
+        return mac_app("Modrinth App.app", "Modrinth App");
+    }
     let local = env_dir("LOCALAPPDATA")?;
     first_existing([
         local.join("Modrinth App").join("Modrinth App.exe"),
@@ -300,15 +304,21 @@ fn write_pack(file: &Path, new: &NewInstance, loader_version: Option<&str>) -> R
 }
 
 /// Give the pack to the app: its program takes it as an argument (and passes it on to a
-/// running copy). Without the program, Explorer opens it with whatever owns .mrpack.
+/// running copy). Without the program, Explorer (or macOS's `open`) opens it with whatever
+/// owns .mrpack.
 pub fn open_pack(pack: &Path) -> ReadResult<()> {
-    let program = program().unwrap_or_else(|| PathBuf::from("explorer.exe"));
+    let fallback = if cfg!(windows) {
+        "explorer.exe"
+    } else {
+        "open"
+    };
+    let program = program().unwrap_or_else(|| PathBuf::from(fallback));
     std::process::Command::new(program).arg(pack).spawn()?;
     Ok(())
 }
 
 pub fn running() -> bool {
-    any_running(&["modrinth app.exe"])
+    any_running(&["modrinth app"])
 }
 
 /// Give an instance a picture when it has none. Packs can't carry one, so instances Atlas
@@ -467,9 +477,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn modrinth_ids_on_this_pc() {
-        let root = crate::launchers::util::env_dir("APPDATA")
-            .unwrap()
-            .join("ModrinthApp");
+        let root = app_data().unwrap().join("ModrinthApp");
         for path in ["PPTools", "not there"] {
             println!("{path} -> {:?}", instance_id(&root, path).await);
         }

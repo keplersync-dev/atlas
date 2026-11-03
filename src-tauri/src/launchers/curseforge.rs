@@ -17,13 +17,14 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::util::{
-    any_running, env_dir, first_existing, free_folder, image_ext, loader_from, parse_time,
+    any_running, env_dir, first_existing, free_folder, home, image_ext, loader_from, mac_app,
+    parse_time,
 };
 use super::{FoundInstance, NewInstance, ReadError, ReadResult};
 use crate::dto::Loader;
 
 pub fn default_roots() -> Vec<PathBuf> {
-    let Some(home) = env_dir("USERPROFILE") else {
+    let Some(home) = home() else {
         return vec![];
     };
     vec![
@@ -39,6 +40,9 @@ pub fn is_root(path: &Path) -> bool {
 }
 
 pub fn program() -> Option<PathBuf> {
+    if cfg!(target_os = "macos") {
+        return mac_app("CurseForge.app", "CurseForge");
+    }
     let local = env_dir("LOCALAPPDATA")?;
     first_existing([
         local
@@ -226,7 +230,7 @@ fn parse_loader(name: &str, minecraft: Option<&str>) -> Option<(Loader, Option<S
 
 /// Is the CurseForge app open? It may not notice an instance folder added meanwhile.
 pub fn running() -> bool {
-    any_running(&["curseforge.exe"])
+    any_running(&["curseforge"])
 }
 
 /// The parts of CurseForge's loader data that it keeps in `baseModLoader`.
@@ -307,7 +311,7 @@ pub fn create(root: &Path, new: &NewInstance, loader_data: Option<Value>) -> Rea
         "isVanilla": new.loader == Loader::Vanilla,
         "guid": uuid::Uuid::now_v7().to_string(),
         "gameTypeID": 432,
-        "installPath": format!("{}\\", dir.display()),
+        "installPath": format!("{}{}", dir.display(), std::path::MAIN_SEPARATOR),
         "name": new.name,
     });
     let rest = json!({
@@ -509,7 +513,12 @@ mod tests {
         assert!(base.get("id").is_none());
         assert_eq!(base["installMethod"], 6);
         assert_eq!(written["isVanilla"], false);
-        assert!(written["installPath"].as_str().unwrap().ends_with('\\'));
+        assert!(
+            written["installPath"]
+                .as_str()
+                .unwrap()
+                .ends_with(std::path::MAIN_SEPARATOR)
+        );
         std::fs::remove_dir_all(&root).ok();
     }
 }

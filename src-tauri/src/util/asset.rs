@@ -5,10 +5,16 @@
 //! the scope in tauri.conf.json (`app.security.assetProtocol`): the icon cache.
 
 /// "file:C:\x\a.png" → "http://asset.localhost/C%3A%5Cx%5Ca.png" (what Tauri's
-/// `convertFileSrc` makes on Windows). Anything else (http URLs, keys) passes through.
+/// `convertFileSrc` makes: that form on Windows, "asset://localhost/…" on macOS).
+/// Anything else (http URLs, keys) passes through.
 pub fn url(stored: &str) -> String {
+    const BASE: &str = if cfg!(windows) {
+        "http://asset.localhost/"
+    } else {
+        "asset://localhost/"
+    };
     match stored.strip_prefix("file:") {
-        Some(path) => format!("http://asset.localhost/{}", encode_component(path)),
+        Some(path) => format!("{BASE}{}", encode_component(path)),
         None => stored.to_string(),
     }
 }
@@ -39,6 +45,16 @@ pub fn encode_component(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     #[test]
+    #[cfg(target_os = "macos")]
+    fn matches_convert_file_src_on_macos() {
+        assert_eq!(
+            super::url("file:/Users/me/a b.png"),
+            "asset://localhost/%2FUsers%2Fme%2Fa%20b.png"
+        );
+    }
+
+    #[test]
+    #[cfg(windows)]
     fn matches_convert_file_src() {
         assert_eq!(
             super::url(
