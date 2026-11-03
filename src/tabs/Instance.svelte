@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { iconSeed } from "$lib/pixel";
   import { api } from "$lib/api";
   import { back, forgetInstance, go, nav } from "$lib/nav.svelte";
   import { confirmAction } from "$lib/confirm.svelte";
@@ -163,7 +164,7 @@
   <div class="flex items-center gap-4">
     <ContentIcon
       src={summary.icon}
-      seed={summary.id}
+      seed={iconSeed(summary)}
       class="size-16 shrink-0 rounded-xl {summary.status === 'missing'
         ? 'opacity-40 grayscale'
         : ''}"

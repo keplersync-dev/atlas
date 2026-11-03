@@ -99,3 +99,7 @@ export function wallPixels(
   }
   return px;
 }
+
+/** What an instance's stand-in icon grows from: a shared pack's own id, so the pack looks the same for everyone in it. */
+export const iconSeed = (i: { id: string; sync: { sharedInstanceId: string } | null }) =>
+  i.sync?.sharedInstanceId ?? i.id;

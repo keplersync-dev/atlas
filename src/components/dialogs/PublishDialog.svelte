@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { iconSeed } from "$lib/pixel";
   import { api } from "$lib/api";
   import { plural, versionLabel, workLabel } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
@@ -100,7 +101,7 @@
   {#snippet header()}
     <ContentIcon
       src={instance?.icon ?? null}
-      seed={instanceId}
+      seed={instance ? iconSeed(instance) : instanceId}
       class="size-10 rounded-md"
     />
   {/snippet}

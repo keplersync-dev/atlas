@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { iconSeed } from "$lib/pixel";
   import { unfinished } from "$lib/play";
   import { api } from "$lib/api";
   import { go, isActive, type View } from "$lib/nav.svelte";
@@ -114,7 +115,7 @@
       >
         <ContentIcon
           src={inst.icon}
-          seed={inst.id}
+          seed={iconSeed(inst)}
           class="size-6 rounded {inst.status === 'missing'
             ? 'opacity-40 grayscale'
             : ''}"

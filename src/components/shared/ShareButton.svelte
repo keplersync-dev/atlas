@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { iconSeed } from "$lib/pixel";
   import { openDialog } from "$lib/dialogs.svelte";
   import { instances } from "$lib/stores";
   import ContentIcon from "../ContentIcon.svelte";
@@ -68,7 +69,7 @@
               ? 'opacity-50'
               : 'hover:bg-(--bg-hover)'}"
           >
-            <ContentIcon src={i.icon} seed={i.id} class="size-7 rounded-md" />
+            <ContentIcon src={i.icon} seed={iconSeed(i)} class="size-7 rounded-md" />
             <span class="min-w-0 flex-1">
               <b class="block truncate text-[13px] font-medium">{i.name}</b>
               <small class="block truncate text-[13px] text-(--text-faint)"

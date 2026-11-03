@@ -270,7 +270,7 @@
   >
     <ContentIcon
       src={local?.icon ?? s.icon}
-      seed={s.localInstanceId ?? s.id}
+      seed={s.id}
       class="size-10 rounded-lg"
     />
     <span class="min-w-0 flex-1">
