@@ -71,6 +71,10 @@ opt-level = 3
 panic = "abort"
 strip = true
 
+# macOS can't load proc-macro libraries that strip has rewritten ("mis-aligned LINKEDIT string pool").
+[profile.release.build-override]
+strip = false
+
 [dev-dependencies]
 atlas-protocol = { path = "../protocol", features = ["ts"] }
 dunce = "1.0.5"
