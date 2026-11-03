@@ -52,6 +52,17 @@
   );
   const myId = $derived(social.session?.user?.id);
 
+  // The owner, then members, then open invites, each by name.
+  const ORDER = { active: 1, invited: 2, declined: 3 } as const;
+  const members = $derived(
+    [...(shared.data?.members ?? [])].sort(
+      (a, b) =>
+        (a.role === "owner" ? 0 : ORDER[a.status]) -
+          (b.role === "owner" ? 0 : ORDER[b.status]) ||
+        a.user.displayName.localeCompare(b.user.displayName),
+    ),
+  );
+
   function memberStatus(m: SharedMember) {
     if (m.status === "invited")
       return { text: "Invited", cls: "text-(--text-faint)" };
@@ -169,7 +180,7 @@
       class="mb-2 max-w-72"
     />
   {/if}
-  {#each fuzzyFilter( shared.data.members, query, (m) => [m.user.displayName, m.user.username, m.viaGroup?.name] ) as m (m.user.id)}
+  {#each fuzzyFilter( members, query, (m) => [m.user.displayName, m.user.username, m.viaGroup?.name] ) as m (m.user.id)}
     {@const status = memberStatus(m)}
     <div
       class="grid grid-cols-[32px_minmax(0,1fr)_100px_136px_32px] items-center gap-3.5 rounded-md px-2 py-2 hover:bg-(--bg-hover)"

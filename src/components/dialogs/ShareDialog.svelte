@@ -80,21 +80,21 @@
         : friendIds.length + groupIds.length > 0),
   );
 
-  // Who's picked, in words, for the button and the confirmation.
+  // Who's picked, in words, for the button and the confirmation: a name when it's one,
+  // otherwise "3 people and 2 groups".
   const picked = $derived.by(() => {
-    const names = [
-      ...social.friends
-        .filter((f) => friendIds.includes(f.user.id))
-        .map((f) => f.user.displayName),
-      ...(groups.data ?? [])
-        .filter((g) => groupIds.includes(g.id))
-        .map((g) => g.name),
-    ];
-    return names.length === 1
-      ? names[0]
-      : names.length
-        ? plural(names.length, "person", "people")
-        : null;
+    const people = social.friends.filter((f) => friendIds.includes(f.user.id));
+    const picks = (groups.data ?? []).filter((g) => groupIds.includes(g.id));
+    if (people.length + picks.length === 1)
+      return people[0]?.user.displayName ?? picks[0].name;
+    return (
+      [
+        people.length && plural(people.length, "person", "people"),
+        picks.length && plural(picks.length, "group"),
+      ]
+        .filter(Boolean)
+        .join(" and ") || null
+    );
   });
   // Invite mode with everyone already in: nothing to pick.
   const pickable = $derived(
