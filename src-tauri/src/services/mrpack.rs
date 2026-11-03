@@ -62,9 +62,7 @@ pub async fn export<R: Runtime>(
     state: &AppState,
     id: &str,
 ) -> AppResult<Option<String>> {
-    let row = db::instances::get(&state.db, id).await?.ok_or_else(|| {
-        AppError::not_found("That instance isn't there anymore. It may have just been removed.")
-    })?;
+    let row = db::instances::require(&state.db, id).await?;
     let (Some(minecraft), Some(loader)) = (row.minecraft_version.clone(), row.loader()) else {
         return Err(AppError::invalid_input(
             "Atlas couldn't tell which Minecraft version and loader this folder uses",

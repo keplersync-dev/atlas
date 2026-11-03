@@ -1,11 +1,13 @@
 //! Friends and the activity feed. Lists come from the server and fall back to the
 //! offline cache; changes need the server and are never queued.
 
-use atlas_protocol::api::{MarkRead, Page, SendFriendRequest};
+use atlas_protocol::api::{MarkRead, SendFriendRequest};
 use atlas_protocol::codes::{self, FRIEND_CODE_LEN};
 use reqwest::Method;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Runtime};
 
+use crate::cloud::Lenient;
 use crate::dto::{ActivityIds, ActivityItem, Friend, FriendRequest, Id, PresenceState, PublicUser};
 use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
@@ -14,7 +16,11 @@ use crate::state::AppState;
 /// Offline, the cached list comes back with everyone shown offline: their last known
 /// presence would be out of date.
 pub async fn list(state: &AppState) -> AppResult<Vec<Friend>> {
-    let mut friends: Vec<Friend> = state.cloud.cached_get("friends", "/friends").await?;
+    let mut friends = state
+        .cloud
+        .cached_get::<Lenient<Friend>>("friends", "/friends")
+        .await?
+        .items;
     if !state.cloud.is_online() {
         for friend in &mut friends {
             let p = &mut friend.presence;
@@ -28,10 +34,11 @@ pub async fn list(state: &AppState) -> AppResult<Vec<Friend>> {
 }
 
 pub async fn requests(state: &AppState) -> AppResult<Vec<FriendRequest>> {
-    state
+    let requests: Lenient<FriendRequest> = state
         .cloud
         .cached_get("friend_requests", "/friends/requests")
-        .await
+        .await?;
+    Ok(requests.items)
 }
 
 fn normalize(code: &str) -> AppResult<String> {
@@ -108,9 +115,15 @@ pub async fn blocked(state: &AppState) -> AppResult<Vec<crate::dto::PublicUser>>
     state.cloud.call(Method::GET, "/blocks", None::<&()>).await
 }
 
+/// `Page<ActivityItem>`, read leniently.
+#[derive(Serialize, Deserialize)]
+struct Feed {
+    items: Lenient<ActivityItem>,
+}
+
 pub async fn activity(state: &AppState) -> AppResult<Vec<ActivityItem>> {
-    let page: Page<ActivityItem> = state.cloud.cached_get("activity", "/notifications").await?;
-    Ok(page.items)
+    let feed: Feed = state.cloud.cached_get("activity", "/notifications").await?;
+    Ok(feed.items.items)
 }
 
 pub async fn mark_read(state: &AppState, ids: ActivityIds) -> AppResult<()> {
@@ -130,14 +143,9 @@ pub async fn mark_read(state: &AppState, ids: ActivityIds) -> AppResult<()> {
         .await
 }
 
-/// A user id as a path segment. Ids are UUIDs; anything else is refused before it can
-/// change the path.
+/// A user id as a path segment (`ids::segment`).
 fn segment(id: &str) -> AppResult<&str> {
-    if !id.is_empty() && id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
-        Ok(id)
-    } else {
-        Err(AppError::invalid_input(
-            "That person isn't on Atlas anymore",
-        ))
-    }
+    crate::util::ids::segment(id, || {
+        AppError::invalid_input("That person isn't on Atlas anymore")
+    })
 }

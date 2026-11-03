@@ -1,8 +1,7 @@
 use tauri::{AppHandle, Runtime, State};
 
 use crate::dto::{
-    CreateGroupInput, CreateGroupInviteInput, Group, GroupDetail, GroupInvite, GroupInvitePreview,
-    GroupMemberRole, Id, UpdateGroupInput,
+    CreateGroup, CreateGroupInvite, Group, GroupDetail, GroupInvite, GroupInvitePreview, Id,
 };
 use crate::error::AppResult;
 use crate::services::groups;
@@ -22,19 +21,9 @@ pub async fn get_group(state: State<'_, AppState>, id: Id) -> AppResult<GroupDet
 pub async fn create_group<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
-    input: CreateGroupInput,
+    input: CreateGroup,
 ) -> AppResult<Group> {
     groups::create(&state, &app, input).await
-}
-
-#[tauri::command]
-pub async fn update_group<R: Runtime>(
-    app: AppHandle<R>,
-    state: State<'_, AppState>,
-    id: Id,
-    patch: UpdateGroupInput,
-) -> AppResult<Group> {
-    groups::update(&state, &app, &id, patch).await
 }
 
 #[tauri::command]
@@ -50,18 +39,9 @@ pub async fn delete_group<R: Runtime>(
 pub async fn create_group_invite(
     state: State<'_, AppState>,
     group_id: Id,
-    input: CreateGroupInviteInput,
+    input: CreateGroupInvite,
 ) -> AppResult<GroupInvite> {
     groups::create_invite(&state, &group_id, input).await
-}
-
-#[tauri::command]
-pub async fn revoke_group_invite(
-    state: State<'_, AppState>,
-    group_id: Id,
-    code: String,
-) -> AppResult<()> {
-    groups::revoke_invite(&state, &group_id, &code).await
 }
 
 #[tauri::command]
@@ -103,17 +83,6 @@ pub async fn join_group<R: Runtime>(
     code: String,
 ) -> AppResult<Group> {
     groups::join(&state, &app, &code).await
-}
-
-#[tauri::command]
-pub async fn set_group_member_role<R: Runtime>(
-    app: AppHandle<R>,
-    state: State<'_, AppState>,
-    group_id: Id,
-    user_id: Id,
-    role: GroupMemberRole,
-) -> AppResult<Group> {
-    groups::set_role(&state, &app, &group_id, &user_id, role).await
 }
 
 #[tauri::command]

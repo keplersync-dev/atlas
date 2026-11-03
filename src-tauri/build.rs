@@ -1,4 +1,6 @@
 fn main() {
+    // sqlx embeds migrations/ at compile time: a new one has to rebuild the app.
+    println!("cargo:rerun-if-changed=migrations");
     let mut windows = tauri_build::WindowsAttributes::new();
     if embed_manifest_everywhere() {
         // We embed the manifest ourselves (below), so Tauri mustn't add a second one.

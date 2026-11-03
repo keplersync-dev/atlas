@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use sqlx::{FromRow, SqlitePool};
 
 use crate::dto::{InstanceStatus, LauncherKind, Loader, from_wire, to_wire};
+use crate::error::{AppError, AppResult};
 use crate::util::{ids::new_id, time::now_iso};
 
 #[derive(Debug, Clone, FromRow)]
@@ -102,6 +103,15 @@ pub async fn get(db: &SqlitePool, id: &str) -> sqlx::Result<Option<InstanceRow>>
         .bind(id)
         .fetch_optional(db)
         .await
+}
+
+/// `get`, for an instance that has to be there: not found when it was just removed.
+pub async fn require(db: &SqlitePool, id: &str) -> AppResult<InstanceRow> {
+    get(db, id).await?.ok_or_else(gone)
+}
+
+pub fn gone() -> AppError {
+    AppError::not_found("That instance isn't there anymore. It may have just been removed.")
 }
 
 pub async fn find_by_game_dir(

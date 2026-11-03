@@ -2,17 +2,13 @@
 //! need the server. After a change the UI hears `groups.changed`; when shared instances
 //! come or go with it, the server sends `shared.changed` too.
 
-use atlas_protocol::api::{
-    CreateGroup, CreateGroupInvite, InviteToGroup, SetGroupRole, Transfer, UpdateGroup,
-};
+use atlas_protocol::api::{CreateGroup, CreateGroupInvite, InviteToGroup, Transfer};
 use atlas_protocol::codes::{self, GROUP_CODE_LEN};
 use reqwest::Method;
 use tauri::{AppHandle, Runtime};
 
-use crate::dto::{
-    CreateGroupInput, CreateGroupInviteInput, Group, GroupDetail, GroupInvite, GroupInvitePreview,
-    GroupMemberRole, Id, UpdateGroupInput,
-};
+use crate::cloud::Lenient;
+use crate::dto::{Group, GroupDetail, GroupInvite, GroupInvitePreview, Id};
 use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
 use crate::state::AppState;
@@ -20,17 +16,13 @@ use crate::state::AppState;
 pub const CACHE_KEY: &str = "groups";
 
 pub async fn list(state: &AppState) -> AppResult<Vec<Group>> {
-    state.cloud.cached_get(CACHE_KEY, "/groups").await
+    let groups: Lenient<Group> = state.cloud.cached_get(CACHE_KEY, "/groups").await?;
+    Ok(groups.items)
 }
 
-/// An id as a path segment. Ids are UUIDs; anything else is refused before it can change
-/// the path.
+/// A group's or user's id as a path segment (`ids::segment`).
 fn segment(id: &str) -> AppResult<&str> {
-    if !id.is_empty() && id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
-        Ok(id)
-    } else {
-        Err(AppError::not_found("That group isn't available"))
-    }
+    crate::util::ids::segment(id, || AppError::not_found("That group isn't available"))
 }
 
 fn group_path(id: &str) -> AppResult<String> {
@@ -70,35 +62,13 @@ pub async fn get(state: &AppState, id: &Id) -> AppResult<GroupDetail> {
 pub async fn create<R: Runtime>(
     state: &AppState,
     app: &AppHandle<R>,
-    input: CreateGroupInput,
+    input: CreateGroup,
 ) -> AppResult<Group> {
-    let body = CreateGroup {
-        name: input.name,
-        icon: input.icon.flatten(),
-    };
     let group: Group = state
         .cloud
-        .call(Method::POST, "/groups", Some(&body))
+        .call(Method::POST, "/groups", Some(&input))
         .await?;
     changed(app, Some(&group.id));
-    Ok(group)
-}
-
-pub async fn update<R: Runtime>(
-    state: &AppState,
-    app: &AppHandle<R>,
-    id: &Id,
-    patch: UpdateGroupInput,
-) -> AppResult<Group> {
-    let body = UpdateGroup {
-        name: patch.name,
-        icon: patch.icon,
-    };
-    let group = state
-        .cloud
-        .call(Method::PATCH, &group_path(id)?, Some(&body))
-        .await?;
-    changed(app, Some(id));
     Ok(group)
 }
 
@@ -114,22 +84,10 @@ pub async fn delete<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &Id) -
 pub async fn create_invite(
     state: &AppState,
     group_id: &Id,
-    input: CreateGroupInviteInput,
+    input: CreateGroupInvite,
 ) -> AppResult<GroupInvite> {
-    let body = CreateGroupInvite {
-        max_uses: input.max_uses,
-        expires_in_hours: input.expires_in_hours,
-    };
     let path = format!("{}/invites", group_path(group_id)?);
-    state.cloud.call(Method::POST, &path, Some(&body)).await
-}
-
-pub async fn revoke_invite(state: &AppState, group_id: &Id, code: &str) -> AppResult<()> {
-    let path = format!("{}/invites/{}", group_path(group_id)?, invite_code(code)?);
-    state
-        .cloud
-        .call::<()>(Method::DELETE, &path, None::<&()>)
-        .await
+    state.cloud.call(Method::POST, &path, Some(&input)).await
 }
 
 pub async fn preview_invite(state: &AppState, code: &str) -> AppResult<GroupInvitePreview> {
@@ -184,22 +142,6 @@ pub async fn join<R: Runtime>(
     let path = format!("/group-invites/{}/accept", invite_code(code)?);
     let group: Group = state.cloud.call(Method::POST, &path, None::<&()>).await?;
     changed(app, Some(&group.id));
-    Ok(group)
-}
-
-pub async fn set_role<R: Runtime>(
-    state: &AppState,
-    app: &AppHandle<R>,
-    group_id: &Id,
-    user_id: &Id,
-    role: GroupMemberRole,
-) -> AppResult<Group> {
-    let path = format!("{}/members/{}", group_path(group_id)?, segment(user_id)?);
-    let group = state
-        .cloud
-        .call(Method::PATCH, &path, Some(&SetGroupRole { role }))
-        .await?;
-    changed(app, Some(group_id));
     Ok(group)
 }
 

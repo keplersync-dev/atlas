@@ -45,7 +45,6 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::launchers::list_launchers,
         commands::launchers::detect_launchers,
         commands::launchers::add_launcher,
-        commands::launchers::remove_launcher,
         commands::launchers::list_detected_instances,
         // Instances
         commands::instances::list_instances,
@@ -93,12 +92,9 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::sharing::preview_sync,
         commands::sharing::sync_instance,
         commands::sharing::revert_local_changes,
-        commands::sharing::update_shared_instance,
         commands::sharing::invite_to_shared_instance,
         commands::sharing::set_shared_member_role,
         commands::sharing::remove_shared_member,
-        commands::sharing::unshare_from_group,
-        commands::sharing::transfer_shared_instance,
         commands::sharing::leave_shared_instance,
         commands::sharing::archive_shared_instance,
         // Friends
@@ -118,16 +114,13 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::groups::list_groups,
         commands::groups::get_group,
         commands::groups::create_group,
-        commands::groups::update_group,
         commands::groups::delete_group,
         commands::groups::create_group_invite,
-        commands::groups::revoke_group_invite,
         commands::groups::preview_group_invite,
         commands::groups::join_group,
         commands::groups::invite_friends_to_group,
         commands::groups::list_group_invites,
         commands::groups::decline_group_invite,
-        commands::groups::set_group_member_role,
         commands::groups::remove_group_member,
         commands::groups::transfer_group,
         // Activity
@@ -260,6 +253,8 @@ fn setup<R: Runtime>(app: &mut tauri::App<R>) -> Result<(), Box<dyn std::error::
     if !recovered.is_empty() {
         tracing::warn!(count = recovered.len(), "undid interrupted updates");
     }
+    let paths = state.paths.clone();
+    tauri::async_runtime::spawn_blocking(move || sync::fetch::drop_old_cache(&paths));
 
     // Rescan an instance whenever the watcher sees its content folders change.
     if let Some(mut changes) = state.watcher.take_receiver() {

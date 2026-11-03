@@ -86,11 +86,7 @@ pub async fn report_file(
     reason: ReportReason,
     details: Option<String>,
 ) -> AppResult<()> {
-    let row = crate::db::instances::get(&state.db, instance_id)
-        .await?
-        .ok_or_else(|| {
-            AppError::not_found("That instance isn't there anymore. It may have just been removed.")
-        })?;
+    let row = crate::db::instances::require(&state.db, instance_id).await?;
     let shared = super::shared::server_id(&row)
         .ok_or_else(|| AppError::conflict("This instance isn't shared"))?
         .to_owned();
@@ -166,7 +162,7 @@ pub async fn remove_unused_uploads(state: &AppState) -> AppResult<crate::dto::Re
 
 /// Remove an upload no pack uses, freeing its space now.
 pub async fn remove_upload(state: &AppState, sha256: &str) -> AppResult<()> {
-    if sha256.len() != 64 || !sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+    if !crate::sync::manifest::is_sha256(sha256) {
         return Err(AppError::invalid_input("That isn't one of your uploads"));
     }
     state

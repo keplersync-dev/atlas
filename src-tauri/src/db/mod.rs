@@ -73,4 +73,27 @@ mod tests {
             assert!(names.iter().any(|n| n == t), "missing table {t}: {names:?}");
         }
     }
+
+    #[tokio::test]
+    async fn content_is_indexed_once_by_instance() {
+        let pool = super::open_in_memory().await.unwrap();
+        let indexes: Vec<(String,)> = sqlx::query_as(
+            "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'instance_content'",
+        )
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+        let names: Vec<_> = indexes.into_iter().map(|(n,)| n).collect();
+        assert!(
+            !names
+                .iter()
+                .any(|n| n == "instance_content_instance_id_idx")
+        );
+        assert!(
+            names
+                .iter()
+                .any(|n| n.starts_with("sqlite_autoindex_instance_content")),
+            "the UNIQUE (instance_id, path) one covers it: {names:?}"
+        );
+    }
 }

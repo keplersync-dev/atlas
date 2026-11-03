@@ -3,7 +3,7 @@
 //! every (re)connect refetches the friends list, since messages may have been missed.
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use atlas_protocol::ws::{ClientMessage, HEARTBEAT_SECONDS, PresenceUpdate, ServerMessage};
 use futures_util::{SinkExt, StreamExt};
@@ -11,7 +11,7 @@ use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::header::{AUTHORIZATION, USER_AGENT};
 
-use super::Cloud;
+use super::{Cloud, Lenient};
 use crate::dto::SharedInstance;
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::events::AtlasEvent;
@@ -72,7 +72,7 @@ impl Cloud {
         });
     }
 
-    async fn keep_connected(&self) {
+    async fn keep_connected(self: &Arc<Self>) {
         let mut backoff = Duration::from_secs(1);
         while self.is_signed_in() {
             match self.connect().await {
@@ -145,15 +145,17 @@ impl Cloud {
         Err(AppError::not_signed_in())
     }
 
-    async fn run(&self, socket: Socket) -> End {
+    async fn run(self: &Arc<Self>, socket: Socket) -> End {
         let (mut sink, mut stream) = socket.split();
         let mut presence = self.presence.subscribe();
         let mut ping = tokio::time::interval(Duration::from_secs(HEARTBEAT_SECONDS));
         ping.tick().await;
+        let mut last_heard = Instant::now();
 
         loop {
             tokio::select! {
                 incoming = stream.next() => {
+                    last_heard = Instant::now();
                     let text = match incoming {
                         Some(Ok(Message::Text(text))) => text,
                         Some(Ok(Message::Close(Some(frame))))
@@ -188,6 +190,11 @@ impl Cloud {
                     }
                 }
                 _ = ping.tick() => {
+                    // Sleep or a network change can leave a socket that's open on this side
+                    // only: nothing arrives, not even the answers to pings.
+                    if gone_quiet(last_heard, Instant::now()) {
+                        return End::Lost;
+                    }
                     if send(&mut sink, ClientMessage::Ping {}).await.is_err() {
                         return End::Lost;
                     }
@@ -197,8 +204,9 @@ impl Cloud {
     }
 
     /// Server hints → UI events. A shared instance change refreshes the cached list
-    /// first, so instance summaries already see the new latest revision.
-    async fn forward(&self, msg: ServerMessage) {
+    /// first, so instance summaries already see the new latest revision; that runs on its
+    /// own, so the socket keeps reading meanwhile.
+    async fn forward(self: &Arc<Self>, msg: ServerMessage) {
         let event = match msg {
             ServerMessage::PresenceChanged { user_id, presence } => {
                 AtlasEvent::PresenceChanged { user_id, presence }
@@ -213,19 +221,28 @@ impl Cloud {
             ServerMessage::SharedChanged {
                 shared_instance_id, ..
             } => {
-                let refreshed = self
-                    .cached_get::<Vec<SharedInstance>>(SHARED_CACHE_KEY, "/shared-instances")
-                    .await;
-                match refreshed {
-                    // A changed role (the owner made them an editor) applies straight away.
-                    Ok(list) => {
-                        if let Err(e) = crate::db::instances::sync_roles(&self.db, &list).await {
-                            tracing::warn!(error = %e, "couldn't update roles");
+                let cloud = Arc::clone(self);
+                tauri::async_runtime::spawn(async move {
+                    let refreshed = cloud
+                        .cached_get::<Lenient<SharedInstance>>(
+                            SHARED_CACHE_KEY,
+                            "/shared-instances",
+                        )
+                        .await;
+                    match refreshed {
+                        // A changed role (the owner made them an editor) applies straight away.
+                        Ok(list) => {
+                            if let Err(e) =
+                                crate::db::instances::sync_roles(&cloud.db, &list.items).await
+                            {
+                                tracing::warn!(error = %e, "couldn't update roles");
+                            }
                         }
+                        Err(e) => tracing::info!(error = %e, "couldn't refresh shared instances"),
                     }
-                    Err(e) => tracing::info!(error = %e, "couldn't refresh shared instances"),
-                }
-                AtlasEvent::SharedChanged { shared_instance_id }
+                    cloud.emit(AtlasEvent::SharedChanged { shared_instance_id });
+                });
+                return;
             }
             ServerMessage::GroupsChanged { group_id } => AtlasEvent::GroupsChanged {
                 group_id: Some(group_id),
@@ -256,4 +273,27 @@ fn bearer(token: &str) -> AppResult<tokio_tungstenite::tungstenite::http::Header
     format!("Bearer {token}")
         .parse()
         .map_err(|_| AppError::not_signed_in())
+}
+
+/// Nothing from the server for two heartbeats: it answers every ping, so the connection
+/// is gone even if the socket still looks open.
+fn gone_quiet(last_heard: Instant, now: Instant) -> bool {
+    now.saturating_duration_since(last_heard) > Duration::from_secs(2 * HEARTBEAT_SECONDS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_connection_that_went_quiet_is_lost() {
+        let heard = Instant::now();
+        let after = |secs| heard + Duration::from_secs(secs);
+        assert!(
+            !gone_quiet(heard, after(HEARTBEAT_SECONDS)),
+            "a ping unanswered yet"
+        );
+        assert!(!gone_quiet(heard, after(2 * HEARTBEAT_SECONDS)));
+        assert!(gone_quiet(heard, after(3 * HEARTBEAT_SECONDS)));
+    }
 }

@@ -1,4 +1,4 @@
-//! Live events for the UI. Mirrors the `AtlasEvent` union in types.ts.
+//! Live events for the UI (the `AtlasEvent` union in types.ts).
 //!
 //! Everything goes out on one channel, `atlas://event`, which src/lib/api/tauri.ts
 //! listens to. Most events mean "refetch"; `instance.progress` and `presence.changed`
@@ -11,6 +11,7 @@ use crate::dto::{ActivityItem, Id, InstanceStatus, Notice, Presence, SyncProgres
 
 pub const CHANNEL: &str = "atlas://event";
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all_fields = "camelCase")]
 pub enum AtlasEvent {

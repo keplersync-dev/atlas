@@ -2,7 +2,7 @@ use tauri::{AppHandle, Runtime, State};
 
 use crate::dto::{
     Id, InstanceSummary, InviteInput, InviteRole, PublishInput, PublishPlan, ShareInstanceInput,
-    SharedInstance, SharedInstanceDetail, SyncOptions, SyncPreview, UpdateSharedInstanceInput,
+    SharedInstance, SharedInstanceDetail, SyncOptions, SyncPreview,
 };
 use crate::error::AppResult;
 use crate::services::{accept, instances, publish, shared, sync};
@@ -134,16 +134,6 @@ pub async fn revert_local_changes<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn update_shared_instance<R: Runtime>(
-    app: AppHandle<R>,
-    state: State<'_, AppState>,
-    id: Id,
-    patch: UpdateSharedInstanceInput,
-) -> AppResult<SharedInstance> {
-    shared::update(&state, &app, &id, patch).await
-}
-
-#[tauri::command]
 pub async fn invite_to_shared_instance<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
@@ -172,26 +162,6 @@ pub async fn remove_shared_member<R: Runtime>(
     user_id: Id,
 ) -> AppResult<SharedInstance> {
     shared::remove_member(&state, &app, &id, &user_id).await
-}
-
-#[tauri::command]
-pub async fn unshare_from_group<R: Runtime>(
-    app: AppHandle<R>,
-    state: State<'_, AppState>,
-    id: Id,
-    group_id: Id,
-) -> AppResult<SharedInstance> {
-    shared::unshare_from_group(&state, &app, &id, &group_id).await
-}
-
-#[tauri::command]
-pub async fn transfer_shared_instance<R: Runtime>(
-    app: AppHandle<R>,
-    state: State<'_, AppState>,
-    id: Id,
-    user_id: Id,
-) -> AppResult<SharedInstance> {
-    shared::transfer(&state, &app, &id, &user_id).await
 }
 
 #[tauri::command]

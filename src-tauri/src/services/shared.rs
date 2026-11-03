@@ -9,11 +9,11 @@ use reqwest::Method;
 use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Runtime};
 
+use crate::cloud::Lenient;
 use crate::db::{self, instances::InstanceRow};
 use crate::dto::{
     AddMembers, Id, InviteInput, InviteRole, MemberStatus, SetMemberRole, ShareToGroup,
-    SharedInstance, SharedInstanceDetail, Synced, Transfer, UpdateSharedInstance,
-    UpdateSharedInstanceInput,
+    SharedInstance, SharedInstanceDetail, Synced,
 };
 use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
@@ -25,8 +25,8 @@ pub const CACHE_KEY: &str = "shared_instances";
 
 /// The last fetched copy of one shared instance (no network).
 pub async fn cached(state: &AppState, id: &str) -> AppResult<Option<SharedInstance>> {
-    let list: Option<Vec<SharedInstance>> = db::cloud_cache::get(&state.db, CACHE_KEY).await?;
-    Ok(list.and_then(|l| l.into_iter().find(|s| s.id == id)))
+    let list: Option<Lenient<SharedInstance>> = db::cloud_cache::get(&state.db, CACHE_KEY).await?;
+    Ok(list.and_then(|l| l.items.into_iter().find(|s| s.id == id)))
 }
 
 /// Shared instances on the server, linked to their local copies. When the list is fresh,
@@ -38,9 +38,12 @@ pub async fn list<R: Runtime>(
     state: &AppState,
     app: &AppHandle<R>,
 ) -> AppResult<Vec<SharedInstance>> {
-    let mut list: Vec<SharedInstance> = state
+    let Lenient {
+        items: mut list,
+        left_out,
+    } = state
         .cloud
-        .cached_get(CACHE_KEY, "/shared-instances")
+        .cached_get::<Lenient<SharedInstance>>(CACHE_KEY, "/shared-instances")
         .await?;
     db::instances::sync_roles(&state.db, &list).await?;
     let rows = db::instances::list(&state.db).await?;
@@ -59,6 +62,8 @@ pub async fn list<R: Runtime>(
                 if row.sync_report_due {
                     report_synced(state, row).await;
                 }
+            } else if left_out > 0 {
+                tracing::info!(instance = %row.id, "not in the list, but some of it couldn't be read; left alone");
             } else if row.shared_scope.as_deref() == Some(scope.as_str()) {
                 tracing::info!(instance = %row.id, "shared instance gone; now local-only");
                 unlink(state, app, &row.id).await?;
@@ -96,21 +101,6 @@ pub async fn decline<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &Id) 
     Ok(())
 }
 
-pub async fn update<R: Runtime>(
-    state: &AppState,
-    app: &AppHandle<R>,
-    id: &Id,
-    patch: UpdateSharedInstanceInput,
-) -> AppResult<SharedInstance> {
-    let body = UpdateSharedInstance {
-        name: patch.name,
-        description: patch.description,
-    };
-    let path = format!("/shared-instances/{}", segment(id)?);
-    let shared = state.cloud.call(Method::PATCH, &path, Some(&body)).await?;
-    finish(state, app, id, shared).await
-}
-
 pub async fn invite<R: Runtime>(
     state: &AppState,
     app: &AppHandle<R>,
@@ -137,22 +127,6 @@ pub async fn invite<R: Runtime>(
     let Some(shared) = shared else {
         return Err(AppError::invalid_input("Pick someone to share it with"));
     };
-    finish(state, app, id, shared).await
-}
-
-/// Stop sharing with a group. Members who only had it through the group lose it.
-pub async fn unshare_from_group<R: Runtime>(
-    state: &AppState,
-    app: &AppHandle<R>,
-    id: &Id,
-    group_id: &Id,
-) -> AppResult<SharedInstance> {
-    let path = format!(
-        "/shared-instances/{}/groups/{}",
-        segment(id)?,
-        segment(group_id)?
-    );
-    let shared = state.cloud.call(Method::DELETE, &path, None::<&()>).await?;
     finish(state, app, id, shared).await
 }
 
@@ -192,20 +166,6 @@ pub async fn remove_member<R: Runtime>(
         .await?;
     let detail = get(state, id).await?;
     finish(state, app, id, detail.shared).await
-}
-
-pub async fn transfer<R: Runtime>(
-    state: &AppState,
-    app: &AppHandle<R>,
-    id: &Id,
-    user_id: &Id,
-) -> AppResult<SharedInstance> {
-    let path = format!("/shared-instances/{}/transfer", segment(id)?);
-    let body = Transfer {
-        user_id: user_id.clone(),
-    };
-    let shared = state.cloud.call(Method::POST, &path, Some(&body)).await?;
-    finish(state, app, id, shared).await
 }
 
 /// Leave it. Your copy stays, as a local-only instance.
@@ -276,11 +236,11 @@ pub async fn report_synced(state: &AppState, row: &InstanceRow) {
 pub async fn changed<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) {
     match state
         .cloud
-        .cached_get::<Vec<SharedInstance>>(CACHE_KEY, "/shared-instances")
+        .cached_get::<Lenient<SharedInstance>>(CACHE_KEY, "/shared-instances")
         .await
     {
         Ok(list) => {
-            if let Err(e) = db::instances::sync_roles(&state.db, &list).await {
+            if let Err(e) = db::instances::sync_roles(&state.db, &list.items).await {
                 tracing::warn!(error = %e, "couldn't update roles");
             }
         }
@@ -397,7 +357,7 @@ fn icon_sha256(s: &SharedInstance) -> Option<&str> {
     s.icon
         .as_deref()
         .and_then(|i| i.strip_prefix("sha256:"))
-        .filter(|sha| sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit()))
+        .filter(|sha| crate::sync::manifest::is_sha256(sha))
 }
 
 /// The picture of a shared instance as the server sends it, from the icon cache (fetched
@@ -421,13 +381,11 @@ async fn fetch_icon(state: &AppState, shared: &str, sha256: &str, file: &Path) -
         .map_err(|_| AppError::offline())?
         .and_then(|r| r.error_for_status())
         .map_err(|_| AppError::offline())?;
-    let bytes = res.bytes().await.map_err(|_| AppError::offline())?;
-    if bytes.len() as u64 > MAX_ICON_BYTES
-        || hex::encode(Sha256::digest(&bytes)) != sha256
-        || !crate::scan::icons::is_image(&bytes)
-    {
-        return Err(AppError::unknown("not the picture it should be"));
-    }
+    let bytes = crate::cloud::files::body_up_to(res, MAX_ICON_BYTES)
+        .await
+        .map_err(|_| AppError::offline())?
+        .filter(|b| hex::encode(Sha256::digest(b)) == sha256 && crate::scan::icons::is_image(b))
+        .ok_or_else(|| AppError::unknown("not the picture it should be"))?;
     let tmp = file.with_extension("part");
     tokio::fs::write(&tmp, &bytes).await?;
     tokio::fs::rename(&tmp, file).await?;
@@ -448,12 +406,7 @@ pub fn server_id(row: &InstanceRow) -> Option<&str> {
         .filter(|id| !id.starts_with("dev:"))
 }
 
-/// An id as a path segment. Ids are UUIDs; anything else is refused before it can change
-/// the path.
+/// A shared instance's or user's id as a path segment (`ids::segment`).
 pub fn segment(id: &str) -> AppResult<&str> {
-    if !id.is_empty() && id.bytes().all(|b| b.is_ascii_hexdigit() || b == b'-') {
-        Ok(id)
-    } else {
-        Err(AppError::not_found("That pack isn't available"))
-    }
+    crate::util::ids::segment(id, || AppError::not_found("That pack isn't available"))
 }

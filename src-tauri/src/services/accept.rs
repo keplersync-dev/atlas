@@ -129,11 +129,7 @@ pub async fn into_existing<R: Runtime>(
     install_optional: Vec<String>,
     auto_update: bool,
 ) -> AppResult<InstanceSummary> {
-    let row = db::instances::get(&state.db, instance_id)
-        .await?
-        .ok_or_else(|| {
-            AppError::not_found("That instance isn't there anymore. It may have just been removed.")
-        })?;
+    let row = db::instances::require(&state.db, instance_id).await?;
     if row.shared_instance_id.is_some() {
         return Err(AppError::conflict(
             "That instance is already shared. Pick another one.",

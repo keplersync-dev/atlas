@@ -21,8 +21,8 @@ use atlas_protocol::ws::PresenceUpdate;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use reqwest::{Method, StatusCode};
-use serde::Serialize;
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize};
 use sqlx::SqlitePool;
 use tokio::sync::{oneshot, watch};
 use url::Url;
@@ -534,6 +534,38 @@ impl Cloud {
     }
 }
 
+/// A list from the server, leaving out items this build can't read: one with a value only
+/// a newer server knows (a new kind of activity, a new loader) mustn't fail the whole list.
+#[derive(Debug, Serialize)]
+#[serde(transparent)]
+pub struct Lenient<T> {
+    pub items: Vec<T>,
+    /// How many were left out: the list isn't the whole of it.
+    #[serde(skip)]
+    pub left_out: usize,
+}
+
+impl<'de, T: DeserializeOwned> Deserialize<'de> for Lenient<T> {
+    fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let all = Vec::<serde_json::Value>::deserialize(d)?;
+        let count = all.len();
+        let items: Vec<T> = all
+            .into_iter()
+            .filter_map(|item| {
+                serde_json::from_value(item)
+                    .inspect_err(
+                        |e| tracing::warn!(error = %e, "left out an item Atlas can't read"),
+                    )
+                    .ok()
+            })
+            .collect();
+        Ok(Lenient {
+            left_out: count - items.len(),
+            items,
+        })
+    }
+}
+
 /// The server's `{ error: { code, message } }` as the UI's error.
 fn server_error(status: StatusCode, bytes: &[u8]) -> AppError {
     let Ok(ErrorBody { error }) = serde_json::from_slice::<ErrorBody>(bytes) else {
@@ -603,6 +635,22 @@ mod tests {
         let err = cloud.check_reachable().await.unwrap_err();
         assert_eq!(err.code, ErrorCode::Offline);
         assert!(err.message.contains("Atlas server"), "{}", err.message);
+    }
+
+    #[test]
+    fn one_unreadable_item_leaves_the_rest_of_the_list() {
+        let item = |kind: &str| {
+            serde_json::json!({
+                "id": kind, "type": kind, "actor": null, "createdAt": "2026-11-01T00:00:00.000Z",
+                "readAt": null, "sharedInstanceId": null, "sharedInstanceName": null,
+                "groupId": null, "groupName": null, "revision": null
+            })
+        };
+        let list = serde_json::json!([item("friend_request"), item("from_a_newer_server")]);
+        let list = serde_json::from_value::<Lenient<crate::dto::ActivityItem>>(list).unwrap();
+        assert_eq!(list.items.len(), 1);
+        assert_eq!(list.items[0].id, "friend_request");
+        assert_eq!(list.left_out, 1);
     }
 
     #[tokio::test]
