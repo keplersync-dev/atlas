@@ -1,7 +1,7 @@
 //! Sync state, computed when a response is built and never stored.
 //! Pure functions.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::manifest::Manifest;
 use crate::db::content::ContentRow;
@@ -17,6 +17,9 @@ pub struct LocalChanges<'a> {
     pub mode_changed: Vec<&'a ContentRow>,
     /// Owners/editors: files not in the shared version that would now be shared.
     pub added: Vec<&'a ContentRow>,
+    /// Owners/editors: shared files whose contents changed here, at the same path (a jar
+    /// replaced by a build with the same name).
+    pub changed: Vec<&'a ContentRow>,
     /// Owners/editors: the launcher runs other Minecraft or loader versions than the
     /// shared ones (see `version_change`).
     pub versions: bool,
@@ -24,7 +27,8 @@ pub struct LocalChanges<'a> {
 
 impl LocalChanges<'_> {
     pub fn count(&self) -> u32 {
-        (self.removed.len() + self.mode_changed.len() + self.added.len()) as u32
+        (self.removed.len() + self.mode_changed.len() + self.added.len() + self.changed.len())
+            as u32
             + u32::from(self.versions)
     }
 }
@@ -82,11 +86,25 @@ pub fn local_changes<'a>(
         return out;
     }
     out.versions = versions_differ;
+    let shared: HashMap<String, &str> = synced
+        .map(|m| {
+            m.content
+                .iter()
+                .map(|e| (e.path.to_lowercase(), e.sha1.as_str()))
+                .collect()
+        })
+        .unwrap_or_default();
     for r in live.into_iter().filter(|r| r.enabled) {
         let now = mode(&r.share_mode);
         let published = r.published_share_mode.as_deref().and_then(mode);
         if r.is_managed && now != published {
             out.mode_changed.push(r);
+        } else if r.is_managed
+            && shared
+                .get(&r.path.to_lowercase())
+                .is_some_and(|sha1| !sha1.eq_ignore_ascii_case(&r.sha1))
+        {
+            out.changed.push(r);
         } else if !r.is_managed && now != Some(ShareMode::Private) && now != published {
             out.added.push(r);
         }
@@ -235,6 +253,31 @@ mod tests {
         assert_eq!(
             local_changes(MemberRole::Editor, &rows, Some(&m), false).count(),
             4
+        );
+    }
+
+    #[test]
+    fn a_shared_file_replaced_at_the_same_path_is_a_change() {
+        let mut rebuilt = row("tandem", true, true, "required", Some("required"));
+        rebuilt.sha1 = "c".repeat(40);
+        let rows = [
+            rebuilt,
+            row("sodium", true, true, "required", Some("required")),
+        ];
+        let m = manifest(&[("tandem", true), ("sodium", true)]);
+        let c = local_changes(MemberRole::Owner, &rows, Some(&m), false);
+        assert_eq!(
+            c.changed
+                .iter()
+                .map(|r| r.name.as_str())
+                .collect::<Vec<_>>(),
+            ["tandem"]
+        );
+        assert_eq!(c.count(), 1);
+        // A viewer's copy is fixed by the next sync, not published.
+        assert_eq!(
+            local_changes(MemberRole::Viewer, &rows, Some(&m), false).count(),
+            0
         );
     }
 
