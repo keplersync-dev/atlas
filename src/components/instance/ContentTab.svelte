@@ -195,7 +195,8 @@
     />
   </label>
   <KindChips items={instance.content} bind:kind counts />
-  {#if lockedReason}
+  <!-- While the game runs, the bar above already says so. -->
+  {#if lockedReason && !instance.isRunning}
     <span class="min-w-0 truncate text-[13px] text-(--text-faint)"
       >{lockedReason}</span
     >
