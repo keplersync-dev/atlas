@@ -41,7 +41,7 @@ impl Manifest {
         self.icon
             .as_deref()?
             .strip_prefix("sha256:")
-            .filter(|h| is_hex(h, 64))
+            .filter(|h| is_sha256(h))
     }
 
     /// Every uploaded file this version needs: uploads, config files (not those from the
@@ -190,9 +190,13 @@ pub const MAX_OVERRIDE_BYTES: u64 = 8 * 1024 * 1024;
 pub const MAX_OVERRIDES_TOTAL: u64 = 150 * 1024 * 1024;
 /// The largest instance picture that can be shared.
 pub const MAX_ICON_BYTES: u64 = 1024 * 1024;
+/// The largest file a manifest may list. Sizes are added up, so they stay far from overflowing.
+pub const MAX_FILE_BYTES: u64 = 4 * 1024 * 1024 * 1024;
 pub const CONTENT_DIRS: [&str; 4] = ["mods/", "resourcepacks/", "shaderpacks/", "datapacks/"];
-/// Never uploaded: worlds and what the game or launcher writes about this PC.
-pub const NEVER_SHARED: [&str; 12] = [
+/// Never uploaded or written from a pack: worlds, what the game or launcher writes about
+/// this PC, and the official launcher's own files, there when the game folder is its root
+/// (`.minecraft`): its profiles and accounts, and the versions, libraries and Java it runs.
+pub const NEVER_SHARED: [&str; 17] = [
     "saves/",
     "screenshots/",
     "logs/",
@@ -205,6 +209,11 @@ pub const NEVER_SHARED: [&str; 12] = [
     "instance.cfg",
     "mmc-pack.json",
     "profile.json",
+    "launcher_",
+    "versions/",
+    "libraries/",
+    "assets/",
+    "runtime/",
 ];
 /// What uploaded files may be: text, data and pictures, never programs.
 const OVERRIDE_EXTS: [&str; 28] = [
@@ -243,7 +252,8 @@ const RISKY_EXTS: [&str; 21] = [
     "vbe", "wsf", "hta", "msi", "lnk", "reg", "jar", "sh",
 ];
 /// Files known to hold a Minecraft login (ReAuth keeps Microsoft tokens, readable when
-/// its encryption is off). Never uploaded, whatever the owner ticks.
+/// its encryption is off), and the official launcher's `launcher_accounts*.json`.
+/// Never uploaded, whatever the owner ticks.
 const LOGIN_FILES: [&str; 2] = [".reauth.cfg", "reauth.toml"];
 const DOWNLOAD_HOSTS: [&str; 3] = [
     "cdn.modrinth.com",
@@ -287,7 +297,8 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
         ) || b.project_id.is_empty()
             || b.version_id.is_empty()
             || b.name.trim().is_empty()
-            || !is_hex(&b.sha1, 40)
+            || !is_sha1(&b.sha1)
+            || b.size_bytes > MAX_FILE_BYTES
         {
             return bad("The modpack it's based on is damaged.".into());
         }
@@ -300,7 +311,8 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
     }
     let mut seen = HashSet::new();
     for e in &m.content {
-        check_path(&e.path, Some(&CONTENT_DIRS))?;
+        // In its own kind's folder: a mod listed as a shader pack would skip approval.
+        check_path(&e.path, Some(&[content_dir(e.kind)]))?;
         let ext = if e.kind == ContentKind::Mod {
             "jar"
         } else {
@@ -309,8 +321,11 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
         if !e.path.to_ascii_lowercase().ends_with(&format!(".{ext}")) {
             return bad(format!("{} has to be a .{ext} file.", e.path));
         }
-        if !is_hex(&e.sha1, 40) || !is_hex(&e.sha256, 64) {
+        if !is_sha1(&e.sha1) || !is_sha256(&e.sha256) {
             return bad(format!("{} couldn't be read properly. Try again.", e.path));
+        }
+        if e.size_bytes > MAX_FILE_BYTES {
+            return bad(format!("{} is over 4 GB.", e.path));
         }
         if e.source == ContentSource::Local {
             return bad(format!("{} is set to Only me.", e.path));
@@ -366,8 +381,11 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
         if o.keep == Some(Keep::MergeServers) && o.path != "servers.dat" {
             return bad(format!("{} can't be merged like a server list.", o.path));
         }
-        if !is_hex(&o.sha256, 64) {
+        if !is_sha256(&o.sha256) {
             return bad(format!("{} couldn't be read properly. Try again.", o.path));
+        }
+        if o.size_bytes > MAX_FILE_BYTES {
+            return bad(format!("{} is over 4 GB.", o.path));
         }
         if !seen.insert(o.path.to_lowercase()) {
             return bad(format!("{} is in it twice.", o.path));
@@ -394,7 +412,9 @@ pub fn upload_refusal(path: &str, size_bytes: u64) -> Option<Refusal> {
             .any(|p| lower.starts_with(p))
     {
         Some(Refusal::Folder)
-    } else if LOGIN_FILES.contains(&name) {
+    } else if LOGIN_FILES.contains(&name)
+        || (name.starts_with("launcher_accounts") && name.ends_with(".json"))
+    {
         Some(Refusal::Login)
     } else if RISKY_EXTS.contains(&ext.as_str()) {
         Some(Refusal::Program)
@@ -421,12 +441,25 @@ pub enum Refusal {
 }
 
 /// Whether a modpack's own file may be written from the pack: a safe path, not where
-/// mods and packs go (those are content), and nothing Windows runs.
+/// mods and packs go (those are content) or a folder never shared, and nothing Windows runs.
 pub fn can_come_from_pack(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
     check_path(path, None).is_ok()
-        && !CONTENT_DIRS.iter().any(|d| lower.starts_with(d))
+        && !CONTENT_DIRS
+            .iter()
+            .chain(&NEVER_SHARED)
+            .any(|d| lower.starts_with(d))
         && !RISKY_EXTS.contains(&extension(path).as_str())
+}
+
+/// The folder each kind of content is in (scan/files.rs in the app finds them there).
+pub fn content_dir(kind: ContentKind) -> &'static str {
+    match kind {
+        ContentKind::Mod => "mods/",
+        ContentKind::Resourcepack => "resourcepacks/",
+        ContentKind::Shaderpack => "shaderpacks/",
+        ContentKind::Datapack => "datapacks/",
+    }
 }
 
 fn shareable_type(path: &str) -> bool {
@@ -461,6 +494,9 @@ fn check_path(path: &str, dirs: Option<&[&str]>) -> Result<(), Invalid> {
         // Covers . and .., and names Windows would quietly trim ("x.bat." → "x.bat").
         return bad("empty segment, or one ending in . or a space");
     }
+    if path.split('/').any(is_reserved_name) {
+        return bad("a name Windows keeps for a device");
+    }
     if path
         .chars()
         .any(|c| c.is_control() || "<>\"|?*".contains(c))
@@ -474,8 +510,32 @@ fn check_path(path: &str, dirs: Option<&[&str]>) -> Result<(), Invalid> {
     Ok(())
 }
 
-fn is_hex(s: &str, len: usize) -> bool {
-    s.len() == len && s.bytes().all(|b| b.is_ascii_hexdigit())
+/// A name Windows keeps for a device, with or without an extension ("CON", "nul.txt",
+/// "com1.jar"): opening it opens the device, not a file.
+pub fn is_reserved_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or("").trim_end();
+    let stem = stem.to_ascii_lowercase();
+    let port = |n: &str| {
+        let mut c = n.chars();
+        matches!((c.next(), c.next()), (Some(d), None) if d.is_ascii_digit() || "¹²³".contains(d))
+    };
+    matches!(stem.as_str(), "con" | "prn" | "aux" | "nul")
+        || stem.strip_prefix("com").is_some_and(port)
+        || stem.strip_prefix("lpt").is_some_and(port)
+}
+
+/// A sha1 as both sides write it: 40 lowercase hex digits.
+pub fn is_sha1(s: &str) -> bool {
+    is_lower_hex(s, 40)
+}
+
+/// A sha256 as both sides write it: 64 lowercase hex digits.
+pub fn is_sha256(s: &str) -> bool {
+    is_lower_hex(s, 64)
+}
+
+fn is_lower_hex(s: &str, len: usize) -> bool {
+    s.len() == len && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
 }
 
 /// A download link a manifest may carry: https on Modrinth's or CurseForge's CDN.
@@ -617,11 +677,51 @@ mod tests {
             "mods/con<1>.jar",
             "mods/sub./x.jar",
             "mods/sub /x.jar",
+            "mods/CON.jar",
+            "mods/nul",
+            "mods/aux/x.jar",
+            "mods/Com1.jar",
+            "mods/lpt¹.jar",
+            "mods/prn .x.jar",
             "",
         ] {
             assert!(with_path(p).is_err(), "{p:?} should be refused");
         }
         assert!(with_path("mods/sub/ok.jar").is_ok());
+        assert!(with_path("mods/console.jar").is_ok());
+        assert!(with_path("mods/com10.jar").is_ok());
+    }
+
+    #[test]
+    fn content_is_in_its_own_kinds_folder() {
+        let m = parse(&example()).unwrap();
+        let with = |kind: ContentKind, path: &str| {
+            let mut m = m.clone();
+            m.content[3].kind = kind;
+            m.content[3].path = path.into();
+            validate(&m)
+        };
+        assert!(with(ContentKind::Shaderpack, "shaderpacks/x.zip").is_ok());
+        assert!(with(ContentKind::Datapack, "datapacks/x.zip").is_ok());
+        // A mod's bytes listed as a shader pack would install with no approval.
+        assert!(with(ContentKind::Shaderpack, "mods/x.zip").is_err());
+        assert!(with(ContentKind::Resourcepack, "shaderpacks/x.zip").is_err());
+        assert!(with(ContentKind::Mod, "resourcepacks/x.jar").is_err());
+    }
+
+    #[test]
+    fn hashes_are_lowercase_and_sizes_bounded() {
+        let mut m = parse(&example()).unwrap();
+        m.content[0].sha1 = m.content[0].sha1.to_uppercase();
+        assert!(validate(&m).is_err(), "uppercase sha1");
+        let mut m = parse(&example()).unwrap();
+        m.overrides[0].sha256 = m.overrides[0].sha256.to_uppercase();
+        assert!(validate(&m).is_err(), "uppercase sha256");
+        let mut m = parse(&example()).unwrap();
+        m.content[0].size_bytes = MAX_FILE_BYTES + 1;
+        assert!(validate(&m).is_err(), "over 4 GB");
+        assert!(is_sha1(&"a".repeat(40)) && !is_sha1(&"g".repeat(40)));
+        assert!(is_sha256(&"0".repeat(64)) && !is_sha256(&"0".repeat(63)));
     }
 
     #[test]
@@ -783,6 +883,29 @@ mod tests {
         );
         assert!(can_come_from_pack("fancymenu_data/menu.png"));
         assert!(!can_come_from_pack("mods/extra.jar"));
+    }
+
+    #[test]
+    fn the_official_launchers_files_are_never_shared() {
+        // A game folder can be the official launcher's own: what it runs is beside it.
+        for path in [
+            "launcher_profiles.json",
+            "launcher_accounts.json",
+            "versions/1.21.1/1.21.1.json",
+            "libraries/org/x/x.json",
+            "assets/indexes/17.json",
+            "runtime/java-runtime-delta/windows-x64/jvm.cfg",
+            "saves/World/level.dat",
+            "minecraftinstance.json",
+        ] {
+            assert_eq!(upload_refusal(path, 100), Some(Refusal::Folder), "{path}");
+            assert!(!can_come_from_pack(path), "{path}");
+        }
+        assert_eq!(
+            upload_refusal("old/.minecraft/launcher_accounts_microsoft_store.json", 100),
+            Some(Refusal::Login)
+        );
+        assert_eq!(upload_refusal("config/launcher_ideas.json", 100), None);
     }
 
     #[test]

@@ -97,6 +97,7 @@ impl Source {
             Source::Server {
                 shared_instance_id, ..
             } => {
+                let shared_instance_id = crate::services::shared::segment(shared_instance_id)?;
                 let dir = state.paths.manifests.join(shared_instance_id);
                 let file = dir.join(format!("{revision}.json"));
                 if let Ok(bytes) = std::fs::read(&file) {
@@ -143,5 +144,35 @@ impl Source {
             } => Some(shared_instance_id),
             Source::Dev(_) => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn a_shared_id_that_isnt_one_never_becomes_a_path() {
+        let root =
+            std::env::temp_dir().join(format!("atlas-source-{}", crate::util::ids::new_id()));
+        let db = crate::db::open_in_memory().await.unwrap();
+        let mut state = AppState::new(db.clone(), crate::state::AppPaths::new(&root));
+        state.cloud = std::sync::Arc::new(crate::cloud::Cloud::new(
+            db,
+            None,
+            std::sync::Arc::new(crate::cloud::tokens::MemoryStore::default()),
+        ));
+        let src = Source::Server {
+            shared_instance_id: "../../escaped".into(),
+            latest: 1,
+            frozen: false,
+        };
+        let err = src.manifest(&state, 1).await.unwrap_err();
+        assert_eq!(
+            err.code,
+            crate::error::ErrorCode::NotFound,
+            "refused before any request"
+        );
+        std::fs::remove_dir_all(&root).ok();
     }
 }

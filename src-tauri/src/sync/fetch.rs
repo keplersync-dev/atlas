@@ -1,7 +1,11 @@
 //! Getting the bytes a plan needs into Atlas's cache, verified.
 //!
-//!   cache/<sha1[0..2]>/<sha1>                    mods and packs, reused across instances
-//!   cache/blobs/<sha256[0..2]>/<sha256>          config files (only have a sha256)
+//!   cache/files/<sha1[0..2]>/<sha1>              mods, packs and modpacks from Modrinth and
+//!                                                CurseForge, reused across instances
+//!   cache/blobs/<sha256[0..2]>/<sha256>          uploads to Atlas, config files, modpack files
+//!
+//! Uploads stay out of `files/`: there they could stand in for a Modrinth or CurseForge
+//! file with the same hashes, which installs without the approval an upload needs.
 //!
 //! A file only enters the cache after its hashes match; nothing is ever written straight
 //! to its final place in a game folder.
@@ -22,11 +26,39 @@ use crate::util::ids::new_id;
 pub const STALL: Duration = Duration::from_secs(30);
 
 pub fn cache_file(paths: &AppPaths, sha1: &str) -> PathBuf {
-    paths.cache.join(&sha1[..2]).join(sha1)
+    paths.cache.join("files").join(&sha1[..2]).join(sha1)
 }
 
 pub fn blob_file(paths: &AppPaths, sha256: &str) -> PathBuf {
     paths.cache.join("blobs").join(&sha256[..2]).join(sha256)
+}
+
+/// Where a content file is cached: by where it comes from, never by its hashes alone.
+pub fn content_file(paths: &AppPaths, entry: &Entry) -> PathBuf {
+    if entry.source == ContentSource::Upload {
+        blob_file(paths, &entry.sha256)
+    } else {
+        cache_file(paths, &entry.sha1)
+    }
+}
+
+/// Older versions cached uploads by sha1 beside mod-site downloads (cache/<sha1[0..2]>/),
+/// where one could stand in for a Modrinth or CurseForge file. That cache is dropped; its
+/// files download again when needed.
+pub fn drop_old_cache(paths: &AppPaths) {
+    let Ok(dirs) = std::fs::read_dir(&paths.cache) else {
+        return;
+    };
+    for dir in dirs.flatten() {
+        let name = dir.file_name();
+        let old = name.len() == 2
+            && name
+                .to_str()
+                .is_some_and(|n| n.bytes().all(|b| b.is_ascii_hexdigit()));
+        if old && let Err(e) = std::fs::remove_dir_all(dir.path()) {
+            tracing::warn!(error = %e, "couldn't remove the old download cache");
+        }
+    }
 }
 
 /// How a file will be obtained.
@@ -52,7 +84,7 @@ pub fn route(
     entry: &Entry,
     local: Option<&String>,
 ) -> Route {
-    if cache_file(paths, &entry.sha1).is_file() {
+    if content_file(paths, entry).is_file() {
         return Route::Cached;
     }
     if let Some(l) = local {
@@ -107,6 +139,7 @@ fn admit(from: &Path, to: &Path, sha1: Option<&str>, sha256: Option<&str>) -> Ap
 }
 
 /// Bring one content file into the cache by its route. Blocking for copies; downloads stream.
+/// Uploads (`Route::Blob`) need a link from the server first: apply.rs fetches those.
 pub async fn content(
     paths: &AppPaths,
     http: &reqwest::Client,
@@ -114,7 +147,7 @@ pub async fn content(
     route: &Route,
     on_bytes: &mut (dyn FnMut(u64) + Send),
 ) -> AppResult<()> {
-    let target = cache_file(paths, &entry.sha1);
+    let target = content_file(paths, entry);
     match route {
         Route::Cached => Ok(()),
         Route::Local(p) | Route::Source(p) => {
@@ -133,14 +166,12 @@ pub async fn content(
                 &target,
                 Some(&entry.sha1),
                 Some(&entry.sha256),
+                entry.size_bytes,
                 on_bytes,
             )
             .await
         }
-        Route::Blob => Err(AppError::unknown(format!(
-            "Atlas couldn't download {}. Try again.",
-            entry.name
-        ))),
+        Route::Blob => unreachable!("apply.rs downloads uploads itself"),
         Route::Manual(m) => Err(AppError::conflict(format!(
             "{} has to be downloaded by hand",
             m.content_name
@@ -158,12 +189,14 @@ fn download_failed() -> AppError {
 }
 
 /// Download `url` to a temporary file, then admit it to `target` if its hashes match.
+/// Gives up once it's over `size_bytes`, the size it should be.
 pub async fn download(
     http: &reqwest::Client,
     url: &str,
     target: &Path,
     sha1: Option<&str>,
     sha256: Option<&str>,
+    size_bytes: u64,
     on_bytes: &mut (dyn FnMut(u64) + Send),
 ) -> AppResult<()> {
     let offline = |e: reqwest::Error| {
@@ -190,11 +223,20 @@ pub async fn download(
         .map_err(offline)?;
     {
         let mut file = std::fs::File::create(&tmp)?;
+        let mut written = 0u64;
         while let Some(chunk) = tokio::time::timeout(STALL, resp.chunk())
             .await
             .map_err(|_| stalled())?
             .map_err(offline)?
         {
+            written += chunk.len() as u64;
+            if written > size_bytes {
+                drop(file);
+                let _ = std::fs::remove_file(&tmp);
+                return Err(AppError::conflict(
+                    "A download is bigger than the shared version (it may be corrupt or a different file)",
+                ));
+            }
             file.write_all(&chunk)?;
             on_bytes(chunk.len() as u64);
         }
@@ -223,7 +265,16 @@ pub async fn config_from(
 ) -> AppResult<PathBuf> {
     let target = blob_file(paths, &o.sha256);
     if !target.is_file() {
-        download(http, url, &target, None, Some(&o.sha256), &mut |_| {}).await?;
+        download(
+            http,
+            url,
+            &target,
+            None,
+            Some(&o.sha256),
+            o.size_bytes,
+            &mut |_| {},
+        )
+        .await?;
     }
     Ok(target)
 }
@@ -277,7 +328,7 @@ pub fn pick_up_manual_downloads(paths: &AppPaths, wanted: &[&Entry], since: Syst
         let same_size = || {
             wanted
                 .iter()
-                .filter(|e| e.size_bytes == meta.len() && !cache_file(paths, &e.sha1).is_file())
+                .filter(|e| e.size_bytes == meta.len() && !content_file(paths, e).is_file())
         };
         if same_size().next().is_none() {
             continue;
@@ -290,7 +341,7 @@ pub fn pick_up_manual_downloads(paths: &AppPaths, wanted: &[&Entry], since: Syst
         };
         if admit(
             &file.path(),
-            &cache_file(paths, &e.sha1),
+            &content_file(paths, e),
             Some(&e.sha1),
             Some(&e.sha256),
         )
@@ -378,6 +429,72 @@ mod tests {
         );
         assert!(cache_file(&paths, &second.sha1).is_file());
         assert!(!cache_file(&paths, &first.sha1).is_file());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn an_upload_never_stands_in_for_a_mod_site_file() {
+        let root =
+            std::env::temp_dir().join(format!("atlas-fetch-test-{}", crate::util::ids::new_id()));
+        let paths = AppPaths::new(&root);
+        let url = "https://cdn.modrinth.com/data/x/versions/y/x.jar";
+        let entry = |source: &str| -> Entry {
+            serde_json::from_value(serde_json::json!({
+                "kind": "mod", "source": source, "name": "X", "path": "mods/x.jar",
+                "sha1": "a".repeat(40), "sha256": "b".repeat(64), "sizeBytes": 4,
+                "downloadUrl": url, "required": true
+            }))
+            .unwrap()
+        };
+        let (upload, modrinth) = (entry("upload"), entry("modrinth"));
+        // The upload as an update caches it now, and as older versions did, by its sha1.
+        let old = paths.cache.join("aa").join("a".repeat(40));
+        for file in [content_file(&paths, &upload), old.clone()] {
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, b"jar!").unwrap();
+        }
+        let source = Source::Dev(root.join("no source"));
+        assert_eq!(route(&paths, &source, &root, &upload, None), Route::Cached);
+        assert_eq!(
+            route(&paths, &source, &root, &modrinth, None),
+            Route::Download(url.into()),
+            "the same hashes from Modrinth come from Modrinth"
+        );
+        drop_old_cache(&paths);
+        assert!(!old.exists(), "the old cache is dropped");
+        assert!(content_file(&paths, &upload).is_file());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[tokio::test]
+    async fn a_download_bigger_than_it_should_be_stops() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/x.jar", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            let (mut s, _) = listener.accept().unwrap();
+            let _ = std::io::Read::read(&mut s, &mut [0; 4096]);
+            let body = vec![b'x'; 256 * 1024];
+            let head = format!("HTTP/1.1 200 OK\r\ncontent-length: {}\r\n\r\n", body.len());
+            let _ = s.write_all(head.as_bytes());
+            let _ = s.write_all(&body);
+        });
+        let root =
+            std::env::temp_dir().join(format!("atlas-fetch-test-{}", crate::util::ids::new_id()));
+        let target = root.join("x.jar");
+        let sha256 = "0".repeat(64);
+        let err = download(
+            &reqwest::Client::new(),
+            &url,
+            &target,
+            None,
+            Some(&sha256),
+            1024,
+            &mut |_| {},
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(err.code, ErrorCode::Conflict);
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 0, "nothing left");
         std::fs::remove_dir_all(&root).ok();
     }
 }

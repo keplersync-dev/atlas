@@ -36,6 +36,9 @@ pub struct PackFile {
 /// The pack's own files by where they go in the instance ("config/a.json").
 pub type PackIndex = HashMap<String, PackFile>;
 
+/// The largest of the pack's own files Atlas reads (they're read whole, to hash them).
+const MAX_ENTRY_BYTES: u64 = super::manifest::MAX_OVERRIDES_TOTAL;
+
 /// The modpack to share the instance on: the one its launcher installed it from, else
 /// (a member's copy, made by Atlas) the one the shared instance already names.
 pub async fn base_for(state: &AppState, row: &InstanceRow) -> Option<PackBase> {
@@ -134,6 +137,7 @@ async fn download(
             &file,
             Some(&base.sha1),
             None,
+            base.size_bytes,
             on_bytes,
         )
         .await?;
@@ -224,8 +228,9 @@ fn read_index(pack: &Path, source: ContentSource) -> AppResult<PackIndex> {
             if !super::manifest::can_come_from_pack(rel) {
                 continue;
             }
-            let mut bytes = Vec::new();
-            file.read_to_end(&mut bytes)?;
+            let Some(bytes) = read_capped(&mut file, MAX_ENTRY_BYTES)? else {
+                continue;
+            };
             index.insert(
                 rel.to_owned(),
                 PackFile {
@@ -290,13 +295,19 @@ fn open(pack: &Path) -> AppResult<zip::ZipArchive<std::fs::File>> {
 }
 
 fn read_entry(zip: &mut zip::ZipArchive<std::fs::File>, name: &str) -> AppResult<Vec<u8>> {
-    let mut file = zip.by_name(name).map_err(damaged)?;
-    let mut bytes = Vec::new(); // not sized from the header: a damaged zip can claim anything
-    file.read_to_end(&mut bytes)?;
-    Ok(bytes)
+    let file = zip.by_name(name).map_err(damaged)?;
+    read_capped(file, MAX_ENTRY_BYTES)?.ok_or_else(|| damaged(format!("{name} is too big")))
 }
 
-fn damaged(e: zip::result::ZipError) -> AppError {
+/// One of the pack's files, None when it's over `limit`. Not sized from the header: a
+/// damaged or hostile zip can claim anything.
+fn read_capped(file: impl Read, limit: u64) -> std::io::Result<Option<Vec<u8>>> {
+    let mut bytes = Vec::new();
+    file.take(limit + 1).read_to_end(&mut bytes)?;
+    Ok((bytes.len() as u64 <= limit).then_some(bytes))
+}
+
+fn damaged(e: impl std::fmt::Display) -> AppError {
     tracing::warn!(error = %e, "couldn't read a modpack");
     AppError::unknown("The modpack's download is damaged. Try again.")
 }
@@ -313,6 +324,16 @@ mod tests {
             zip.write_all(bytes).unwrap();
         }
         zip.finish().unwrap();
+    }
+
+    #[test]
+    fn a_pack_file_is_never_read_past_its_limit() {
+        let endless = std::io::repeat(b'x');
+        assert_eq!(read_capped(endless, 1024).unwrap(), None);
+        assert_eq!(
+            read_capped(&b"a = 1"[..], 5).unwrap(),
+            Some(b"a = 1".to_vec())
+        );
     }
 
     #[test]
@@ -381,6 +402,7 @@ mod tests {
             &zip,
             Some(&base.sha1),
             None,
+            base.size_bytes,
             &mut |_| {},
         )
         .await

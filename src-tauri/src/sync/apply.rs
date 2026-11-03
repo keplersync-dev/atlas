@@ -6,9 +6,10 @@
 //! Files are assembled in `<game dir>/.atlas-staging/<job>/` (same drive, so the final
 //! step is a rename), with a journal of every change made, so a crash in the middle can
 //! be undone at the next start (recovery.rs). Anything that fails before "apply" leaves
-//! the folder untouched.
+//! the folder untouched. Restoring a backup goes the same way (`restore_files`).
 
 use std::collections::{HashMap, HashSet};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -145,27 +146,58 @@ fn records(plan: &Plan) -> Vec<FileRecord> {
         .collect()
 }
 
-/// What has been done so far, written after every change (see recovery.rs).
+/// What has been done so far (see recovery.rs). On disk, `journal.jsonl` in the staging
+/// folder: the backup folder on the first line, then one line per change, each added
+/// before the change is made.
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Journal {
     pub backup_dir: PathBuf,
     pub done: Vec<FileRecord>,
+    #[serde(skip)]
+    file: Option<std::fs::File>,
 }
 
+const JOURNAL: &str = "journal.jsonl";
+
 impl Journal {
-    fn save(&self, staging: &Path) -> AppResult<()> {
-        let tmp = staging.join("journal.json.tmp");
-        std::fs::write(&tmp, serde_json::to_vec(self)?)?;
-        std::fs::rename(tmp, staging.join("journal.json"))?;
+    fn start(staging: &Path, backup_dir: PathBuf) -> AppResult<Self> {
+        let mut file = std::fs::File::create(staging.join(JOURNAL))?;
+        file.write_all(format!("{}\n", serde_json::to_string(&backup_dir)?).as_bytes())?;
+        Ok(Self {
+            backup_dir,
+            done: vec![],
+            file: Some(file),
+        })
+    }
+
+    fn record(&mut self, path: &str, action: FileAction) -> AppResult<()> {
+        let step = FileRecord {
+            path: path.to_string(),
+            action,
+        };
+        if let Some(file) = &mut self.file {
+            file.write_all(format!("{}\n", serde_json::to_string(&step)?).as_bytes())?;
+        }
+        self.done.push(step);
         Ok(())
     }
 
-    fn record(&mut self, staging: &Path, path: &str, action: FileAction) -> AppResult<()> {
-        self.done.push(FileRecord {
-            path: path.to_string(),
-            action,
-        });
-        self.save(staging)
+    /// The journal a job left in `staging`, if it got as far as starting one. A last line
+    /// cut short by a crash is left out: that change hadn't been made. Older versions
+    /// wrote the whole journal as one JSON file.
+    pub fn read(staging: &Path) -> Option<Self> {
+        let Ok(text) = std::fs::read_to_string(staging.join(JOURNAL)) else {
+            let old = std::fs::read(staging.join("journal.json")).ok()?;
+            return serde_json::from_slice(&old).ok();
+        };
+        let mut lines = text.lines();
+        let backup_dir = serde_json::from_str(lines.next()?).ok()?;
+        let done = lines.map_while(|l| serde_json::from_str(l).ok()).collect();
+        Some(Self {
+            backup_dir,
+            done,
+            file: None,
+        })
     }
 }
 
@@ -180,9 +212,7 @@ pub async fn run<R: Runtime>(
     // 1. Never write under a running game.
     progress.wait_for_game_exit(state).await?;
 
-    let row = db::instances::get(&state.db, &id).await?.ok_or_else(|| {
-        AppError::not_found("That instance isn't there anymore. It may have just been removed.")
-    })?;
+    let row = db::instances::require(&state.db, &id).await?;
     let game_dir = PathBuf::from(&row.game_dir);
     if !game_dir.is_dir() {
         return Err(AppError::conflict(
@@ -296,20 +326,16 @@ async fn fetch_all<R: Runtime>(
         Some(b) if !from_pack.is_empty() && pack::needs_download(&state.paths, b) => b.size_bytes,
         _ => 0,
     };
-    let total: u64 = routes
+    let total = routes
         .iter()
         .filter(|(_, r)| *r != Route::Cached)
-        .map(|(e, _)| e.size_bytes)
-        .sum::<u64>()
-        + pack_bytes;
+        .fold(pack_bytes, |sum, (e, _)| sum.saturating_add(e.size_bytes));
     progress.stage(SyncStage::Download);
     // Uploaded files and config files come from the server: their links in batches.
     let links = source.server_id().map(|shared| {
         let blobs = routes
             .iter()
-            .filter(|(e, r)| {
-                *r == Route::Blob && !fetch::cache_file(&state.paths, &e.sha1).is_file()
-            })
+            .filter(|(e, r)| *r == Route::Blob && !fetch::content_file(&state.paths, e).is_file())
             .map(|(e, _)| e.sha256.clone());
         let configs = plan.actions.iter().filter_map(|a| match a {
             Action::WriteConfig { config, .. }
@@ -346,19 +372,20 @@ async fn fetch_all<R: Runtime>(
                 };
                 match (route, links) {
                     (Route::Blob, Some(links))
-                        if !fetch::cache_file(&state.paths, &entry.sha1).is_file() =>
+                        if !fetch::content_file(&state.paths, entry).is_file() =>
                     {
                         let url = links
                             .get(&entry.sha256)
                             .await
                             .map_err(|e| taken_down(e, &entry.name))?;
-                        let target = fetch::cache_file(&state.paths, &entry.sha1);
+                        let target = fetch::content_file(&state.paths, entry);
                         fetch::download(
                             state.cloud.file_http(),
                             &url,
                             &target,
                             Some(&entry.sha1),
                             Some(&entry.sha256),
+                            entry.size_bytes,
                             &mut on_bytes,
                         )
                         .await
@@ -441,7 +468,7 @@ async fn wait_for_manual_downloads<R: Runtime>(
     loop {
         let waiting: Vec<_> = manual
             .iter()
-            .filter(|(e, _)| !fetch::cache_file(&state.paths, &e.sha1).is_file())
+            .filter(|(e, _)| !fetch::content_file(&state.paths, e).is_file())
             .collect();
         if waiting.is_empty() {
             return Ok(());
@@ -459,7 +486,6 @@ async fn wait_for_manual_downloads<R: Runtime>(
     }
 }
 
-/// Stage every file, then make the changes, journaling each one. Blocking.
 /// How many steps `apply_actions` counts: a copy per file it places, then one per action.
 fn apply_steps(actions: &[Action]) -> u64 {
     let copies = actions
@@ -469,6 +495,7 @@ fn apply_steps(actions: &[Action]) -> u64 {
     (copies + actions.len()) as u64
 }
 
+/// Stage every file, then make the changes, journaling each one. Blocking.
 fn apply_actions(
     paths: &crate::state::AppPaths,
     game_dir: &Path,
@@ -476,14 +503,12 @@ fn apply_actions(
     backup_dir: PathBuf,
     done: &AtomicU64,
 ) -> AppResult<()> {
-    let staging = game_dir.join(STAGING).join(new_id());
-    std::fs::create_dir_all(&staging)?;
-    hide(&game_dir.join(STAGING));
+    let staging = new_staging(game_dir)?;
 
     // Copy from the cache into staging first: if that fails, nothing has changed yet.
     for a in actions {
         let (path, from) = match a {
-            Action::Place { entry, .. } => (&entry.path, fetch::cache_file(paths, &entry.sha1)),
+            Action::Place { entry, .. } => (&entry.path, fetch::content_file(paths, entry)),
             Action::WriteConfig { config, .. } => {
                 (&config.path, fetch::blob_file(paths, &config.sha256))
             }
@@ -515,72 +540,107 @@ fn apply_actions(
         done.fetch_add(1, Ordering::Relaxed);
     }
 
-    let mut journal = Journal {
-        backup_dir,
-        done: vec![],
-    };
-    journal.save(&staging)?;
-    // Each step is journaled before it's made, so a crash in between is still undone.
-    let result = (|| -> AppResult<()> {
-        for a in actions {
-            done.fetch_add(1, Ordering::Relaxed);
-            match a {
-                Action::Remove { path } | Action::RemoveConfig { path } => {
-                    journal.record(&staging, path, FileAction::Removed)?;
-                    remove(&game_dir.join(path))?;
-                }
-                Action::Place {
-                    entry: Entry { path, .. },
-                    ..
-                }
-                | Action::WriteConfig {
-                    config: Override { path, .. },
-                    ..
-                } => {
-                    // Anything already there was backed up, tracked or not.
-                    let target = game_dir.join(path);
-                    if target.exists() {
-                        journal.record(&staging, path, FileAction::Removed)?;
-                        remove(&target)?;
-                    }
-                    std::fs::create_dir_all(target.parent().expect("relative path has a parent"))?;
-                    journal.record(&staging, path, FileAction::Added)?;
-                    std::fs::rename(staging.join("files").join(path), &target)?;
-                }
+    let steps = actions.iter().map(|a| match a {
+        Action::Remove { path } | Action::RemoveConfig { path } => (path.as_str(), false),
+        Action::Place { entry, .. } => (entry.path.as_str(), true),
+        Action::WriteConfig { config, .. } => (config.path.as_str(), true),
+    });
+    commit(game_dir, &staging, steps, backup_dir, done)
+}
+
+/// Put back the files a backup recorded, staged and journaled like an update, so a crash
+/// in the middle is undone at the next start. `backup_dir` holds the files as they are
+/// now (the backup taken before restoring). Blocking.
+pub fn restore_files(
+    game_dir: &Path,
+    from: &Path,
+    records: &[FileRecord],
+    backup_dir: PathBuf,
+) -> AppResult<()> {
+    let staging = new_staging(game_dir)?;
+    let mut steps = Vec::new();
+    for r in records {
+        let copy = from.join(&r.path);
+        match r.action {
+            FileAction::Added => steps.push((r.path.as_str(), false)),
+            // Not in the backup: left as it is.
+            FileAction::Replaced | FileAction::Removed if !copy.is_file() => {}
+            FileAction::Replaced | FileAction::Removed => {
+                let to = staging.join("files").join(&r.path);
+                std::fs::create_dir_all(to.parent().expect("relative path has a parent"))?;
+                std::fs::copy(&copy, &to)?;
+                steps.push((r.path.as_str(), true));
             }
+        }
+    }
+    commit(game_dir, &staging, steps, backup_dir, &AtomicU64::new(0))
+}
+
+/// A staging folder for one job, inside the game folder (same drive, so moving a file
+/// into place is a rename).
+fn new_staging(game_dir: &Path) -> AppResult<PathBuf> {
+    let staging = game_dir.join(STAGING).join(new_id());
+    std::fs::create_dir_all(&staging)?;
+    hide(&game_dir.join(STAGING));
+    Ok(staging)
+}
+
+/// Make the changes: `(path, true)` moves the staged file into place, `(path, false)`
+/// removes what's there. Each is journaled before it's made, so a crash in between is
+/// still undone (recovery.rs); a failure undoes what was done so far. Blocking.
+fn commit<'a>(
+    game_dir: &Path,
+    staging: &Path,
+    steps: impl IntoIterator<Item = (&'a str, bool)>,
+    backup_dir: PathBuf,
+    done: &AtomicU64,
+) -> AppResult<()> {
+    let mut journal = Journal::start(staging, backup_dir)?;
+    let result = (|| -> AppResult<()> {
+        for (path, put) in steps {
+            done.fetch_add(1, Ordering::Relaxed);
+            let target = game_dir.join(path);
+            if !put {
+                journal.record(path, FileAction::Removed)?;
+                remove(&target)?;
+                continue;
+            }
+            // Anything already there was backed up, tracked or not.
+            if target.exists() {
+                journal.record(path, FileAction::Removed)?;
+                remove(&target)?;
+            }
+            std::fs::create_dir_all(target.parent().expect("relative path has a parent"))?;
+            journal.record(path, FileAction::Added)?;
+            std::fs::rename(staging.join("files").join(path), &target)?;
         }
         Ok(())
     })();
 
-    if let Err(e) = result {
+    if result.is_err() {
         // Undo what was done so far, then report the failure.
         super::recovery::undo(game_dir, &journal);
-        let _ = std::fs::remove_dir_all(&staging);
-        return Err(e);
     }
-    let _ = std::fs::remove_dir_all(&staging);
+    // Closed first: Windows won't remove a folder with a file open in it, and a journal
+    // left behind would be undone at the next start.
+    drop(journal);
+    let _ = std::fs::remove_dir_all(staging);
     let _ = std::fs::remove_dir(game_dir.join(STAGING)); // only if empty
-    Ok(())
+    result
 }
 
 /// Delete a file, retrying briefly if something (antivirus, the launcher) has it open.
 fn remove(path: &Path) -> AppResult<()> {
-    for attempt in 0..6 {
-        match std::fs::remove_file(path) {
-            Ok(()) => return Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-            Err(e) if matches!(e.raw_os_error(), Some(32 | 33)) && attempt < 5 => {
-                std::thread::sleep(Duration::from_millis(200));
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, path = %path.display(), "couldn't remove file");
-                return Err(AppError::conflict(
-                    "A file is in use. Close the launcher and try again.",
-                ));
-            }
+    match crate::util::files::retry_in_use(|| std::fs::remove_file(path)) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => {
+            tracing::warn!(error = %e, path = %path.display(), "couldn't remove file");
+            Err(AppError::conflict(
+                "A file is in use. Close the launcher and try again.",
+            ))
         }
     }
-    unreachable!()
 }
 
 /// Mark the staging folder hidden, so it doesn't confuse anyone browsing the game folder.
@@ -604,6 +664,91 @@ fn hide(path: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_update_that_fails_partway_is_undone() {
+        let dir = std::env::temp_dir().join(format!("atlas-apply-{}", new_id()));
+        let paths = crate::state::AppPaths::new(&dir.join("appdata"));
+        let (game, backup) = (dir.join("game"), dir.join("backup"));
+        std::fs::create_dir_all(game.join("mods/stuck/x")).unwrap();
+        std::fs::create_dir_all(backup.join("mods")).unwrap();
+        std::fs::write(game.join("mods/a.jar"), "a v1").unwrap();
+        std::fs::write(backup.join("mods/a.jar"), "a v1").unwrap();
+        let entry: Entry = serde_json::from_value(serde_json::json!({
+            "kind": "mod", "source": "modrinth", "name": "A", "path": "mods/a.jar",
+            "sha1": "1".repeat(40), "sha256": "2".repeat(64), "sizeBytes": 4, "required": true
+        }))
+        .unwrap();
+        let cached = fetch::content_file(&paths, &entry);
+        std::fs::create_dir_all(cached.parent().unwrap()).unwrap();
+        std::fs::write(&cached, "a v2").unwrap();
+
+        // a.jar is replaced, then removing "mods/stuck" (a folder) fails.
+        let actions = [
+            Action::Place {
+                entry,
+                replaces: true,
+                local: None,
+            },
+            Action::Remove {
+                path: "mods/stuck".into(),
+            },
+        ];
+        let done = AtomicU64::new(0);
+        assert!(apply_actions(&paths, &game, &actions, backup, &done).is_err());
+        assert_eq!(std::fs::read(game.join("mods/a.jar")).unwrap(), b"a v1");
+        assert!(!game.join(STAGING).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_restore_goes_through_the_journal_and_is_undone_when_it_fails() {
+        let dir = std::env::temp_dir().join(format!("atlas-restore-{}", new_id()));
+        let (game, old, now) = (dir.join("game"), dir.join("old"), dir.join("now"));
+        for d in [&game, &old, &now] {
+            std::fs::create_dir_all(d.join("mods")).unwrap();
+        }
+        std::fs::write(game.join("mods/a.jar"), b"a, as it is now").unwrap();
+        std::fs::write(now.join("mods/a.jar"), b"a, as it is now").unwrap();
+        std::fs::write(old.join("mods/a.jar"), b"a, as it was").unwrap();
+        std::fs::write(game.join("mods/b.jar"), b"added since").unwrap();
+        let rec = |path: &str, action| FileRecord {
+            path: path.into(),
+            action,
+        };
+
+        // "mods/stuck" is a folder, so removing it fails after a.jar was put back.
+        std::fs::create_dir_all(game.join("mods/stuck/x")).unwrap();
+        let failing = [
+            rec("mods/a.jar", FileAction::Replaced),
+            rec("mods/stuck", FileAction::Added),
+        ];
+        assert!(restore_files(&game, &old, &failing, now.clone()).is_err());
+        assert_eq!(
+            std::fs::read(game.join("mods/a.jar")).unwrap(),
+            b"a, as it is now",
+            "undone"
+        );
+        assert!(!game.join(STAGING).exists());
+
+        let records = [
+            rec("mods/a.jar", FileAction::Replaced),
+            rec("mods/b.jar", FileAction::Added),
+            rec("mods/gone.jar", FileAction::Removed),
+        ];
+        restore_files(&game, &old, &records, now).unwrap();
+        assert_eq!(
+            std::fs::read(game.join("mods/a.jar")).unwrap(),
+            b"a, as it was"
+        );
+        assert!(!game.join("mods/b.jar").exists());
+        assert!(
+            !game.join("mods/gone.jar").exists(),
+            "not in the backup: left alone"
+        );
+        assert!(!game.join(STAGING).exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     #[test]
     fn a_config_a_mod_only_rewrote_counts_as_the_synced_one() {

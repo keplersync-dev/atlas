@@ -12,6 +12,7 @@ use atlas_protocol::api::{
 };
 use futures_util::TryStreamExt as _;
 use reqwest::{Method, StatusCode};
+use sha2::{Digest, Sha256};
 
 use super::{Cloud, server_error};
 use crate::error::{AppError, AppResult, ErrorCode};
@@ -152,6 +153,12 @@ impl Cloud {
             tracing::warn!(file = %file.path.display(), error = %e, "couldn't read a file to upload");
             AppError::conflict(format!("Couldn't read {name}"))
         })?;
+        // It was hashed earlier: changed since, it would be stored under the wrong hash.
+        if hex::encode(Sha256::digest(&bytes)) != file.sha256 {
+            return Err(AppError::conflict(format!(
+                "{name} changed while it was being shared. Try again."
+            )));
+        }
         // Always say the size: without it an empty file goes out with none, and storage
         // refuses it (411 Length Required).
         let length = bytes.len();
@@ -260,6 +267,22 @@ impl Cloud {
     }
 }
 
+/// A response's body, or None once it's over `limit` bytes: it reads no further, whatever
+/// length the server claims (or doesn't).
+pub async fn body_up_to(
+    mut res: reqwest::Response,
+    limit: u64,
+) -> reqwest::Result<Option<Vec<u8>>> {
+    let mut body = Vec::new();
+    while let Some(chunk) = res.chunk().await? {
+        if (body.len() + chunk.len()) as u64 > limit {
+            return Ok(None);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(Some(body))
+}
+
 /// Links for the files an install or update downloads, asked for a batch at a time just
 /// before they're needed: links expire after a few minutes, and a slow download of a big
 /// pack would outlast them if they were all asked for at the start.
@@ -348,5 +371,64 @@ mod tests {
         let sizes: Vec<usize> = batches(&mods).iter().map(|b| b.len()).collect();
         assert_eq!(sizes, [2, 1]);
         assert!(batches(&[]).is_empty());
+    }
+
+    #[tokio::test]
+    async fn a_body_is_read_only_up_to_its_limit() {
+        use std::io::Write as _;
+        // A chunked answer: no length to check up front.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}/icon.png", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            for _ in 0..2 {
+                let (mut s, _) = listener.accept().unwrap();
+                let _ = std::io::Read::read(&mut s, &mut [0; 4096]);
+                let chunk = vec![b'x'; 4096];
+                let _ = s.write_all(b"HTTP/1.1 200 OK\r\ntransfer-encoding: chunked\r\n\r\n");
+                for _ in 0..4 {
+                    let _ = write!(s, "{:x}\r\n", chunk.len());
+                    let _ = s.write_all(&chunk);
+                    let _ = s.write_all(b"\r\n");
+                }
+                let _ = s.write_all(b"0\r\n\r\n");
+            }
+        });
+        let http = reqwest::Client::new();
+        let get = || async { http.get(&url).send().await.unwrap() };
+        assert_eq!(body_up_to(get().await, 10_000).await.unwrap(), None);
+        assert_eq!(
+            body_up_to(get().await, 16_384)
+                .await
+                .unwrap()
+                .map(|b| b.len()),
+            Some(16_384)
+        );
+    }
+
+    #[tokio::test]
+    async fn a_file_that_changed_since_it_was_hashed_is_not_sent() {
+        let dir = std::env::temp_dir().join(format!("atlas-put-{}", crate::util::ids::new_id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("a.json");
+        std::fs::write(&path, b"after").unwrap();
+        let cloud = Cloud::new(
+            crate::db::open_in_memory().await.unwrap(),
+            None,
+            std::sync::Arc::new(super::super::tokens::MemoryStore::default()),
+        );
+        let file = UploadFile {
+            path,
+            sha256: hex::encode(Sha256::digest(b"before")),
+            size: 6,
+            name: "config/a.json".into(),
+            rights_confirmed: false,
+        };
+        // Nothing listens there: it fails on the hash before anything is sent.
+        let err = cloud
+            .put(&file, "http://127.0.0.1:9/", |_| {})
+            .await
+            .unwrap_err();
+        assert_eq!(err.code, ErrorCode::Conflict);
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

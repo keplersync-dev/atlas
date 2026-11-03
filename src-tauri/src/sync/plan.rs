@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::manifest::{Entry, Keep, Manifest, Override};
 use crate::db::content::ContentRow;
-use crate::dto::{ConfigChoice, OptionalItem, RevisionChanges, UpdatedItem};
+use crate::dto::{ConfigChoice, OptionalItem, RevisionChanges};
 
 /// One step of applying a plan, in order: all removals, then placements, then configs.
 #[derive(Debug, Clone, PartialEq)]
@@ -83,16 +83,6 @@ pub fn disk_path(row: &ContentRow) -> String {
     }
 }
 
-fn label(e: &Entry) -> String {
-    e.version_label
-        .clone()
-        .unwrap_or_else(|| e.path.rsplit('/').next().unwrap_or(&e.path).to_string())
-}
-
-fn kind_label(required: bool) -> &'static str {
-    if required { "Required" } else { "Optional" }
-}
-
 pub fn plan(input: &Input) -> Plan {
     let rows: HashMap<String, &ContentRow> = input
         .rows
@@ -106,7 +96,18 @@ pub fn plan(input: &Input) -> Plan {
         .unwrap_or_default();
     let target_keys: HashSet<&str> = input.target.content.iter().map(Entry::key).collect();
 
-    let mut out = Plan::default();
+    let mut out = Plan {
+        changes: super::manifest::changes(input.synced, input.target),
+        ..Plan::default()
+    };
+    // New optional items are offered in `new_optional` instead.
+    out.changes.added = input
+        .target
+        .content
+        .iter()
+        .filter(|e| e.required && !synced_by_key.contains_key(e.key()))
+        .map(|e| e.name.clone())
+        .collect();
     let mut removes = Vec::new();
     let mut places = Vec::new();
 
@@ -114,23 +115,6 @@ pub fn plan(input: &Input) -> Plan {
         let before = synced_by_key.get(e.key()).copied();
         let old_row = before.and_then(|b| row_at(&b.path));
         let new_row = row_at(&e.path);
-
-        // What the review screen shows.
-        match before {
-            None if e.required => out.changes.added.push(e.name.clone()),
-            None => {}
-            Some(b) if b.sha1 != e.sha1 => out.changes.updated.push(UpdatedItem {
-                name: e.name.clone(),
-                from: label(b),
-                to: label(e),
-            }),
-            Some(b) if b.required != e.required => out.changes.updated.push(UpdatedItem {
-                name: e.name.clone(),
-                from: kind_label(b.required).into(),
-                to: kind_label(e.required).into(),
-            }),
-            Some(_) => {}
-        }
 
         // Does the user want this file? Required: yes. Optional: if ticked now, else
         // whatever they decided before (installed or not). Never seen before = new optional.
@@ -192,7 +176,6 @@ pub fn plan(input: &Input) -> Plan {
             .iter()
             .filter(|b| !target_keys.contains(b.key()))
         {
-            out.changes.removed.push(b.name.clone());
             if let Some(r) = row_at(&b.path).filter(|r| r.installed && r.is_managed) {
                 removes.push(Action::Remove { path: disk_path(r) });
             }
@@ -293,7 +276,7 @@ pub fn plan(input: &Input) -> Plan {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::dto::{ContentKind, ContentSource, Loader, Side};
+    use crate::dto::{ContentKind, ContentSource, Loader, Side, UpdatedItem};
     use crate::sync::manifest::MinecraftSpec;
 
     fn entry(key: &str, file: &str, sha: char, required: bool) -> Entry {

@@ -507,6 +507,14 @@ fn guards() {
         "conflict",
         "one job at a time"
     );
+    let busy = w
+        .app
+        .call(
+            "set_optional_installed",
+            json!({ "instanceId": w.id, "contentId": "any", "installed": false }),
+        )
+        .unwrap_err();
+    assert_eq!(busy["message"], "Wait for the update to finish");
     w.app.state().running.remove(&w.id);
     assert_eq!(w.wait()["sync"]["state"], "up_to_date");
 }

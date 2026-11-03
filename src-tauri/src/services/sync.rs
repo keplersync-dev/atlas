@@ -21,12 +21,6 @@ use crate::sync::source::{self, Source};
 use crate::sync::{adopt, apply, pack, prism_versions, state as sync_state};
 use crate::util::ids::new_id;
 
-async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
-    db::instances::get(&state.db, id).await?.ok_or_else(|| {
-        AppError::not_found("That instance isn't there anymore. It may have just been removed.")
-    })
-}
-
 /// The instance's source, or `conflict` if it isn't shared.
 async fn linked(state: &AppState, row: &InstanceRow) -> AppResult<Source> {
     let shared = row
@@ -88,7 +82,7 @@ fn first_difference(mine: &str, theirs: &str) -> (String, String) {
 }
 
 pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
-    let row = row(state, id).await?;
+    let row = db::instances::require(&state.db, id).await?;
     let src = linked(state, &row).await?;
     let latest = src.latest_revision();
     let target = src.manifest(state, latest).await?;
@@ -97,7 +91,7 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
         apply::make_plan(state, &row, &target, &none, &Default::default()).await?;
     let game_dir = PathBuf::from(&row.game_dir);
 
-    let mut download_bytes = 0;
+    let mut download_bytes = 0u64;
     let mut manual = Vec::new();
     let mut unverified = Vec::new();
     for (e, local) in plan.places() {
@@ -107,7 +101,7 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
         match fetch::route(&state.paths, &src, &game_dir, e, local) {
             Route::Cached | Route::Local(_) => {}
             Route::Manual(m) => manual.push(m),
-            _ => download_bytes += e.size_bytes,
+            _ => download_bytes = download_bytes.saturating_add(e.size_bytes),
         }
     }
     // The modpack's own files: one download of the pack, if they aren't here yet.
@@ -117,7 +111,7 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
             .iter()
             .any(|o| o.in_pack && !fetch::blob_file(&state.paths, &o.sha256).is_file());
         if needed && pack::needs_download(&state.paths, base) {
-            download_bytes += base.size_bytes;
+            download_bytes = download_bytes.saturating_add(base.size_bytes);
         }
     }
     let mut config_conflicts = Vec::new();
@@ -175,7 +169,7 @@ pub async fn sync<R: Runtime>(
     id: &str,
     options: SyncOptions,
 ) -> AppResult<()> {
-    let row = row(state, id).await?;
+    let row = db::instances::require(&state.db, id).await?;
     let src = linked(state, &row).await?;
     if src.is_frozen() {
         return Err(AppError::conflict(
@@ -216,7 +210,7 @@ pub async fn report_if_shared(state: &AppState, instance_id: &str, src: &Source)
 
 /// Viewers: put shared files back the way the synced version has them. Waits for it.
 pub async fn revert<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) -> AppResult<()> {
-    let row = row(state, id).await?;
+    let row = db::instances::require(&state.db, id).await?;
     let src = linked(state, &row).await?;
     if state.is_running(id) {
         return Err(AppError::conflict("Close the game first"));
@@ -247,7 +241,10 @@ pub async fn set_optional_installed<R: Runtime>(
     content_id: &str,
     installed: bool,
 ) -> AppResult<()> {
-    let row = row(state, id).await?;
+    let row = db::instances::require(&state.db, id).await?;
+    if state.jobs.is_busy(id) {
+        return Err(AppError::conflict("Wait for the update to finish"));
+    }
     if state.is_running(id) {
         return Err(AppError::conflict("Close the game first"));
     }
@@ -315,7 +312,7 @@ pub async fn restore<R: Runtime>(
     id: &str,
     backup_id: &str,
 ) -> AppResult<()> {
-    let row = row(state, id).await?;
+    let row = db::instances::require(&state.db, id).await?;
     if !Path::new(&row.game_dir).is_dir() {
         return Err(AppError::conflict(
             "The instance's folder is missing. If you moved it, add it to Atlas again from its new place.",
@@ -363,7 +360,7 @@ async fn restore_job<R: Runtime>(
         .collect();
     let to = snapshot.synced_revision.map(|r| r.max(0) as u32);
     let from = row.synced_revision.map(|r| r.max(0) as u32);
-    backup::create(
+    let (_, before) = backup::create(
         &state.db,
         &state.paths,
         &id,
@@ -376,30 +373,10 @@ async fn restore_job<R: Runtime>(
     .await?;
 
     progress.stage(SyncStage::Apply);
-    let (game, dir, recs) = (game_dir.clone(), from_dir.clone(), records.clone());
-    tokio::task::spawn_blocking(move || -> AppResult<()> {
-        for r in &recs {
-            let target = game.join(&r.path);
-            match r.action {
-                FileAction::Added => match std::fs::remove_file(&target) {
-                    Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(e.into()),
-                    _ => {}
-                },
-                FileAction::Replaced | FileAction::Removed => {
-                    let copy = dir.join(&r.path);
-                    if copy.is_file() {
-                        std::fs::create_dir_all(
-                            target.parent().expect("relative path has a parent"),
-                        )?;
-                        std::fs::copy(&copy, &target)?;
-                    }
-                }
-            }
-        }
-        Ok(())
-    })
-    .await
-    .map_err(AppError::from)??;
+    let game = game_dir.clone();
+    tokio::task::spawn_blocking(move || apply::restore_files(&game, &from_dir, &records, before))
+        .await
+        .map_err(AppError::from)??;
 
     let _scanning = state.scan_lock(&id).await;
     backup::restore_snapshot(&state.db, &id, &snapshot).await?;
@@ -423,7 +400,7 @@ pub async fn dev_link(
     if !cfg!(debug_assertions) {
         return Err(AppError::forbidden("Only available in development builds"));
     }
-    row(state, id).await?;
+    db::instances::require(&state.db, id).await?;
     let folder = PathBuf::from(folder);
     let src = Source::Dev(folder.clone());
     if src.latest_revision() == 0 {
@@ -442,7 +419,7 @@ pub async fn dev_link(
 
 /// Stop being linked: the folder stays, now only on this PC.
 pub async fn unlink(state: &AppState, id: &str) -> AppResult<()> {
-    let row = row(state, id).await?;
+    let row = db::instances::require(&state.db, id).await?;
     if let Some(shared) = &row.shared_instance_id {
         source::forget(&state.db, shared).await?;
     }
