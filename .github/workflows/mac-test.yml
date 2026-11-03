@@ -42,6 +42,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ATLAS_SERVER_URL: ${{ vars.ATLAS_SERVER_URL }}
+          CARGO_PROFILE_RELEASE_LTO: "false"
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
         with:
           tagName: ${{ github.ref_name }}
           releaseName: Atlas Mac test ${{ github.ref_name }}
