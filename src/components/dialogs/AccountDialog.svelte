@@ -20,10 +20,11 @@
   const me = $derived(social.session?.user ?? null);
 
   // ── Profile: a draft form ──
-  // Copy the saved values ONCE when the dialog opens. untrack() reads without
-  // subscribing, so a store reload (new session object) can't wipe half-typed edits.
-  let displayName = $state(untrack(() => me?.displayName ?? ""));
-  let username = $state(untrack(() => me?.username ?? ""));
+  // Copied again only when the account changes (signing in here): a store reload
+  // (new session object) can't wipe half-typed edits.
+  const myId = $derived(me?.id);
+  let displayName = $derived(myId ? untrack(() => me!.displayName) : "");
+  let username = $derived(myId ? untrack(() => me!.username) : "");
 
   const usernameError = $derived(
     /^[a-z0-9_]{3,16}$/.test(username)
@@ -80,7 +81,9 @@
   let busy = $state<string | null>(null);
   let attempt = 0;
   let exported = $state<string | null>(null);
-  const blocked = resource(() => api.listBlocked());
+  const blocked = resource(() =>
+    myId ? api.listBlocked() : Promise.resolve(null),
+  );
 
   // This PC's settings, which aren't part of the account.
   let pc = $state<AppSettings | null>(null);
@@ -311,7 +314,6 @@
         </label>
         <label class="text-[13px] text-(--text-muted)">
           Username
-          <!-- oninput lowercases as you type; bind:value keeps `username` in sync -->
           <input
             bind:value={username}
             oninput={() => (username = username.toLowerCase())}

@@ -2,6 +2,7 @@
   import { openDialog } from "$lib/dialogs.svelte";
   import { fileSize, plural, timeAgo, versionLabel } from "$lib/format";
   import { social } from "$lib/stores";
+  import { showError } from "$lib/toasts.svelte";
   import type { SharedInstance } from "$lib/types";
   import Button from "./Button.svelte";
   import ContentIcon from "./ContentIcon.svelte";
@@ -18,6 +19,8 @@
     declining = true;
     try {
       await social.declineInvite(invite.id);
+    } catch (e) {
+      showError((e as Error).message);
     } finally {
       declining = false;
     }

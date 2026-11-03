@@ -9,8 +9,8 @@
   import Button from "../Button.svelte";
   import ContentIcon from "../ContentIcon.svelte";
   import Dialog from "../Dialog.svelte";
-  import Icon from "../Icon.svelte";
   import LauncherIcon from "../LauncherIcon.svelte";
+  import SearchBox from "../SearchBox.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -97,7 +97,6 @@
   }
 
   function trackFolder() {
-    // In the real app this path comes from a native folder picker (Tauri's dialog plugin).
     finish(async () => [await api.trackFolder(folder.trim())]);
   }
 
@@ -177,19 +176,12 @@
     </p>
   {:else}
     <div class="mb-3 flex items-center gap-3">
-      <label class="relative block min-w-0 flex-1">
-        <span
-          class="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2 text-(--text-faint)"
-        >
-          <Icon name="search" class="size-3.5" />
-        </span>
-        <input
-          bind:value={query}
-          placeholder="Search {plural(detected.data?.length ?? 0, 'instance')}"
-          aria-label="Search instances"
-          class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg) pr-2.5 pl-8 text-[13px] outline-none placeholder:text-(--text-faint) focus:border-(--accent)"
-        />
-      </label>
+      <SearchBox
+        bind:value={query}
+        placeholder="Search {plural(detected.data?.length ?? 0, 'instance')}"
+        label="Search instances"
+        class="min-w-0 flex-1"
+      />
       {#if untracked.length > 1}
         <button
           type="button"
@@ -263,7 +255,6 @@
     {/each}
   {/if}
 
-  <!-- Expandable section: plain $state toggles it, {#if} shows it. -->
   <div class="mt-2 border-t border-(--line) pt-3">
     {#if !showFolder}
       <button

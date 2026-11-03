@@ -11,12 +11,14 @@
   import { instances, social } from "$lib/stores";
   import { openDialog } from "$lib/dialogs.svelte";
   import Button from "../components/Button.svelte";
+  import FilterChips from "../components/FilterChips.svelte";
   import FriendsRail from "../components/FriendsRail.svelte";
   import Icon from "../components/Icon.svelte";
   import InstanceCard, {
     needsAttention,
   } from "../components/InstanceCard.svelte";
   import InviteCard from "../components/InviteCard.svelte";
+  import SearchBox from "../components/SearchBox.svelte";
   import Select from "../components/Select.svelte";
 
   const FILTERS = [
@@ -198,18 +200,12 @@
     {:else}
       <!-- Search and actions on one row, filters under them: the same at every width. -->
       <div class="mb-3 flex items-center gap-2">
-        <label class="relative block max-w-72 min-w-36 flex-1">
-          <span
-            class="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2 text-(--text-faint)"
-          >
-            <Icon name="search" class="size-3.5" />
-          </span>
-          <input
-            bind:value={query}
-            placeholder="Search instances"
-            class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg-raise) pr-2.5 pl-8 text-[13px] placeholder:text-(--text-faint) focus:border-(--accent) focus:outline-none"
-          />
-        </label>
+        <SearchBox
+          bind:value={query}
+          placeholder="Search instances"
+          raised
+          class="max-w-72 min-w-36 flex-1"
+        />
         <div class="ml-auto flex shrink-0 items-center gap-2">
           <Select
             bind:value={sort}
@@ -230,27 +226,12 @@
         </div>
       </div>
       <div class="mb-7">
-        <div
-          class="flex flex-wrap gap-1.5"
-          role="radiogroup"
-          aria-label="Filter"
-        >
-          {#each FILTERS as f (f.key)}
-            <button
-              role="radio"
-              aria-checked={filter === f.key}
-              onclick={() => (filter = f.key)}
-              class="h-7 rounded-full px-3 text-[13px] {filter === f.key
-                ? 'bg-(--accent)/15 font-semibold text-(--accent)'
-                : 'text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)'}"
-            >
-              {f.label}
-              {#if f.key !== "all"}<span class="ml-0.5 opacity-70"
-                  >{instances.list.filter(f.test).length}</span
-                >{/if}
-            </button>
-          {/each}
-        </div>
+        <FilterChips
+          filters={FILTERS}
+          items={instances.list}
+          bind:value={filter}
+          class="flex-wrap"
+        />
       </div>
 
       <!-- Under All, what needs the player gets its own section first. -->
@@ -286,7 +267,7 @@
         {#if (invites.length || attention.length) && rest.length}
           {@render heading("Your instances", rest.length)}
         {/if}
-        <!-- auto-fill: as many 240px+ columns as fit, so wide windows get more columns -->
+        <!-- auto-fill: as many 200px+ columns as fit, so wide windows get more columns -->
         <div class="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-4">
           {#each rest as inst (inst.id)}
             <InstanceCard instance={inst} />

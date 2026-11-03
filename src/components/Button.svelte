@@ -5,10 +5,7 @@
 
   type Variant = "default" | "primary" | "warn" | "danger" | "ghost";
 
-  // `children` is whatever is written between <Button> and </Button>: the label.
-  // `icon` goes before it: an Icon name, or a snippet for anything else.
-  // `...rest` collects every other attribute (onclick, disabled, aria-label…)
-  // so the parent can use <Button> exactly like a normal <button>.
+  // `icon` goes before the label: an Icon name, or a snippet for anything else.
   let {
     variant = "default",
     size = "md",

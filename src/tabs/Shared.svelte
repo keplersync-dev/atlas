@@ -12,7 +12,9 @@
   import type { SharedInstance } from "$lib/types";
   import AttentionBadges from "../components/AttentionBadges.svelte";
   import Button from "../components/Button.svelte";
+  import FilterChips from "../components/FilterChips.svelte";
   import Icon from "../components/Icon.svelte";
+  import SearchBox from "../components/SearchBox.svelte";
   import SharedRow, {
     byAttention,
     localFor,
@@ -91,7 +93,8 @@
   let updateNote = $state<{ text: string; ok: boolean } | null>(null);
 
   // Updates that ask nothing of the user go ahead; any with a question (config files
-  // you changed, manual downloads, a launcher change) are left for their own Review page.
+  // you changed, manual downloads, uploaded files, a launcher change) are left for their
+  // own Review page.
   async function updateAll() {
     updating = true;
     updateNote = null;
@@ -102,6 +105,7 @@
       try {
         const p = await api.previewSync(local.id);
         const needsYou =
+          p.unverified.length > 0 ||
           p.configConflicts.length > 0 ||
           p.manualDownloads.length > 0 ||
           p.overwrittenLocalChanges.length > 0 ||
@@ -163,42 +167,6 @@
   ]);
 </script>
 
-<!-- Snippets keep the markup below short: tools, then the two lists. -->
-
-{#snippet search()}
-  <label class="relative block max-w-72 min-w-36 flex-1">
-    <span
-      class="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2 text-(--text-faint)"
-    >
-      <Icon name="search" class="size-3.5" />
-    </span>
-    <input
-      bind:value={query}
-      placeholder="Search packs"
-      class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg-raise) pr-2.5 pl-8 text-[13px] placeholder:text-(--text-faint) focus:border-(--accent) focus:outline-none"
-    />
-  </label>
-{/snippet}
-
-{#snippet chips()}
-  <div class="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Filter">
-    {#each FILTERS as f (f.key)}
-      {@const n = all.filter(f.test).length}
-      <button
-        role="radio"
-        aria-checked={filter === f.key}
-        onclick={() => (filter = f.key)}
-        class="h-7 rounded-full px-3 text-[13px] {filter === f.key
-          ? 'bg-(--accent)/15 font-semibold text-(--accent)'
-          : 'text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)'}"
-      >
-        {f.label}
-        {#if f.key !== "all"}<span class="ml-0.5 opacity-70">{n}</span>{/if}
-      </button>
-    {/each}
-  </div>
-{/snippet}
-
 {#snippet cards()}
   <div class="grid grid-cols-1 items-start gap-10">
     {#if narrowed && sections.every((sec) => !sec.items.length)}
@@ -253,10 +221,22 @@
     <div>
       <!-- Search and the main action on one row, filters under them: the same at every width. -->
       <div class="mb-3 flex items-center gap-3">
-        {@render search()}
+        <SearchBox
+          bind:value={query}
+          placeholder="Search packs"
+          raised
+          class="max-w-72 min-w-36 flex-1"
+        />
         <ShareButton class="ml-auto shrink-0" />
       </div>
-      <div class="mb-5">{@render chips()}</div>
+      <div class="mb-5">
+        <FilterChips
+          filters={FILTERS}
+          items={all}
+          bind:value={filter}
+          class="flex-wrap"
+        />
+      </div>
       {#if updatable.length > 1 || updating || updateNote}
         <div
           class="mb-5 flex items-center gap-3 rounded-xl bg-(--warn)/10 px-4 py-2.5"

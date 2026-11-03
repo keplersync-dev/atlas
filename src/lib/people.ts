@@ -1,9 +1,17 @@
 import { confirmAction } from "$lib/confirm.svelte";
 import { openDialog } from "$lib/dialogs.svelte";
+import { timeAgo } from "$lib/format";
 import { social } from "$lib/stores";
 import { showDone, showError } from "$lib/toasts.svelte";
-import type { PublicUser } from "$lib/types";
+import type { Presence, PublicUser } from "$lib/types";
 import type { MenuItem } from "../components/MenuList.svelte";
+
+/** "Playing All the Mods 9", "Online", "Last seen 3 hours ago". */
+export function presenceText(p: Presence, online = "Online") {
+  if (p.state === "playing")
+    return p.instanceName ? `Playing ${p.instanceName}` : "Playing Minecraft";
+  return p.state === "online" ? online : `Last seen ${timeAgo(p.updatedAt)}`;
+}
 
 /** What you can do about another person wherever they're shown (Friends, the friends
  *  column on Home, group members): report them, unfriend them, block them. */

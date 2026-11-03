@@ -6,10 +6,11 @@
   import { openDialog } from "$lib/dialogs.svelte";
   import { instanceItems } from "$lib/instanceMenu";
   import { instances, social } from "$lib/stores";
-  import type { AuthProvider, InstanceSummary } from "$lib/types";
+  import type { AuthProvider } from "$lib/types";
   import ContentIcon from "./ContentIcon.svelte";
   import Head from "./Head.svelte";
   import Icon from "./Icon.svelte";
+  import { waitingOnYou } from "./InstanceCard.svelte";
   import ProviderIcon from "./ProviderIcon.svelte";
   import UpdateCard from "./UpdateCard.svelte";
 
@@ -28,10 +29,6 @@
       return social.incomingRequests.length + social.groupInvites.length;
     return 0;
   }
-
-  /** Something waiting on the user: an update to review or changes to publish. */
-  const needsYou = (i: InstanceSummary) =>
-    instances.needingAttention.includes(i);
 
   function openLegal(page: "terms" | "privacy") {
     legalError = null;
@@ -127,7 +124,7 @@
           <!-- What needs the player is said in words, not only by the dot. -->
           <small
             class="block truncate text-[13px] {inst.status === 'missing' ||
-            needsYou(inst)
+            waitingOnYou(inst)
               ? 'text-(--warn)'
               : 'text-(--text-faint)'}"
           >
@@ -140,12 +137,12 @@
                   : inst.sync?.state === "update_available" ||
                       inst.sync?.state === "conflict"
                     ? "Update ready"
-                    : needsYou(inst)
+                    : waitingOnYou(inst)
                       ? "Changes not sent"
                       : inst.launcher.name}
           </small>
         </span>
-        {#if needsYou(inst)}
+        {#if waitingOnYou(inst)}
           <span
             class="size-1.75 shrink-0 rounded-full bg-(--warn)"
             aria-hidden="true"

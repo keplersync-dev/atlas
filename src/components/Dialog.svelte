@@ -46,6 +46,7 @@
     children: Snippet;
     footer?: Snippet;
   } = $props();
+  const titleId = $props.id();
 
   let el: HTMLDialogElement;
 
@@ -53,7 +54,6 @@
   let opener: Element | null = null;
   let openedByPointer = false;
 
-  // showModal() is a DOM call, so it has to wait until the element exists.
   onMount(() => {
     opener = document.activeElement;
     openedByPointer = byPointer;
@@ -102,7 +102,7 @@
   bind:this={el}
   {onclick}
   onclose={closed}
-  aria-labelledby="dialog-title"
+  aria-labelledby={titleId}
   class="m-auto max-h-[calc(100vh-80px)] w-full overflow-hidden rounded-xl border border-(--line) bg-(--bg-raise) p-0 text-(--text-primary) shadow-[0_30px_80px_#000a]
     backdrop:bg-[#05070acc] {wide ? 'max-w-155' : 'max-w-130'}"
 >
@@ -110,7 +110,7 @@
     <div class="flex items-start gap-3.5 px-5.5 pt-5 pb-1.5">
       {@render header?.()}
       <div class="min-w-0 flex-1">
-        <h2 id="dialog-title" class="text-base font-semibold">{title}</h2>
+        <h2 id={titleId} class="text-base font-semibold">{title}</h2>
         {#if description}<p class="mt-0.5 text-[13px] text-(--text-muted)">
             {description}
           </p>{/if}

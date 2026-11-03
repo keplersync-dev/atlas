@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { fileSize, plural } from "$lib/format";
-  import type { ContentKind, OptionalItem } from "$lib/types";
+  import { fileSize, KIND, plural } from "$lib/format";
+  import type { OptionalItem } from "$lib/types";
 
   // Optional files a friend marked as "Optional". Nothing is ticked to begin with:
   // the user opts in. `selected` holds the ticked keys (bind:selected).
@@ -9,13 +9,6 @@
     selected = $bindable([]),
     title = "Optional extras",
   }: { items: OptionalItem[]; selected: string[]; title?: string } = $props();
-
-  const KIND: Record<ContentKind, string> = {
-    mod: "Mod",
-    resourcepack: "Resource pack",
-    shaderpack: "Shader",
-    datapack: "Data pack",
-  };
 
   const chosenBytes = $derived(
     items

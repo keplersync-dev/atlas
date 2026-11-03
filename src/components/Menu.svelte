@@ -34,8 +34,6 @@
       box.bottom + list.offsetHeight + 12 > window.innerHeight &&
       box.top > list.offsetHeight + 12;
   });
-  // bind:this gives us the actual DOM element, so we can tell
-  // whether a click happened inside the menu or somewhere else.
   let root = $state<HTMLDivElement>();
 
   function onWindowClick(e: MouseEvent) {

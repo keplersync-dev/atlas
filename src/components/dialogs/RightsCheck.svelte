@@ -1,38 +1,54 @@
 <script lang="ts">
-  // The upload-rights confirmation, in a dialog's footer next to its buttons so it's
-  // always in view. `note` goes under it: progress, or why sharing failed.
+  import { workLabel } from "$lib/format";
+  import type { InstanceWork, PublishItem } from "$lib/types";
+  import { names } from "./SharePicker.svelte";
+
+  // The share and publish dialogs' footer note, next to the buttons so it's always in
+  // view: the upload-rights confirmation when files get uploaded, then progress, or why
+  // sharing failed, or `hint`.
   let {
     checked = $bindable(false),
-    names,
-    count,
-    note = null,
-    tone = "muted",
+    uploads,
+    submitting,
+    work,
+    error,
+    hint = null,
   }: {
     checked: boolean;
-    /** The files being uploaded, as a phrase: "Global Packs and 2 others". */
-    names: string;
-    count: number;
-    note?: string | null;
-    tone?: "muted" | "danger";
+    uploads: PublishItem[];
+    submitting: boolean;
+    work: InstanceWork | undefined;
+    error: string | null;
+    hint?: string | null;
   } = $props();
+
+  const progress = $derived(submitting && work ? workLabel(work) : null);
 </script>
 
-<div class="mr-auto flex min-w-0 flex-col gap-1">
-  <label class="flex cursor-pointer items-center gap-2 text-[13px]">
-    <input type="checkbox" bind:checked class="accent-(--accent)" />
-    <span
-      >I made <b class="font-medium">{names}</b> or have permission to share {count ===
-      1
-        ? "it"
-        : "them"}</span
-    >
-  </label>
-  {#if note}
-    <span
-      class="text-[13px] tabular-nums {tone === 'danger'
-        ? 'text-(--danger)'
-        : 'text-(--text-muted)'}"
-      role={tone === "danger" ? "alert" : undefined}>{note}</span
-    >
-  {/if}
-</div>
+{#if uploads.length}
+  <div class="mr-auto flex min-w-0 flex-col gap-1">
+    <label class="flex cursor-pointer items-center gap-2 text-[13px]">
+      <input type="checkbox" bind:checked class="accent-(--accent)" />
+      <span
+        >I made <b class="font-medium">{names(uploads)}</b> or have permission to
+        share {uploads.length === 1 ? "it" : "them"}</span
+      >
+    </label>
+    {#if progress ?? error}
+      <span
+        class="text-[13px] tabular-nums {progress
+          ? 'text-(--text-muted)'
+          : 'text-(--danger)'}"
+        role={progress ? undefined : "alert"}>{progress ?? error}</span
+      >
+    {/if}
+  </div>
+{:else if progress}
+  <span class="mr-auto text-[13px] text-(--text-muted) tabular-nums"
+    >{progress}</span
+  >
+{:else if error}
+  <span class="mr-auto text-[13px] text-(--danger)" role="alert">{error}</span>
+{:else if hint}
+  <span class="mr-auto text-[13px] text-(--text-muted)">{hint}</span>
+{/if}

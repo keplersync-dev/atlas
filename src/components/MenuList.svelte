@@ -1,6 +1,4 @@
 <script lang="ts" module>
-  // A `module` script runs once for the file, not per component instance.
-  // It's where you export types (or constants) that other files import.
   export type MenuItem =
     | {
         label: string;

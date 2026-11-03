@@ -33,7 +33,7 @@
 
   // A new instance was opened: go back to the first tab.
   $effect(() => {
-    id; // reading `id` makes it a dependency
+    id;
     tab = "content";
     error = null;
   });
@@ -41,8 +41,6 @@
   // The files changed (a scan finished, the watcher saw a change, names arrived from
   // Modrinth, an update or restore ended): reload the detail. The store refreshes the
   // summary on the same event, but the content list lives only on this page.
-  // An $effect that returns a function: Svelte calls it when the page goes away, which
-  // is exactly when we should stop listening (api.subscribe returns the unsubscribe).
   $effect(() =>
     api.subscribe((e) => {
       if (e.type === "instance.changed" && e.instanceId === id) detail.reload();

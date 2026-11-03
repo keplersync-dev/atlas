@@ -7,10 +7,6 @@ import { updates } from "./updates.svelte";
 
 export { instances, social, updates };
 
-/**
- * Loads every store and keeps them fresh from live events.
- * Call once, from the app shell. Returns a cleanup function.
- */
 /** Reload groups, and say so when a friend just invited you to one. */
 async function groupsChanged() {
   const before = new Set(social.groupInvites.map((i) => i.code));
@@ -23,6 +19,10 @@ async function groupsChanged() {
     });
 }
 
+/**
+ * Loads every store and keeps them fresh from live events.
+ * Call once, from the app shell. Returns a cleanup function.
+ */
 export function connectStores() {
   instances.load();
   social.load();

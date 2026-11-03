@@ -72,6 +72,8 @@
 </script>
 
 <script lang="ts">
+  import { onDestroy } from "svelte";
+  import { api } from "$lib/api";
   import { openDialog } from "$lib/dialogs.svelte";
   import { timeAgo } from "$lib/format";
   import { go } from "$lib/nav.svelte";
@@ -81,6 +83,20 @@
 
   // Recent events about shared instances, one per line.
   let { items: all }: { items: ActivityItem[] } = $props();
+
+  // Shown is seen: the server hears it now, and the dots go once you leave the page.
+  const seen = new Set<string>();
+  $effect(() => {
+    const fresh = all.filter((a) => !a.readAt && !seen.has(a.id));
+    if (!fresh.length) return;
+    for (const a of fresh) seen.add(a.id);
+    api.markActivityRead(fresh.map((a) => a.id)).catch(() => {});
+  });
+  onDestroy(() => {
+    const now = new Date().toISOString();
+    for (const a of social.activity) if (seen.has(a.id)) a.readAt ??= now;
+  });
+
   // The same event twice in a row (invited again after leaving) reads as a glitch: once.
   const items = $derived(
     all.filter(

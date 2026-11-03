@@ -11,12 +11,7 @@
   import FileTree from "./FileTree.svelte";
   import RightsCheck from "./RightsCheck.svelte";
   import { publishChanges } from "$lib/publishChanges";
-  import SharePicker, {
-    names,
-    uncheckedOf,
-    uploadBytes,
-    uploadsOf,
-  } from "./SharePicker.svelte";
+  import SharePicker, { names, uploadCheck } from "./SharePicker.svelte";
 
   let { instanceId, onclose }: { instanceId: Id; onclose: () => void } =
     $props();
@@ -40,31 +35,14 @@
   const total = $derived(changes?.total ?? 0);
   // The launcher moved to other Minecraft or loader versions: one change.
   const versions = $derived(plan.data?.versions ?? null);
-  const uploads = $derived(plan.data ? uploadsOf(plan.data.items, modes) : []);
-  const needsRights = $derived(uploads.length > 0);
-  // A file Modrinth and CurseForge couldn't be asked about: sharing waits for them.
-  const waiting = $derived(
-    !!plan.data && uncheckedOf(plan.data.items, modes).length > 0,
-  );
-  const overQuota = $derived(
-    !!plan.data &&
-      plan.data.storage.usedBytes + uploadBytes(plan.data.items, modes) >
-        plan.data.storage.quotaBytes,
-  );
-  const tooBig = $derived(
-    !!plan.data &&
-      uploadsOf(plan.data.items, modes).some(
-        (i) => i.sizeBytes > plan.data!.storage.maxFileBytes,
-      ),
-  );
+  const check = $derived(plan.data ? uploadCheck(plan.data, modes) : null);
+  const uploads = $derived(check?.uploads ?? []);
   const canSubmit = $derived(
     !submitting &&
-      !!plan.data &&
+      !!check &&
       total > 0 &&
-      (!needsRights || rights) &&
-      !waiting &&
-      !overQuota &&
-      !tooBig,
+      !check.blocked &&
+      (!uploads.length || rights),
   );
   // Who gets it, by name when it's one person.
   const who = $derived.by(() => {
@@ -208,23 +186,7 @@
   {/if}
 
   {#snippet footer()}
-    {#if needsRights}
-      <RightsCheck
-        bind:checked={rights}
-        names={names(uploads)}
-        count={uploads.length}
-        note={submitting && work ? workLabel(work) : error}
-        tone={submitting && work ? "muted" : "danger"}
-      />
-    {:else if submitting && work}
-      <span class="mr-auto text-[13px] text-(--text-muted) tabular-nums"
-        >{workLabel(work)}</span
-      >
-    {:else if error}
-      <span class="mr-auto text-[13px] text-(--danger)" role="alert"
-        >{error}</span
-      >
-    {/if}
+    <RightsCheck bind:checked={rights} {uploads} {submitting} {work} {error} />
     <Button variant="ghost" onclick={onclose}>Cancel</Button>
     <Button type="submit" variant="primary" disabled={!canSubmit}>
       {submitting ? "Sending…" : "Send update"}

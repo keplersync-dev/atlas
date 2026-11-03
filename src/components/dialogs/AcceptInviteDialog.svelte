@@ -38,6 +38,8 @@
   const spare = $derived(
     instances.list.filter((i) => !i.sync && i.status !== "missing"),
   );
+  // Instances already on the right versions; the rest can't take it, so aren't offered.
+  const usable = $derived(spare.filter((i) => !mismatch(i)));
 
   // Where the files go: a new instance in a launcher, or an instance you already have.
   type Target = { kind: "launcher" | "instance"; id: Id };
@@ -49,8 +51,8 @@
     chosen ??
       (creatable[0]
         ? { kind: "launcher", id: creatable[0].id }
-        : spare[0]
-          ? { kind: "instance", id: spare[0].id }
+        : usable[0]
+          ? { kind: "instance", id: usable[0].id }
           : null),
   );
   const picked = (kind: Target["kind"], id: Id) =>
@@ -77,7 +79,7 @@
   );
   const pickedInstance = $derived(
     target?.kind === "instance"
-      ? spare.find((i) => i.id === target?.id)
+      ? usable.find((i) => i.id === target?.id)
       : undefined,
   );
 
@@ -110,7 +112,7 @@
   );
   // Nowhere to put it yet: the button tracks an instance instead.
   const nowhere = $derived(
-    !!invite && !launchers.loading && !creatable.length && !spare.length,
+    !!invite && !launchers.loading && !creatable.length && !usable.length,
   );
 
   /** A note when an existing instance is on other versions than the shared one. */
@@ -123,9 +125,6 @@
       ? null
       : `It's on ${versionLabel(i.loader, i.minecraftVersion)}; this needs ${versionLabel(invite.loader, invite.minecraftVersion)}`;
   }
-
-  // Instances already on the right versions; the rest can't take it, so aren't offered.
-  const usable = $derived(spare.filter((i) => !mismatch(i)));
 
   async function submit(e: SubmitEvent) {
     e.preventDefault();

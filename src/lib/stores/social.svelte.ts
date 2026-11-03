@@ -29,6 +29,7 @@ class SocialStore {
   signingIn = $state<AuthProvider | null>(null);
   signInError = $state<string | null>(null);
   #signInAttempt = 0;
+  #version = 0;
 
   signedIn = $derived(!!this.session?.user);
   /** False when this copy of Atlas has no server: sign-in is hidden. */
@@ -43,7 +44,7 @@ class SocialStore {
 
   async load() {
     try {
-      await this.loadNow();
+      await this.loadNow(++this.#version);
     } catch (err) {
       // Show the sign-in buttons rather than nothing at all.
       console.error("couldn't load the account", err);
@@ -53,9 +54,12 @@ class SocialStore {
     }
   }
 
-  private async loadNow() {
-    this.session = await api.getSession();
-    if (!this.session.user) {
+  /** `v`: a slow older reply mustn't overwrite a newer one. */
+  private async loadNow(v: number) {
+    const session = await api.getSession();
+    if (v !== this.#version) return;
+    this.session = session;
+    if (!session.user) {
       this.friends = [];
       this.requests = [];
       this.shared = [];
@@ -75,6 +79,7 @@ class SocialStore {
           api.listActivity(),
           api.listGroupInvites(),
         ]);
+      if (v !== this.#version) return;
       if (friends.status === "fulfilled") this.friends = friends.value;
       if (requests.status === "fulfilled") this.requests = requests.value;
       if (shared.status === "fulfilled") this.shared = shared.value;

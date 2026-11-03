@@ -1,13 +1,7 @@
 import { api } from "$lib/api";
 import type { Id, InstanceSummary, InstanceWork } from "$lib/types";
 
-/**
- * The tracked instances, shared by every component that shows them.
- *
- * Fields declared with $state are reactive: any component that reads
- * `instances.list` re-renders when it changes. $derived fields recompute
- * automatically from the $state they read.
- */
+/** The tracked instances, shared by every component that shows them. */
 class InstancesStore {
   list = $state<InstanceSummary[]>([]);
   loaded = $state(false);
@@ -16,32 +10,18 @@ class InstancesStore {
   failures = $state<Record<Id, string>>({});
   /** Work under way outside an update: reading files, uploading, saving a version. */
   work = $state<Record<Id, InstanceWork>>({});
-
-  /** Instances with something waiting on the user: an update to review or changes to publish. */
-  needingAttention = $derived(
-    this.list.filter(
-      (i) =>
-        i.sync?.state === "update_available" ||
-        i.sync?.state === "conflict" ||
-        i.sync?.state === "local_changes",
-    ),
-  );
-
-  /** Most recently played first; never-played ones at the end. */
-  recentlyPlayed = $derived(
-    this.list
-      .filter((i) => i.status !== "missing")
-      .toSorted((a, b) =>
-        (b.lastPlayedAt ?? "").localeCompare(a.lastPlayedAt ?? ""),
-      ),
-  );
+  #version = 0;
 
   async load() {
+    // A slow older reply mustn't overwrite a newer one.
+    const v = ++this.#version;
     try {
-      this.list = await api.listInstances();
+      const list = await api.listInstances();
+      if (v !== this.#version) return;
+      this.list = list;
       this.error = null;
     } catch (e) {
-      this.error = (e as Error).message;
+      if (v === this.#version) this.error = (e as Error).message;
     } finally {
       this.loaded = true;
     }

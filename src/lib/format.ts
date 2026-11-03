@@ -1,6 +1,13 @@
 // Small display helpers. Plain functions: no Svelte, easy to test, usable anywhere.
 
-import type { InstanceWork, IsoDate, LauncherKind, Loader } from "$lib/types";
+import type {
+  ContentKind,
+  InstanceWork,
+  IsoDate,
+  LauncherKind,
+  Loader,
+  SyncProgress,
+} from "$lib/types";
 
 const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 
@@ -41,6 +48,31 @@ export function versionLabel(
     .filter(Boolean)
     .join(" ");
 }
+
+/** "Mod", "Resource pack"… */
+export const KIND: Record<ContentKind, string> = {
+  mod: "Mod",
+  resourcepack: "Resource pack",
+  shaderpack: "Shader",
+  datapack: "Data pack",
+};
+
+/** "Mods", "Resource packs"…, in the order the kind filters list them. */
+export const KINDS: Record<ContentKind, string> = {
+  mod: "Mods",
+  resourcepack: "Resource packs",
+  shaderpack: "Shaders",
+  datapack: "Data packs",
+};
+
+/** What an update is doing right now. */
+export const SYNC_STAGES: Record<SyncProgress["stage"], string> = {
+  waiting_for_game_exit: "Waiting for you to close Minecraft…",
+  backup: "Backing up files…",
+  download: "Downloading…",
+  waiting_for_manual_downloads: "Waiting for you to download files",
+  apply: "Putting files in place…",
+};
 
 /** "1 mod", "34 mods" */
 export function plural(

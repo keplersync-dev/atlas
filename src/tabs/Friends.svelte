@@ -10,15 +10,16 @@
 <script lang="ts">
   import { openContextMenu } from "$lib/contextMenu.svelte";
   import { fuzzy } from "$lib/fuzzy";
-  import { personItems } from "$lib/people";
-  import { plural, timeAgo } from "$lib/format";
+  import { personItems, presenceText } from "$lib/people";
+  import { plural } from "$lib/format";
   import { social } from "$lib/stores";
   import type { Friend } from "$lib/types";
   import AttentionBadges from "../components/AttentionBadges.svelte";
-
+  import FilterChips from "../components/FilterChips.svelte";
   import Head from "../components/Head.svelte";
   import Icon from "../components/Icon.svelte";
   import Menu from "../components/Menu.svelte";
+  import SearchBox from "../components/SearchBox.svelte";
   import SharedRow, {
     attentionOf,
     byAttention,
@@ -86,14 +87,6 @@
   const isOpen = (f: Friend) =>
     expanded[f.user.id] ?? attentionOf(sharedBy(f)).total > 0;
   const toggle = (f: Friend) => (expanded[f.user.id] = !isOpen(f));
-
-  function status(f: Friend) {
-    const p = f.presence;
-    if (p.state === "playing")
-      return p.instanceName ? `Playing ${p.instanceName}` : "Playing Minecraft";
-    if (p.state === "online") return "Online in Atlas";
-    return `Last seen ${timeAgo(p.updatedAt)}`;
-  }
 </script>
 
 {#if !social.signedIn}
@@ -131,36 +124,17 @@
       <div
         class="flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-(--line) px-4 py-3"
       >
-        <label class="relative block max-w-64 min-w-36 flex-1">
-          <span
-            class="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2 text-(--text-faint)"
-          >
-            <Icon name="search" class="size-3.5" />
-          </span>
-          <input
-            bind:value={query}
-            placeholder="Search friends"
-            aria-label="Search friends"
-            class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg) pr-2.5 pl-8 text-[13px] placeholder:text-(--text-faint) focus:border-(--accent) focus:outline-none"
-          />
-        </label>
-        <div class="flex gap-1.5" role="radiogroup" aria-label="Filter">
-          {#each FILTERS as f (f.key)}
-            <button
-              role="radio"
-              aria-checked={filter === f.key}
-              onclick={() => (filter = f.key)}
-              class="h-7 rounded-full px-3 text-[13px] {filter === f.key
-                ? 'bg-(--accent)/15 font-semibold text-(--accent)'
-                : 'text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)'}"
-            >
-              {f.label}
-              <span class="ml-0.5 opacity-70"
-                >{social.friends.filter(f.test).length}</span
-              >
-            </button>
-          {/each}
-        </div>
+        <SearchBox
+          bind:value={query}
+          placeholder="Search friends"
+          class="max-w-64 min-w-36 flex-1"
+        />
+        <FilterChips
+          filters={FILTERS}
+          items={social.friends}
+          bind:value={filter}
+          countAll
+        />
       </div>
       <div class="px-2 pt-1 pb-2">
         {#each sections as section (section.title)}
@@ -204,7 +178,7 @@
                         ? 'text-(--online)'
                         : 'text-(--text-faint)'}"
                     >
-                      {status(f)}
+                      {presenceText(f.presence, "Online in Atlas")}
                     </small>
                   </span>
                   {#if theirs.length}

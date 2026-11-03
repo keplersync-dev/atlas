@@ -7,7 +7,6 @@
  * `key` lets several buttons share one copier: only the one you clicked says "Copied".
  * Copying can fail (permissions, some webviews), so `failed` says which key didn't make it —
  * show the text for the user to copy by hand instead of silently doing nothing.
- * In the Tauri app, @tauri-apps/plugin-clipboard-manager is the most reliable option.
  *
  * Call during component setup (it registers a cleanup so no timer outlives the component).
  */
@@ -16,7 +15,6 @@ export function copier(ms = 1600) {
   let failed = $state<string | null>(null);
   let timer: ReturnType<typeof setTimeout> | undefined;
 
-  // Returning a function from $effect = cleanup when the component is destroyed.
   $effect(() => () => clearTimeout(timer));
 
   return {

@@ -1,9 +1,4 @@
 <script lang="ts" generics="T extends string">
-  // `generics` makes the component typed by its tab ids: bind:value={tab}
-  // only accepts the ids you passed in `tabs`.
-  //
-  // `$bindable()` marks `value` as two-way: the parent writes
-  // <Tabs bind:value={tab} …/> and its `tab` variable changes when a tab is clicked.
   let {
     tabs,
     value = $bindable(),

@@ -1,11 +1,11 @@
 <script lang="ts">
   import { unfinished } from "$lib/play";
   import { api } from "$lib/api";
-  import { fileSize, plural, timeAgo } from "$lib/format";
+  import { fileSize, plural, SYNC_STAGES, timeAgo } from "$lib/format";
   import { go } from "$lib/nav.svelte";
   import { resource } from "$lib/resource.svelte";
   import { instances } from "$lib/stores";
-  import type { Id, SyncProgress } from "$lib/types";
+  import type { Id } from "$lib/types";
   import BlockArt from "../components/BlockArt.svelte";
   import Button from "../components/Button.svelte";
   import Head from "../components/Head.svelte";
@@ -18,8 +18,6 @@
   const summary = $derived(instances.byId(id));
   const sharedId = $derived(summary?.sync?.sharedInstanceId ?? null);
 
-  // Three requests, one loading state. Promise.all starts them together and
-  // resolves when all are done; destructuring gives each result a name.
   const review = resource(async () => {
     if (!sharedId) return null;
     const [preview, shared, detail] = await Promise.all([
@@ -35,7 +33,6 @@
   });
 
   // Per-file choice for config conflicts, keyed by path. Missing = take theirs.
-  // A $state object tracks each key separately, so one radio only re-renders its own row.
   let choices = $state<Record<string, "mine" | "theirs">>({});
   // New optional items this update offers. Nothing ticked unless the user chooses.
   let installOptional = $state<string[]>([]);
@@ -52,12 +49,10 @@
   const progress = $derived(summary?.progress ?? null);
 
   // When the update we started finishes, return to the instance page.
-  // $effect is the right tool: navigation is a side effect reacting to a state change.
-  //
-  // Careful: right after clicking, the store still says "ready" — it only switches to
+  // Right after clicking, the store still says "ready" — it only switches to
   // "syncing" when the first progress event arrives. So "finished" means we've seen
   // "syncing" and then "ready" again, not just "ready".
-  let sawSyncing = false; // plain variable: it's bookkeeping, nothing renders it
+  let sawSyncing = false;
   $effect(() => {
     const status = summary?.status;
     if (!started) return;
@@ -92,14 +87,6 @@
       { id: "theirs", label: `Use ${publisher}'s`, value: c.theirs },
     ] as const;
   }
-
-  const STAGES: Record<SyncProgress["stage"], string> = {
-    waiting_for_game_exit: "Waiting for you to close Minecraft…",
-    backup: "Backing up files…",
-    download: "Downloading…",
-    waiting_for_manual_downloads: "Waiting for you to download files",
-    apply: "Putting files in place…",
-  };
 
   async function apply() {
     error = null;
@@ -366,7 +353,7 @@
           </div>
         {/if}
         <span class="text-[13px] text-(--text-muted)"
-          >{STAGES[progress.stage]}</span
+          >{SYNC_STAGES[progress.stage]}</span
         >
         <div class="flex items-center gap-3">
           {#if !manual && progress.stage !== "waiting_for_game_exit"}

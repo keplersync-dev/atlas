@@ -10,6 +10,7 @@
   import Button from "../Button.svelte";
   import Dialog from "../Dialog.svelte";
   import Icon from "../Icon.svelte";
+  import SearchBox from "../SearchBox.svelte";
 
   // What fills your upload space: every file you uploaded, what still uses it, and a way
   // to free the space files nothing uses take now, one or all at once (the server also
@@ -159,19 +160,7 @@
       Nothing uploaded. Mods from Modrinth and CurseForge never need it.
     </p>
   {:else if uploads.data}
-    <label class="relative mt-3 block">
-      <span
-        class="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2 text-(--text-faint)"
-      >
-        <Icon name="search" class="size-3.5" />
-      </span>
-      <input
-        bind:value={query}
-        placeholder="Search uploads"
-        aria-label="Search uploads"
-        class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg) pr-2.5 pl-8 text-[13px] outline-none placeholder:text-(--text-faint) focus:border-(--accent)"
-      />
-    </label>
+    <SearchBox bind:value={query} placeholder="Search uploads" class="mt-3" />
 
     {#if unused.length > 1}
       <div

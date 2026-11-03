@@ -1,9 +1,9 @@
 <script lang="ts">
   import { unfinished } from "$lib/play";
   import { api } from "$lib/api";
-  import { plural, workLabel, workPercent } from "$lib/format";
+  import { plural, SYNC_STAGES, workLabel, workPercent } from "$lib/format";
   import { instances } from "$lib/stores";
-  import type { InstanceSummary, SyncProgress } from "$lib/types";
+  import type { InstanceSummary } from "$lib/types";
   import Button from "../Button.svelte";
   import Icon from "../Icon.svelte";
   import ManualDownloads from "./ManualDownloads.svelte";
@@ -27,15 +27,7 @@
     onsetup?: () => void;
   } = $props();
 
-  const STAGES: Record<SyncProgress["stage"], string> = {
-    waiting_for_game_exit: "Waiting for you to close Minecraft…",
-    backup: "Backing up files…",
-    download: "Downloading…",
-    waiting_for_manual_downloads: "Waiting for you to download files",
-    apply: "Putting files in place…",
-  };
-
-  const s = $derived(instance.sync);
+  const s =$derived(instance.sync);
   let cancelling = $state(false);
   // Once files are being changed, the job can't stop.
   const cancellable = $derived(
@@ -109,7 +101,7 @@
 {:else if instance.status === "syncing" && instance.progress}
   <div class="mt-5 rounded-lg bg-(--bg-raise) px-4 py-3">
     <div class="flex items-center justify-between gap-3 text-[13px]">
-      <span class="flex-1">{STAGES[instance.progress.stage]}</span>
+      <span class="flex-1">{SYNC_STAGES[instance.progress.stage]}</span>
       {#if !waiting}
         <span class="text-(--text-muted) tabular-nums"
           >{instance.progress.percent}%</span

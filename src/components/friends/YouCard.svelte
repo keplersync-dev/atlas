@@ -13,8 +13,7 @@
   import Icon from "../Icon.svelte";
 
   const me = $derived(social.session?.user);
-  // Depend on the code itself, not the whole session object: a $derived only
-  // notifies when its value changes, so reloading the session doesn't re-run the lookup.
+  // Keyed on the code, not `me`: the session is a new object after every reload.
   const myCode = $derived(me?.friendCode);
   const clip = copier();
 

@@ -16,6 +16,7 @@
   import { fileSize, plural } from "$lib/format";
   import type { FileRules, LeftOutFile, ShareFile } from "$lib/types";
   import Icon from "../Icon.svelte";
+  import SearchBox from "../SearchBox.svelte";
 
   // Every file in the instance besides mods and packs, as a table to tick, like the
   // Modrinth App's export. Files that can never be sent (programs, logins) aren't
@@ -276,19 +277,11 @@
       <h3 class="mr-auto shrink-0 text-[14px] font-semibold">
         Configs and other files
       </h3>
-      <label class="relative block w-52 min-w-0">
-        <span
-          class="pointer-events-none absolute top-1/2 left-2.5 flex -translate-y-1/2 text-(--text-faint)"
-        >
-          <Icon name="search" class="size-3.5" />
-        </span>
-        <input
-          bind:value={query}
-          placeholder="Search files"
-          aria-label="Search files"
-          class="h-8 w-full rounded-md border border-(--line-2) bg-(--bg) pr-2.5 pl-8 text-[13px] outline-none focus:border-(--accent)"
-        />
-      </label>
+      <SearchBox
+        bind:value={query}
+        placeholder="Search files"
+        class="w-52 min-w-0"
+      />
       {#if !isDefault}
         <button
           type="button"
