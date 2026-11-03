@@ -8,10 +8,18 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --manifest-path protocol/Cargo.toml
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+
   windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check the tag matches the app version
         shell: pwsh
@@ -28,24 +36,15 @@ jobs:
             throw "Set the ATLAS_SERVER_URL repository variable"
           }
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 12
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
       - uses: dtolnay/rust-toolchain@stable
-      - uses: swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
       - run: pnpm install --frozen-lockfile
-
-      - name: Test
-        run: |
-          cargo test --manifest-path protocol/Cargo.toml
-          cargo test --manifest-path src-tauri/Cargo.toml
 
       - uses: tauri-apps/tauri-action@v0
         env:
