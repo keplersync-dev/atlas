@@ -67,7 +67,7 @@
 <header
   data-tauri-drag-region
   class="flex h-9 shrink-0 items-center border-b border-white/3 bg-(--bg-side) select-none
-    {isMac ? 'pl-19.5' : 'pl-3.5'}"
+    {isMac ? 'pl-21' : 'pl-3.5'}"
 >
   <div
     data-tauri-drag-region
