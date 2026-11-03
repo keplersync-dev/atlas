@@ -1,0 +1,43 @@
+name: Mac test build
+
+on:
+  push:
+    tags: ["mac-test-*"]
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 12
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - run: cargo test --manifest-path protocol/Cargo.toml
+      - run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ATLAS_SERVER_URL: ${{ vars.ATLAS_SERVER_URL }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Atlas Mac test ${{ github.ref_name }}
+          releaseBody: A test build for macOS. Not an update; nothing installed gets it.
+          releaseDraft: true
+          prerelease: true
+          includeUpdaterJson: false
+          args: --target universal-apple-darwin
