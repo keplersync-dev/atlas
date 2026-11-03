@@ -212,6 +212,18 @@ pub struct OptionalItem {
     pub size_bytes: u64,
 }
 
+/// A file in a shared pack that isn't from Modrinth or CurseForge: someone uploaded it.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadedFile {
+    pub name: String,
+    /// The file's own name: "tandem-fabric-0.1.0.jar".
+    pub file_name: String,
+    pub kind: ContentKind,
+    pub size_bytes: u64,
+}
+
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -246,6 +258,9 @@ pub struct SharedInstance {
     /// CurseForge: someone uploaded them, and nobody has checked what's inside.
     #[serde(default)]
     pub uploaded_files: Vec<String>,
+    /// The same files with their file names and sizes. Apps before 0.4.1 only read `uploaded_files`.
+    #[serde(default)]
+    pub uploaded: Vec<UploadedFile>,
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

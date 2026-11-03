@@ -427,6 +427,15 @@ export type OptionalItem = {
  */
 key: string, name: string, kind: ContentKind, sizeBytes: number, };
 
+/**
+ * A file in a shared pack that isn't from Modrinth or CurseForge: someone uploaded it.
+ */
+export type UploadedFile = { name: string, 
+/**
+ * The file's own name: "tandem-fabric-0.1.0.jar".
+ */
+fileName: string, kind: ContentKind, sizeBytes: number, };
+
 export type SharedInstance = { id: string, name: string, description: string | null, icon: string | null, 
 /**
  * None when frozen with no owner.
@@ -444,7 +453,11 @@ localInstanceId: string | null, optionalItems: Array<OptionalItem>,
  * Mods and resource packs in the latest version that aren't from Modrinth or
  * CurseForge: someone uploaded them, and nobody has checked what's inside.
  */
-uploadedFiles: Array<string>, };
+uploadedFiles: Array<string>, 
+/**
+ * The same files with their file names and sizes. Apps before 0.4.1 only read `uploaded_files`.
+ */
+uploaded: Array<UploadedFile>, };
 
 export type UpdatedItem = { name: string, from: string, to: string, };
 
@@ -476,7 +489,11 @@ localInstanceId: string | null, optionalItems: Array<OptionalItem>,
  * Mods and resource packs in the latest version that aren't from Modrinth or
  * CurseForge: someone uploaded them, and nobody has checked what's inside.
  */
-uploadedFiles: Array<string>, };
+uploadedFiles: Array<string>, 
+/**
+ * The same files with their file names and sizes. Apps before 0.4.1 only read `uploaded_files`.
+ */
+uploaded: Array<UploadedFile>, };
 
 export type ConfigConflict = { path: string, mine: string, theirs: string, };
 

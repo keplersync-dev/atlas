@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 pub use atlas_protocol::api::{
     AddMembers, CreateRevision, CreateSharedInstance, GroupLinkGroup, GroupRef, OptionalItem,
     Revision, RevisionChanges, RevisionSummary, SetMemberRole, ShareToGroup, SharedGroupLink,
-    SharedInstance, SharedInstanceDetail, SharedMember, Synced, Transfer, UpdatedItem,
+    SharedInstance, SharedInstanceDetail, SharedMember, Synced, Transfer, UpdatedItem, UploadedFile,
 };
 
 use super::{

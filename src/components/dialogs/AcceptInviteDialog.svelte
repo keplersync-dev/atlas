@@ -110,6 +110,19 @@
         ? `Add to ${pickedInstance.name}`
         : "Add",
   );
+  // Files someone uploaded. A server from before 0.4.1 sends only their names.
+  const uploaded = $derived(
+    !invite
+      ? []
+      : invite.uploaded?.length
+        ? invite.uploaded
+        : invite.uploadedFiles.map((name) => ({
+            name,
+            fileName: null as string | null,
+            sizeBytes: null as number | null,
+          })),
+  );
+
   // Nowhere to put it yet: the button tracks an instance instead.
   const nowhere = $derived(
     !!invite && !launchers.loading && !creatable.length && !usable.length,
@@ -358,19 +371,54 @@
         />
       </div>
     {/if}
-    {#if invite.uploadedFiles?.length}
-      <div class="mt-3 rounded-lg bg-(--warn)/10 px-4 py-3 text-[13px]">
-        <b class="font-semibold text-(--warn)"
-          >Not from Modrinth or CurseForge:</b
-        >
-        {invite.uploadedFiles.join(", ")}. {invite.owner?.displayName ??
-          "The owner"}'s pack includes
-        {invite.uploadedFiles.length === 1 ? "this file" : "these files"} from their
-        own PC, so Atlas can't check {invite.uploadedFiles.length === 1
-          ? "it"
-          : "them"}. Only add the pack if you trust {invite.owner
-          ?.displayName ?? "them"}.
-      </div>
+    {#if uploaded.length}
+      {@const one = uploaded.length === 1}
+      <section class="mt-4">
+        <div class="mb-2 flex items-center gap-2">
+          <Icon name="warn" class="size-3.5 shrink-0 text-(--warn)" />
+          <h3 class="min-w-0 flex-1 text-[14px] font-semibold">
+            {one ? "1 file isn't" : `${uploaded.length} files aren't`} from Modrinth
+            or CurseForge
+          </h3>
+          <span class="shrink-0 text-[12.5px] text-(--text-faint)"
+            >Atlas can't check {one ? "it" : "them"}</span
+          >
+        </div>
+        <!-- About five rows, then it scrolls: the dialog stays the same height. -->
+        <ul class="max-h-58 overflow-y-auto rounded-xl border border-(--line)/70">
+          {#each uploaded as f, i (i)}
+            <li
+              class="flex items-center gap-3 px-3 py-2 {i
+                ? 'border-t border-(--line)/40'
+                : ''}"
+            >
+              <span
+                class="grid size-6.5 shrink-0 place-items-center rounded-md bg-(--bg-raise) text-(--text-faint)"
+              >
+                <Icon name="file" class="size-3.5" />
+              </span>
+              <b class="min-w-0 flex-1 truncate text-[13.5px] font-semibold"
+                >{f.name}</b
+              >
+              {#if f.fileName}
+                <span class="min-w-0 truncate text-[12px] text-(--text-faint)"
+                  >{f.fileName}</span
+                >
+              {/if}
+              {#if f.sizeBytes != null}
+                <span
+                  class="w-14 shrink-0 text-right text-[12px] text-(--text-faint) tabular-nums"
+                  >{fileSize(f.sizeBytes)}</span
+                >
+              {/if}
+            </li>
+          {/each}
+        </ul>
+        <p class="mt-2 text-[12.5px] text-(--text-muted)">
+          {invite.owner?.displayName ?? "The owner"} added {one ? "it" : "these"} from
+          their own PC. Only add the pack if you trust them.
+        </p>
+      </section>
     {/if}
   {/if}
 

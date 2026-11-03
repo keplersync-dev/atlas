@@ -47,7 +47,7 @@ fn types_ts() -> String {
         LauncherRef, InstanceSummary, InstanceContent, Backup, InstanceDetail,
         TrackInstanceRef, UpdateInstanceInput,
         // Shared instances
-        GroupRef, SharedMember, GroupLinkGroup, SharedGroupLink, OptionalItem, SharedInstance,
+        GroupRef, SharedMember, GroupLinkGroup, SharedGroupLink, OptionalItem, UploadedFile, SharedInstance,
         UpdatedItem, RevisionChanges, RevisionSummary, SharedInstanceDetail, ConfigConflict,
         VersionChange, LauncherChange, SyncPreview, SyncOptions, PublishItem, PackInfo,
         LeftOutFile, ShareFile, FileRules, PublishPlan, ShareInstanceInput, PublishInput,
