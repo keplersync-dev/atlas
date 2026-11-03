@@ -1,9 +1,9 @@
 <script lang="ts">
   import { openContextMenu } from "$lib/contextMenu.svelte";
   import { go } from "$lib/nav.svelte";
-  import { personItems } from "$lib/people";
+  import { personItems, presenceText } from "$lib/people";
   import { social } from "$lib/stores";
-  import { timeAgo } from "$lib/format";
+  import { showError } from "$lib/toasts.svelte";
   import type { Friend, Id } from "$lib/types";
   import Button from "./Button.svelte";
   import Head from "./Head.svelte";
@@ -19,23 +19,21 @@
     social.friends.filter((f) => f.presence.state === "offline"),
   );
 
-  function status(f: Friend) {
-    const p = f.presence;
-    if (p.state === "playing")
-      return p.instanceName ? `Playing ${p.instanceName}` : "Playing Minecraft";
-    if (p.state === "online") return "Online";
-    return `Last seen ${timeAgo(p.updatedAt)}`;
-  }
-
   let busy = $state<Id | null>(null);
   async function respond(userId: Id, accept: boolean) {
     busy = userId;
     try {
       await social.respondToRequest(userId, accept);
+    } catch (e) {
+      showError((e as Error).message);
     } finally {
       busy = null;
     }
   }
+
+  // Online friends always show; a long offline list is cut short until asked.
+  const OFFLINE_SHOWN = 8;
+  let allOffline = $state(false);
 </script>
 
 {#snippet row(f: Friend)}
@@ -57,7 +55,7 @@
           ? 'text-(--online)'
           : 'text-(--text-faint)'}"
       >
-        {status(f)}
+        {presenceText(f.presence)}
       </small>
     </div>
     <!-- Shown on hover, or while focused for keyboards, like on the Friends page. -->
@@ -136,6 +134,16 @@
     <div class="mt-4 mb-1 text-[13px] font-semibold text-(--text-faint)">
       Offline · {offline.length}
     </div>
-    {#each offline as f (f.user.id)}{@render row(f)}{/each}
+    {#each allOffline ? offline : offline.slice(0, OFFLINE_SHOWN) as f (f.user.id)}{@render row(
+        f,
+      )}{/each}
+    {#if offline.length > OFFLINE_SHOWN}
+      <button
+        type="button"
+        class="mt-1 w-full rounded-md px-2 py-1 text-left text-[13px] text-(--accent) hover:bg-(--bg-hover)"
+        onclick={() => (allOffline = !allOffline)}
+        >{allOffline ? "Show fewer" : `Show all ${offline.length}`}</button
+      >
+    {/if}
   {/if}
 {/if}

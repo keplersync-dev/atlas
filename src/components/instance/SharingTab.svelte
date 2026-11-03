@@ -2,6 +2,7 @@
   import { showError } from "$lib/toasts.svelte";
   import { api } from "$lib/api";
   import { confirmAction } from "$lib/confirm.svelte";
+  import { fuzzyFilter } from "$lib/fuzzy";
   import { resource } from "$lib/resource.svelte";
   import { social } from "$lib/stores";
   import type {
@@ -13,10 +14,15 @@
   import { instances } from "$lib/stores";
   import Head from "../Head.svelte";
   import Icon from "../Icon.svelte";
+  import SearchBox from "../SearchBox.svelte";
   import Switch from "../Switch.svelte";
 
   let { instanceId, sync }: { instanceId: Id; sync: InstanceSyncInfo } =
     $props();
+
+  // A search once the list is longer than a screenful.
+  let query = $state("");
+  const SEARCH_FROM = 8;
 
   let savingAutoUpdate = $state(false);
   async function setAutoUpdate(on: boolean) {
@@ -31,9 +37,9 @@
     }
   }
 
-  // Reads only `sync.sharedInstanceId` before awaiting, so it refetches only when
-  // that id changes — not on every progress tick of the instance.
-  const shared = resource(() => api.getSharedInstance(sync.sharedInstanceId));
+  // Keyed on the id, not `sync`: that is a new object after every rescan.
+  const sharedId = $derived(sync.sharedInstanceId);
+  const shared = resource(() => api.getSharedInstance(sharedId));
 
   const isOwner = $derived(sync.role === "owner");
   // Updates reach the owner's copy only when an editor sends one: with no editors,
@@ -156,7 +162,14 @@
     <button class="ml-1 underline" onclick={shared.reload}>Try again</button>
   </p>
 {:else if shared.data}
-  {#each shared.data.members as m (m.user.id)}
+  {#if shared.data.members.length >= SEARCH_FROM}
+    <SearchBox
+      bind:value={query}
+      placeholder="Search {shared.data.members.length} members"
+      class="mb-2 max-w-72"
+    />
+  {/if}
+  {#each fuzzyFilter( shared.data.members, query, (m) => [m.user.displayName, m.user.username, m.viaGroup?.name] ) as m (m.user.id)}
     {@const status = memberStatus(m)}
     <div
       class="grid grid-cols-[32px_minmax(0,1fr)_100px_136px_32px] items-center gap-3.5 rounded-md px-2 py-2 hover:bg-(--bg-hover)"
@@ -221,5 +234,9 @@
         <span></span>
       {/if}
     </div>
+  {:else}
+    <p class="px-2 py-6 text-[13px] text-(--text-muted)">
+      No members match “{query}”.
+    </p>
   {/each}
 {/if}

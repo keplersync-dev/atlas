@@ -8,15 +8,10 @@
   import Button from "../Button.svelte";
   import ContentIcon from "../ContentIcon.svelte";
   import Dialog from "../Dialog.svelte";
-  import Head from "../Head.svelte";
+  import PeoplePicker from "../PeoplePicker.svelte";
   import FileTree from "./FileTree.svelte";
   import RightsCheck from "./RightsCheck.svelte";
-  import SharePicker, {
-    names,
-    uncheckedOf,
-    uploadBytes,
-    uploadsOf,
-  } from "./SharePicker.svelte";
+  import SharePicker, { uploadCheck } from "./SharePicker.svelte";
 
   // "share": first share of an instance that's only on this PC (creates revision 1).
   // "invite": add people to an instance that's already shared.
@@ -32,7 +27,7 @@
   const work = $derived(instances.work[instanceId]);
   const sharedId = $derived(instance?.sync?.sharedInstanceId ?? null);
 
-  // Only load what this mode needs. Promise.resolve(null) = "nothing to load".
+  // Only load what this mode needs.
   const plan = resource(() =>
     mode === "share" ? api.preparePublish(instanceId) : Promise.resolve(null),
   );
@@ -74,33 +69,14 @@
     new Set(shared.data?.groups.map((g) => g.group.id) ?? []),
   );
 
-  const uploads = $derived(plan.data ? uploadsOf(plan.data.items, modes) : []);
-  const needsRights = $derived(uploads.length > 0);
-  // A file Modrinth and CurseForge couldn't be asked about: sharing waits for them.
-  const waiting = $derived(
-    !!plan.data && uncheckedOf(plan.data.items, modes).length > 0,
-  );
-  const overQuota = $derived(
-    !!plan.data &&
-      plan.data.storage.usedBytes + uploadBytes(plan.data.items, modes) >
-        plan.data.storage.quotaBytes,
-  );
-  const tooBig = $derived(
-    !!plan.data &&
-      uploadsOf(plan.data.items, modes).some(
-        (i) => i.sizeBytes > plan.data!.storage.maxFileBytes,
-      ),
-  );
+  const check = $derived(plan.data ? uploadCheck(plan.data, modes) : null);
+  const uploads = $derived(check?.uploads ?? []);
 
   const canSubmit = $derived(
     !submitting &&
       social.signedIn &&
       (mode === "share"
-        ? !!plan.data &&
-          (!needsRights || rights) &&
-          !waiting &&
-          !overQuota &&
-          !tooBig
+        ? !!check && !check.blocked && (!uploads.length || rights)
         : friendIds.length + groupIds.length > 0),
   );
 
@@ -127,7 +103,7 @@
   );
 
   async function submit(e: SubmitEvent) {
-    e.preventDefault(); // stop the browser's default "reload the page" form submit
+    e.preventDefault();
     if (!canSubmit) return;
     submitting = true;
     error = null;
@@ -192,94 +168,25 @@
     </p>
   {:else}
     <h3 class="mt-1 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
-      People
+      Share with
     </h3>
-    {#each social.friends as f (f.user.id)}
-      {@const status = memberStatus.get(f.user.id)}
-      {@const member = !!status}
-      <label
-        class="-mx-2 flex items-center gap-3 rounded-md px-2 py-1.5 {member
-          ? 'opacity-50'
-          : 'cursor-pointer hover:bg-(--bg-hover)'}"
-      >
-        <!-- Ticked and greyed: they already have it, so there's nothing to pick. -->
-        {#if member}
-          <input
-            type="checkbox"
-            checked
-            disabled
-            class="size-3.75 accent-(--accent)"
-          />
-        {:else}
-          <input
-            type="checkbox"
-            bind:group={friendIds}
-            value={f.user.id}
-            class="size-3.75 accent-(--accent)"
-          />
-        {/if}
-        <Head user={f.user} size={28} ring="var(--bg-raise)" />
-        <span class="min-w-0 flex-1">
-          <b class="block font-medium">{f.user.displayName}</b>
-          <small class="block text-[13px] text-(--text-faint)"
-            >{status === "invited"
-              ? "Invite pending"
-              : member
-                ? "Already a member"
-                : `@${f.user.username}`}</small
-          >
-        </span>
-      </label>
-    {:else}
-      <p class="text-[13px] text-(--text-muted)">
-        No friends yet. Add some on the Friends page, or share with a group.
-      </p>
-    {/each}
-
-    {#if groups.data?.length}
-      <h3 class="mt-4 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
-        Groups
-      </h3>
-      {#each groups.data as g (g.id)}
-        {@const linked = linkedGroupIds.has(g.id)}
-        <label
-          class="-mx-2 flex items-center gap-3 rounded-md px-2 py-1.5 {linked
-            ? 'opacity-50'
-            : 'cursor-pointer hover:bg-(--bg-hover)'}"
-        >
-          {#if linked}
-            <input
-              type="checkbox"
-              checked
-              disabled
-              class="size-3.75 accent-(--accent)"
-            />
-          {:else}
-            <input
-              type="checkbox"
-              bind:group={groupIds}
-              value={g.id}
-              class="size-3.75 accent-(--accent)"
-            />
-          {/if}
-          <span class="flex">
-            {#each g.members.slice(0, 3) as m, i (m.user.id)}
-              <span class={i ? "-ml-1.5" : ""}
-                ><Head user={m.user} size={22} /></span
-              >
-            {/each}
-          </span>
-          <span class="min-w-0 flex-1">
-            <b class="block font-medium">{g.name}</b>
-            <small class="block text-[13px] text-(--text-faint)">
-              {plural(g.members.length, "member")}{linked
-                ? " · already shared"
-                : ""}
-            </small>
-          </span>
-        </label>
-      {/each}
-    {/if}
+    <!-- Those who already have it are ticked and greyed, so there's nothing to pick. -->
+    <PeoplePicker
+      friends={social.friends}
+      groups={groups.data ?? []}
+      bind:friendIds
+      bind:groupIds
+      friendTaken={(id) => {
+        const status = memberStatus.get(id);
+        return status === "invited"
+          ? "Invite pending"
+          : status
+            ? "Already a member"
+            : null;
+      }}
+      groupTaken={(id) => (linkedGroupIds.has(id) ? "Already shared" : null)}
+      empty="No friends yet. Add some on the Friends page, or share with a group."
+    />
 
     {#if mode === "invite" && social.friends.length && !pickable}
       <p class="mt-3 text-[13px] text-(--text-muted)">
@@ -287,43 +194,52 @@
         page to invite more.
       </p>
     {:else}
-      <h3 class="mt-4 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
-        They can
-      </h3>
-      <div
-        class="inline-flex gap-0.5 rounded-md bg-(--bg) p-0.75"
-        role="group"
-        aria-label="Role"
-      >
-        {#each ROLES as option (option.id)}
-          <!-- type="button" so these don't submit the form -->
-          <button
-            type="button"
-            aria-pressed={role === option.id}
-            onclick={() => (role = option.id)}
-            class="rounded px-3 py-1 text-[13px] font-medium {role === option.id
-              ? 'bg-(--bg-raise-2) text-(--text-primary)'
-              : 'text-(--text-muted)'}"
+      <!-- What they can do and the description share a row; the description wraps
+           under it when the dialog is narrow. -->
+      <div class="mt-4 flex flex-wrap items-end gap-x-6 gap-y-4">
+        <div class="shrink-0">
+          <h3 class="mb-1.5 text-[13px] font-semibold text-(--text-muted)">
+            They can
+          </h3>
+          <div
+            class="inline-flex h-8.5 items-center gap-0.5 rounded-md bg-(--bg) p-0.75"
+            role="group"
+            aria-label="Role"
           >
-            {option.label}
-          </button>
-        {/each}
+            {#each ROLES as option (option.id)}
+              <button
+                type="button"
+                aria-pressed={role === option.id}
+                onclick={() => (role = option.id)}
+                class="rounded px-3 py-1 text-[13px] font-medium {role ===
+                option.id
+                  ? 'bg-(--bg-raise-2) text-(--text-primary)'
+                  : 'text-(--text-muted)'}"
+              >
+                {option.label}
+              </button>
+            {/each}
+          </div>
+        </div>
+        {#if mode === "share"}
+          <div class="min-w-56 flex-1">
+            <h3 class="mb-1.5 text-[13px] font-semibold text-(--text-muted)">
+              Description <span class="font-normal text-(--text-faint)"
+                >(optional)</span
+              >
+            </h3>
+            <input
+              bind:value={description}
+              maxlength="500"
+              placeholder="What's this pack for?"
+              class="h-8.5 w-full rounded-md border border-(--line-2) bg-(--bg) px-3 outline-none focus:border-(--accent)"
+            />
+          </div>
+        {/if}
       </div>
     {/if}
 
     {#if mode === "share"}
-      <h3 class="mt-4 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
-        Description <span class="font-normal text-(--text-faint)"
-          >(optional)</span
-        >
-      </h3>
-      <input
-        bind:value={description}
-        maxlength="500"
-        placeholder="What's this pack for?"
-        class="h-8.5 w-full rounded-md border border-(--line-2) bg-(--bg) px-3 outline-none focus:border-(--accent)"
-      />
-
       <h3 class="mt-4 mb-0.5 text-[13px] font-semibold text-(--text-muted)">
         What friends get
       </h3>
@@ -354,24 +270,17 @@
   {/if}
 
   {#snippet footer()}
-    {#if mode === "share" && needsRights && social.signedIn}
-      <RightsCheck
-        bind:checked={rights}
-        names={names(uploads)}
-        count={uploads.length}
-        note={submitting && work ? workLabel(work) : error}
-        tone={submitting && work ? "muted" : "danger"}
-      />
-    {:else if submitting && work}<span
-        class="mr-auto text-[13px] text-(--text-muted) tabular-nums"
-        >{workLabel(work)}</span
-      >{:else if error}<span
-        class="mr-auto text-[13px] text-(--danger)"
-        role="alert">{error}</span
-      >{:else if mode === "share" && social.signedIn && !picked}<span
-        class="mr-auto text-[13px] text-(--text-muted)"
-        >Nobody picked yet. You can invite friends later.</span
-      >{/if}
+    {@const sharing = mode === "share" && social.signedIn}
+    <RightsCheck
+      bind:checked={rights}
+      uploads={sharing ? uploads : []}
+      {submitting}
+      {work}
+      {error}
+      hint={sharing && !picked
+        ? "Nobody picked yet. You can invite friends later."
+        : null}
+    />
     {#if mode === "invite" && social.friends.length && !pickable}
       <Button onclick={onclose}>Close</Button>
     {:else}

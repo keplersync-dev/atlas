@@ -3,14 +3,15 @@
   import { copier } from "$lib/clipboard.svelte";
   import { confirmAction } from "$lib/confirm.svelte";
   import { openContextMenu } from "$lib/contextMenu.svelte";
-  import { plural, timeAgo } from "$lib/format";
-  import { personItems } from "$lib/people";
+  import { plural } from "$lib/format";
+  import { personItems, presenceText } from "$lib/people";
   import { social } from "$lib/stores";
   import type { Group, GroupMember } from "$lib/types";
   import Button from "../Button.svelte";
   import Head from "../Head.svelte";
   import Icon from "../Icon.svelte";
   import Menu, { type MenuItem } from "../Menu.svelte";
+  import PeoplePicker from "../PeoplePicker.svelte";
 
   const clip = copier(2200);
 
@@ -30,6 +31,10 @@
   const me = $derived(social.session?.user?.id);
 
   /** Why a friend can't be picked for this group, or null when they can. */
+  // A big group shows its first few members until asked, so the card stays scannable.
+  const MEMBERS_SHOWN = 6;
+  let allMembers = $state<Record<string, boolean>>({});
+
   const taken = (g: Group, id: string) =>
     g.members.some((m) => m.user.id === id)
       ? `In ${g.name}`
@@ -223,12 +228,7 @@
   function about(m: GroupMember) {
     if (m.user.id === me) return "You";
     const p = social.friends.find((f) => f.user.id === m.user.id)?.presence;
-    if (!p) return `@${m.user.username}`;
-    if (p.state === "playing")
-      return p.instanceName ? `Playing ${p.instanceName}` : "Playing Minecraft";
-    return p.state === "online"
-      ? "Online"
-      : `Last seen ${timeAgo(p.updatedAt)}`;
+    return p ? presenceText(p) : `@${m.user.username}`;
   }
   const presenceOf = (m: GroupMember) =>
     social.friends.find((f) => f.user.id === m.user.id)?.presence.state ?? null;
@@ -355,7 +355,7 @@
 
         <!-- Members as rows, like friends: what you can do is in ⋯ and on right-click. -->
         <div class="px-1.5 pb-1.5">
-          {#each g.members as m (m.user.id)}
+          {#each allMembers[g.id] ? g.members : g.members.slice(0, MEMBERS_SHOWN) as m (m.user.id)}
             {@const items = memberItems(g, m)}
             <!-- svelte-ignore a11y_no_static_element_interactions (right-click repeats the ⋯ menu, which keyboards reach) -->
             <div
@@ -392,6 +392,16 @@
               </div>
             </div>
           {/each}
+          {#if g.members.length > MEMBERS_SHOWN}
+            <button
+              type="button"
+              class="w-full rounded-md px-2 py-1.5 text-left text-[13px] text-(--accent) hover:bg-(--bg-hover)"
+              onclick={() => (allMembers[g.id] = !allMembers[g.id])}
+              >{allMembers[g.id]
+                ? "Show fewer"
+                : `Show all ${g.members.length} members`}</button
+            >
+          {/if}
         </div>
         {#if packsOf(g).length}
           <p class="truncate px-3.5 pb-3 text-[13px] text-(--text-faint)">
@@ -406,43 +416,13 @@
           <!-- Every friend: those already in or invited are ticked and greyed, so an
                empty choice is plain to see rather than a message. -->
           {@const free = social.friends.filter((f) => !taken(g, f.user.id))}
-          <div class="mx-3 mb-3 rounded-lg bg-(--bg-raise) p-2">
-            {#each social.friends as f (f.user.id)}
-              {@const why = taken(g, f.user.id)}
-              <label
-                class="flex items-center gap-2.5 rounded-md px-2 py-1.5 {why
-                  ? 'opacity-50'
-                  : 'cursor-pointer hover:bg-(--bg-hover)'}"
-              >
-                {#if why}
-                  <input
-                    type="checkbox"
-                    checked
-                    disabled
-                    class="size-3.75 accent-(--accent)"
-                  />
-                {:else}
-                  <input
-                    type="checkbox"
-                    bind:group={picked}
-                    value={f.user.id}
-                    class="size-3.75 accent-(--accent)"
-                  />
-                {/if}
-                <Head user={f.user} size={28} ring="var(--bg-raise)" />
-                <span class="min-w-0 flex-1">
-                  <b class="block truncate font-medium">{f.user.displayName}</b>
-                  <small class="block truncate text-[13px] text-(--text-faint)"
-                    >{why ?? `@${f.user.username}`}</small
-                  >
-                </span>
-              </label>
-            {:else}
-              <p class="px-2 py-1.5 text-[13px] text-(--text-muted)">
-                No friends yet. Add one with their friend code above, or copy an
-                invite link from ⋯.
-              </p>
-            {/each}
+          <div class="mx-3 mb-3">
+            <PeoplePicker
+              friends={social.friends}
+              bind:friendIds={picked}
+              friendTaken={(id) => taken(g, id)}
+              empty="No friends yet. Add one with their friend code above, or copy an invite link from ⋯."
+            />
             {#if social.friends.length && !free.length}
               <p class="px-2 pt-2 text-[13px] text-(--text-muted)">
                 Everyone's in or invited. For anyone else, copy an invite link

@@ -1,16 +1,19 @@
 <script lang="ts" module>
   import type { InstanceSummary } from "$lib/types";
 
-  /** Cards that want the user's attention sort first on Home. */
-  export function needsAttention(i: InstanceSummary) {
+  /** An update to review or changes to send. A viewer's own changes stay on their PC. */
+  export function waitingOnYou(i: InstanceSummary) {
     const s = i.sync?.state;
     return (
-      i.status !== "ready" ||
       s === "update_available" ||
       s === "conflict" ||
       (s === "local_changes" && i.sync?.role !== "viewer")
     );
   }
+
+  /** Cards that want the user's attention sort first on Home. */
+  export const needsAttention = (i: InstanceSummary) =>
+    i.status !== "ready" || waitingOnYou(i);
 </script>
 
 <script lang="ts">
@@ -84,6 +87,8 @@
   type Status = {
     tone: "warn" | "accent" | "online" | "muted" | "shared" | "faint";
     text: string;
+    // Beside a button the row has room for about 20 characters; `text` becomes the tooltip.
+    short?: string;
     action?: {
       label: string;
       variant: "warn" | "primary" | "default";
@@ -120,6 +125,7 @@
           s.role === "owner"
             ? "An editor sent an update"
             : `${s.owner?.displayName ?? "The owner"} sent an update`,
+        short: "Update ready",
         action: {
           label: "Update",
           variant: "warn",
@@ -130,6 +136,7 @@
       return {
         tone: "warn",
         text: "Update available · would undo your changes",
+        short: "Update needs a look",
         action: {
           label: "Review",
           variant: "warn",
@@ -140,6 +147,7 @@
       return {
         tone: "accent",
         text: `${plural(s.localChangeCount, "change")} not sent yet`,
+        short: plural(s.localChangeCount, "unsent change"),
         action: {
           label: "Send",
           variant: "primary",
@@ -297,16 +305,21 @@
       <button
         onclick={open}
         tabindex="-1"
-        class="mt-1.5 flex w-full flex-wrap items-center gap-x-3 gap-y-0.5 text-left text-[13px] whitespace-nowrap text-(--text-faint)"
+        class="mt-1.5 flex w-full min-w-0 items-center gap-3 text-left text-[13px] whitespace-nowrap text-(--text-faint)"
       >
-        <span class="flex items-center gap-1">
+        <!-- One line on every card: the play time gives way (…), the file count never does. -->
+        <span class="flex shrink-0 items-center gap-1">
           <Icon name="cube" class="size-3" />
           {plural(instance.contentCount, "file")}
         </span>
         {#if instance.lastPlayedAt}
-          <span class="flex items-center gap-1">
-            <Icon name="clock" class="size-3" />
-            Played {timeAgo(instance.lastPlayedAt)}
+          <span
+            class="flex min-w-0 items-center gap-1"
+            title="Played {timeAgo(instance.lastPlayedAt)}"
+          >
+            <Icon name="clock" class="size-3 shrink-0" />
+            <span class="truncate">Played {timeAgo(instance.lastPlayedAt)}</span
+            >
           </span>
         {/if}
       </button>
@@ -362,20 +375,21 @@
               title={openError}>{openError}</span
             >
           {:else}
-            <!-- With a button beside it, the status takes the rest of the row and wraps,
-                 so the button stays on the same line. -->
+            <!-- One line always: the short wording beside a button, cut with … if a
+                 name is long; the full wording is the tooltip. -->
             <span
               class="flex min-w-0 {status.action
                 ? 'flex-1 basis-0'
                 : 'max-w-full shrink-0'}"
+              title={status.text}
             >
               <span
-                class="flex min-w-0 items-center gap-1.5 text-[13px] {status.action
-                  ? 'rounded-lg'
-                  : 'rounded-full'} {TEXT[status.tone]}"
+                class="flex min-w-0 items-center gap-1.5 rounded-full text-[13px] {TEXT[
+                  status.tone
+                ]}"
               >
                 <i class="size-2 shrink-0 rounded-full {DOT[status.tone]}"></i>
-                <span class="line-clamp-2">{status.text}</span>
+                <span class="truncate">{status.short ?? status.text}</span>
               </span>
             </span>
           {/if}

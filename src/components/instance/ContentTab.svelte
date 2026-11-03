@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fuzzyFilter } from "$lib/fuzzy";
-  import { plural } from "$lib/format";
+  import { KIND, plural } from "$lib/format";
   import { showError } from "$lib/toasts.svelte";
   import { api } from "$lib/api";
   import { openDialog } from "$lib/dialogs.svelte";
@@ -13,6 +13,7 @@
   } from "$lib/types";
   import ContentIcon from "../ContentIcon.svelte";
   import Icon from "../Icon.svelte";
+  import KindChips from "../KindChips.svelte";
   import Menu from "../Menu.svelte";
   import ShareModeSelect from "../ShareModeSelect.svelte";
   import Switch from "../Switch.svelte";
@@ -29,22 +30,9 @@
     onchanged: () => void;
   } = $props();
 
-  // Local UI state: only this component cares about the filter and search text.
   let kind = $state<ContentKind | "all">("all");
   let query = $state("");
 
-  const KIND_LABELS: Record<ContentKind, string> = {
-    mod: "Mods",
-    resourcepack: "Resource packs",
-    shaderpack: "Shaders",
-    datapack: "Data packs",
-  };
-  const SINGULAR: Record<ContentKind, string> = {
-    mod: "Mod",
-    resourcepack: "Resource pack",
-    shaderpack: "Shader",
-    datapack: "Data pack",
-  };
   // Where a file comes from. `hint` is the tooltip: what the label means for sharing.
   const SOURCES: Record<
     ContentSource,
@@ -76,21 +64,17 @@
   const canSetModes = $derived(
     !!instance.sync && instance.sync.role !== "viewer",
   );
+  // Spare width is shared out (name 2 : version 1 : source 1) so a wide window spaces
+  // the columns evenly instead of leaving one wide gap after the name.
+  const columns = $derived(
+    canSetModes
+      ? "grid-cols-[28px_minmax(0,2fr)_minmax(140px,1fr)_224px_36px]"
+      : "grid-cols-[28px_minmax(0,2fr)_minmax(140px,1fr)_minmax(110px,1fr)_36px]",
+  );
   const ownerName = $derived(
     instance.sync && instance.sync.role === "viewer"
       ? (instance.sync.owner?.displayName ?? "the owner")
       : null,
-  );
-
-  // Only show chips for kinds this instance actually has.
-  const chips = $derived(
-    (Object.keys(KIND_LABELS) as ContentKind[])
-      .map((k) => ({
-        id: k,
-        label: KIND_LABELS[k],
-        count: instance.content.filter((c) => c.kind === k).length,
-      }))
-      .filter((c) => c.count > 0),
   );
 
   /** Owners/editors: has this file's sharing changed since the last publish? */
@@ -200,25 +184,11 @@
 <!-- One row: kinds (when there's more than one), what the choices do, then bulk
      setting and search on the right. -->
 <div class="mt-4 mb-2 flex flex-wrap items-center gap-x-2.5 gap-y-2">
-  {#if chips.length > 1}
-    <div class="flex flex-wrap gap-1">
-      {#each [{ id: "all" as const, label: "All", count: instance.content.length }, ...chips] as chip (chip.id)}
-        <button
-          aria-pressed={kind === chip.id}
-          onclick={() => (kind = chip.id)}
-          class="h-7 rounded-full px-2.75 text-[13px] font-medium transition-colors
-            {kind === chip.id
-            ? 'bg-(--bg-raise-2) text-(--text-primary)'
-            : 'text-(--text-muted) hover:bg-(--bg-hover)'}"
-        >
-          {chip.label}
-          <span class="ml-0.5 font-normal opacity-70">{chip.count}</span>
-        </button>
-      {/each}
-    </div>
-  {/if}
+  <KindChips items={instance.content} bind:kind counts />
   {#if lockedReason}
-    <span class="min-w-0 truncate text-[13px] text-(--text-faint)">{lockedReason}</span>
+    <span class="min-w-0 truncate text-[13px] text-(--text-faint)"
+      >{lockedReason}</span
+    >
   {:else if canSetModes}
     <span class="min-w-0 truncate text-[13px] text-(--text-faint)"
       >Friends get changes with your next update.</span
@@ -249,7 +219,6 @@
       class="flex h-7.5 w-56 max-w-full items-center gap-2 rounded-md bg-(--bg-raise) px-2.5 text-(--text-faint)"
     >
       <Icon name="search" class="size-3.5" />
-      <!-- bind:value keeps `query` and the input in sync both ways -->
       <input
         bind:value={query}
         placeholder="Search {plural(instance.content.length, 'file')}"
@@ -264,9 +233,7 @@
   {#if visible.length}
     <div
       class="grid items-center gap-3.5 border-b border-(--line) px-2 pb-1.5 text-[13px] text-(--text-faint)
-        {canSetModes
-        ? 'grid-cols-[28px_minmax(0,1fr)_minmax(140px,0.35fr)_224px_36px]'
-        : 'grid-cols-[28px_minmax(0,1fr)_minmax(150px,0.35fr)_minmax(0,130px)_36px]'}"
+        {columns}"
       aria-hidden="true"
     >
       <span></span>
@@ -283,9 +250,7 @@
     {@const present = item.installed && item.enabled}
     <div
       class="grid items-center gap-3.5 rounded-md px-2 py-2.25 hover:bg-(--bg-hover)
-        {canSetModes
-        ? 'grid-cols-[28px_minmax(0,1fr)_minmax(140px,0.35fr)_224px_36px]'
-        : 'grid-cols-[28px_minmax(0,1fr)_minmax(150px,0.35fr)_minmax(0,130px)_36px]'}"
+        {columns}"
     >
       <ContentIcon
         src={item.iconUrl}
@@ -295,7 +260,7 @@
       <div class="min-w-0 {present ? '' : 'opacity-60'}">
         <b class="block truncate font-medium" title={item.name}>{item.name}</b>
         <small class="block truncate text-[13px] text-(--text-faint)">
-          {SINGULAR[item.kind]}
+          {KIND[item.kind]}
           {#if canSetModes}
             · <span title={SOURCES[item.source].hint}
               >{SOURCES[item.source].label}</span
