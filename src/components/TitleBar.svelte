@@ -3,6 +3,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { dialogs } from "$lib/dialogs.svelte";
   import { back } from "$lib/nav.svelte";
+  import { isMac } from "$lib/platform";
   import Icon from "./Icon.svelte";
 
   // Outside Tauri (plain `pnpm dev` in a browser) there is no window to control.
@@ -31,7 +32,7 @@
     },
   ]);
 
-  // Back like a browser: the mouse's side "back" button (button 3) and Alt+←.
+  // Back like a browser: the mouse's side "back" button (button 3), Alt+← and Cmd+[.
   // Ignored while a dialog is open, so you can't navigate away underneath it.
   function onMouseUp(e: MouseEvent) {
     if (e.button === 3 && !dialogs.active) {
@@ -40,7 +41,9 @@
     }
   }
   function onKeyDown(e: KeyboardEvent) {
-    if (e.altKey && e.key === "ArrowLeft" && !dialogs.active) {
+    const isBack =
+      (e.altKey && e.key === "ArrowLeft") || (e.metaKey && e.key === "[");
+    if (isBack && !dialogs.active) {
       e.preventDefault();
       back();
     }
@@ -63,7 +66,8 @@
 
 <header
   data-tauri-drag-region
-  class="flex h-9 shrink-0 items-center border-b border-white/3 bg-(--bg-side) pl-3.5 select-none"
+  class="flex h-9 shrink-0 items-center border-b border-white/3 bg-(--bg-side) select-none
+    {isMac ? 'pl-19.5' : 'pl-3.5'}"
 >
   <div
     data-tauri-drag-region
@@ -80,16 +84,19 @@
 
   <div data-tauri-drag-region class="flex-1 self-stretch"></div>
 
-  <div class="flex self-stretch">
-    {#each windowActions as { label, icon, destructive, run } (label)}
-      <button
-        onclick={run}
-        aria-label="{label} window"
-        class="grid w-11.5 cursor-default! place-items-center text-(--text-faint) transition-colors duration-150 hover:text-white
-          {destructive ? 'hover:bg-[#c42b1c]' : 'hover:bg-(--bg-hover)'}"
-      >
-        <Icon name={icon} class="size-4" />
-      </button>
-    {/each}
-  </div>
+  <!-- macOS draws its own traffic lights over the left of the bar. -->
+  {#if !isMac}
+    <div class="flex self-stretch">
+      {#each windowActions as { label, icon, destructive, run } (label)}
+        <button
+          onclick={run}
+          aria-label="{label} window"
+          class="grid w-11.5 cursor-default! place-items-center text-(--text-faint) transition-colors duration-150 hover:text-white
+            {destructive ? 'hover:bg-[#c42b1c]' : 'hover:bg-(--bg-hover)'}"
+        >
+          <Icon name={icon} class="size-4" />
+        </button>
+      {/each}
+    </div>
+  {/if}
 </header>

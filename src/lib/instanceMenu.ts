@@ -3,6 +3,7 @@ import { chooseAction, confirmAction, type Choice } from "$lib/confirm.svelte";
 import { openDialog } from "$lib/dialogs.svelte";
 import { plural } from "$lib/format";
 import { forgetInstance, go, nav } from "$lib/nav.svelte";
+import { isMac } from "$lib/platform";
 import { instances, social } from "$lib/stores";
 import { showError } from "$lib/toasts.svelte";
 import type { InstanceSummary } from "$lib/types";
@@ -45,7 +46,7 @@ export function instanceItems(
       ? []
       : [
           {
-            label: "Show in File Explorer",
+            label: isMac ? "Show in Finder" : "Show in File Explorer",
             icon: "folders",
             onselect: () => run(() => api.openInstanceFolder(i.id)),
           },

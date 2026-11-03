@@ -4,6 +4,7 @@
   import { confirmAction } from "$lib/confirm.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
   import { fileSize, formatCode } from "$lib/format";
+  import { isMac } from "$lib/platform";
   import { resource } from "$lib/resource.svelte";
   import { social } from "$lib/stores";
   import type { AppSettings, AuthProvider } from "$lib/types";
@@ -109,19 +110,23 @@
       key: "notificationSound",
       group: "Notifications",
       title: "Notification sound",
-      hint: "A quiet sound with each one. Silent while Windows is set to Do not disturb.",
+      hint: isMac
+        ? "A quiet sound with each one. Silent while a Focus is on."
+        : "A quiet sound with each one. Silent while Windows is set to Do not disturb.",
     },
     {
       key: "closeToTray",
       group: "Startup",
-      title: "Keep running in the tray",
-      hint: "Closing the window leaves Atlas in the tray, so it keeps your packs up to date.",
+      title: `Keep running in the ${isMac ? "menu bar" : "tray"}`,
+      hint: `Closing the window leaves Atlas in the ${isMac ? "menu bar" : "tray"}, so it keeps your packs up to date.`,
     },
     {
       key: "startWithWindows",
       group: "Startup",
-      title: "Start with Windows",
-      hint: "Atlas starts in the tray when you sign in to Windows.",
+      title: isMac ? "Open at login" : "Start with Windows",
+      hint: isMac
+        ? "Atlas starts in the menu bar when you log in."
+        : "Atlas starts in the tray when you sign in to Windows.",
     },
   ];
 

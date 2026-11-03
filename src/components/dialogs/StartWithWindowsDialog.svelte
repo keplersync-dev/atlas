@@ -1,5 +1,6 @@
 <script lang="ts">
   import { api } from "$lib/api";
+  import { isMac } from "$lib/platform";
   import { showError } from "$lib/toasts.svelte";
   import Button from "../Button.svelte";
   import Dialog from "../Dialog.svelte";
@@ -12,6 +13,8 @@
 
   let on = $state(true);
   let saving = $state(false);
+
+  const title = isMac ? "Open Atlas at login" : "Start Atlas with Windows";
 
   const STEPS = $derived([
     { icon: "users", text: `${owner ?? "Your friend"} sends an update` },
@@ -73,16 +76,13 @@
     class="mt-4 flex items-center gap-3 rounded-lg bg-(--bg-raise) px-3.5 py-3"
   >
     <div class="min-w-0 flex-1">
-      <b class="block font-medium">Start Atlas with Windows</b>
+      <b class="block font-medium">{title}</b>
       <small class="block text-[13px] text-(--text-muted)">
-        It waits in the tray, so updates are in before you play.
+        It waits in the {isMac ? "menu bar" : "tray"}, so updates are in before
+        you play.
       </small>
     </div>
-    <Switch
-      checked={on}
-      label="Start Atlas with Windows"
-      onchange={(next) => (on = next)}
-    />
+    <Switch checked={on} label={title} onchange={(next) => (on = next)} />
   </div>
 
   {#snippet footer()}
