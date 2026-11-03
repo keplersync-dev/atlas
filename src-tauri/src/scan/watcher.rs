@@ -11,17 +11,19 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use notify_debouncer_full::notify::{RecommendedWatcher, RecursiveMode};
-use notify_debouncer_full::{DebounceEventResult, Debouncer, RecommendedCache, new_debouncer};
+use notify_debouncer_full::notify::{self, RecommendedWatcher, RecursiveMode};
+use notify_debouncer_full::{DebounceEventResult, Debouncer, NoCache, new_debouncer_opt};
 use tokio::sync::mpsc;
 
 use super::files::is_content_folder;
+
+const DEBOUNCE: Duration = Duration::from_millis(1500);
 
 /// game dir (lowercase) → instance id
 type Dirs = Arc<Mutex<HashMap<String, String>>>;
 
 pub struct Watcher {
-    debouncer: Mutex<Option<Debouncer<RecommendedWatcher, RecommendedCache>>>,
+    debouncer: Mutex<Option<Debouncer<RecommendedWatcher, NoCache>>>,
     dirs: Dirs,
     watched: Mutex<HashMap<String, PathBuf>>, // instance id → path passed to watch()
     receiver: Mutex<Option<mpsc::UnboundedReceiver<String>>>,
@@ -32,9 +34,12 @@ impl Watcher {
         let (tx, rx) = mpsc::unbounded_channel();
         let dirs: Dirs = Arc::default();
         let lookup = dirs.clone();
-        let debouncer = new_debouncer(
-            Duration::from_millis(1500),
-            None,
+        // No file id cache: on Windows and macOS the default one walks the whole game
+        // folder (worlds, logs, shader caches) on every watch, and Atlas rescans anyway.
+        let debouncer = new_debouncer_opt::<_, RecommendedWatcher, NoCache>(
+            DEBOUNCE,
+            // One flush per window: with a shorter tick a burst can be cut in two.
+            Some(DEBOUNCE),
             move |result: DebounceEventResult| {
                 let Ok(events) = result else { return };
                 let ids: HashSet<String> = {
@@ -49,6 +54,8 @@ impl Watcher {
                     let _ = tx.send(id); // nobody listening (tests): fine
                 }
             },
+            NoCache::new(),
+            notify::Config::default(),
         );
         if let Err(e) = &debouncer {
             tracing::warn!(error = %e, "folder watching unavailable");

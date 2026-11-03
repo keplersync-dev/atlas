@@ -580,71 +580,43 @@ mod real {
             .user_agent(concat!("keplerhaloxx/atlas/", env!("CARGO_PKG_VERSION")))
             .build()
             .unwrap();
-        for kind in launchers::KINDS {
-            for root in launchers::detect(kind) {
-                for found in launchers::list_instances(kind, &root)
-                    .await
-                    .unwrap_or_default()
-                {
-                    let row = db::instances::insert(
-                        &pool,
-                        db::instances::NewInstance {
-                            launcher_id: None,
-                            kind,
-                            launcher_instance_id: None,
-                            game_dir: found.game_dir.to_string_lossy().into_owned(),
-                            meta: db::instances::Metadata {
-                                name: found.name.clone(),
-                                icon: None,
-                                minecraft_version: None,
-                                loader: None,
-                                loader_version: None,
-                                last_played_at: None,
-                                total_playtime_seconds: None,
-                            },
-                        },
-                    )
-                    .await
-                    .unwrap();
-                    scan::files::scan(&pool, &row.id, &found.game_dir, None)
-                        .await
-                        .unwrap();
-                    let start = std::time::Instant::now();
-                    let saved =
-                        super::resolve_instance(&pool, &http, super::modrinth::API, None, &row.id)
-                            .await
-                            .unwrap();
-                    let rows = db::content::list(&pool, &row.id).await.unwrap();
-                    if rows.is_empty() {
-                        continue;
-                    }
-                    let mods: Vec<_> = rows.iter().filter(|r| r.kind == "mod").collect();
-                    let named = mods.iter().filter(|r| r.mod_id.is_some()).count();
-                    let sample: Vec<String> = rows
-                        .iter()
-                        .filter(|r| r.source == "modrinth")
-                        .take(2)
-                        .map(|r| format!("{} {}", r.name, r.version_label.as_deref().unwrap_or("")))
-                        .collect();
-                    let unknown: Vec<&str> = rows
-                        .iter()
-                        .filter(|r| r.source == "local")
-                        .take(2)
-                        .map(|r| r.name.as_str())
-                        .collect();
-                    println!(
-                        "{:36} {:3} files | jar metadata {:3}/{:3} mods | Modrinth {:3} ({:>5.2?}) | e.g. {:?} | unknown e.g. {:?}",
-                        found.name,
-                        rows.len(),
-                        named,
-                        mods.len(),
-                        saved,
-                        start.elapsed(),
-                        sample,
-                        unknown
-                    );
-                }
+        for (found, id) in launchers::track_on_this_pc(&pool).await {
+            scan::files::scan(&pool, &id, &found.game_dir, None)
+                .await
+                .unwrap();
+            let start = std::time::Instant::now();
+            let saved = super::resolve_instance(&pool, &http, super::modrinth::API, None, &id)
+                .await
+                .unwrap();
+            let rows = db::content::list(&pool, &id).await.unwrap();
+            if rows.is_empty() {
+                continue;
             }
+            let mods: Vec<_> = rows.iter().filter(|r| r.kind == "mod").collect();
+            let named = mods.iter().filter(|r| r.mod_id.is_some()).count();
+            let sample: Vec<String> = rows
+                .iter()
+                .filter(|r| r.source == "modrinth")
+                .take(2)
+                .map(|r| format!("{} {}", r.name, r.version_label.as_deref().unwrap_or("")))
+                .collect();
+            let unknown: Vec<&str> = rows
+                .iter()
+                .filter(|r| r.source == "local")
+                .take(2)
+                .map(|r| r.name.as_str())
+                .collect();
+            println!(
+                "{:36} {:3} files | jar metadata {:3}/{:3} mods | Modrinth {:3} ({:>5.2?}) | e.g. {:?} | unknown e.g. {:?}",
+                found.name,
+                rows.len(),
+                named,
+                mods.len(),
+                saved,
+                start.elapsed(),
+                sample,
+                unknown
+            );
         }
     }
 }

@@ -15,7 +15,7 @@ mod util;
 
 use std::path::{Path, PathBuf};
 
-pub use util::{file_stem, home, program_name};
+pub use util::{file_stem, home, program_name, read_json, write_atomic};
 
 use crate::dto::{LauncherKind, Loader};
 use crate::error::AppError;
@@ -230,6 +230,10 @@ pub async fn create_instance(
                 }
                 _ => official::fetch_version(http, &new).await?,
             };
+            // An installer can take minutes: the launcher may have been opened meanwhile.
+            if let Some(why) = create_blocker(kind) {
+                return Err(ReadError::Shown(why.into()));
+            }
             unblock(move || official::create(&root, &new, version)).await
         }
         LauncherKind::Modrinth => modrinth::create(&root, &new).await,
@@ -300,7 +304,6 @@ async fn blocking(
         .map_err(|e| ReadError::Format(format!("reader thread failed: {e}")))?
 }
 
-/// Open the launcher, launching the instance directly where the launcher allows it.
 /// The modpack an instance was installed from, as its launcher recorded it.
 #[derive(Debug, Clone, PartialEq)]
 pub enum InstalledPack {
@@ -345,6 +348,7 @@ pub fn import_pack(kind: LauncherKind, root: &Path, pack: &Path) -> Result<(), R
     }
 }
 
+/// Open the launcher, launching the instance directly where the launcher allows it.
 /// Falls back to opening the install folder when the program can't be found.
 pub fn open(kind: LauncherKind, root: &Path, launcher_instance_id: &str) -> Result<(), OpenError> {
     start(kind, root, open_args(kind, launcher_instance_id))
@@ -443,6 +447,49 @@ fn open_args(kind: LauncherKind, launcher_instance_id: &str) -> Vec<String> {
     }
 }
 
+/// What the adapters find in this PC's real launchers, for the opt-in tests that read them.
+#[cfg(test)]
+pub async fn on_this_pc() -> Vec<(LauncherKind, PathBuf, ReadResult<Vec<FoundInstance>>)> {
+    let mut out = Vec::new();
+    for kind in KINDS {
+        for root in detect(kind) {
+            let found = list_instances(kind, &root).await;
+            out.push((kind, root, found));
+        }
+    }
+    out
+}
+
+/// This PC's real instances, each tracked in `pool` (a throwaway in-memory database), with
+/// their ids there. Writes nothing on disk.
+#[cfg(test)]
+pub async fn track_on_this_pc(pool: &sqlx::SqlitePool) -> Vec<(FoundInstance, String)> {
+    use crate::db::instances::{self, Metadata, NewInstance};
+    let mut out = Vec::new();
+    for (kind, _, found) in on_this_pc().await {
+        for found in found.unwrap_or_default() {
+            let new = NewInstance {
+                launcher_id: None,
+                kind,
+                launcher_instance_id: Some(found.launcher_instance_id.clone()),
+                game_dir: found.game_dir.to_string_lossy().into_owned(),
+                meta: Metadata {
+                    name: found.name.clone(),
+                    icon: None,
+                    minecraft_version: None,
+                    loader: None,
+                    loader_version: None,
+                    last_played_at: None,
+                    total_playtime_seconds: None,
+                },
+            };
+            let row = instances::insert(pool, new).await.unwrap();
+            out.push((found, row.id));
+        }
+    }
+    out
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum OpenError {
     #[error("launcher program not found")]
@@ -502,25 +549,22 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn real_launchers() {
-        for kind in KINDS {
-            for root in detect(kind) {
-                let found = list_instances(kind, &root).await;
-                println!("{} at {}:", display_name(kind), root.display());
-                match found {
-                    Ok(list) => {
-                        for i in list {
-                            println!(
-                                "  {:40} {:>8} {:?} {:<10} played {:?}",
-                                i.name,
-                                i.minecraft_version.unwrap_or_default(),
-                                i.loader,
-                                i.loader_version.unwrap_or_default(),
-                                i.last_played_at
-                            );
-                        }
+        for (kind, root, found) in on_this_pc().await {
+            println!("{} at {}:", display_name(kind), root.display());
+            match found {
+                Ok(list) => {
+                    for i in list {
+                        println!(
+                            "  {:40} {:>8} {:?} {:<10} played {:?}",
+                            i.name,
+                            i.minecraft_version.unwrap_or_default(),
+                            i.loader,
+                            i.loader_version.unwrap_or_default(),
+                            i.last_played_at
+                        );
                     }
-                    Err(e) => println!("  error: {e}"),
                 }
+                Err(e) => println!("  error: {e}"),
             }
         }
     }

@@ -129,7 +129,7 @@ pub fn dev_profile() -> Option<String> {
 #[derive(Debug, Clone)]
 pub struct AppPaths {
     pub root: PathBuf,
-    /// Downloaded files, reused across instances: cache/<sha1[0..2]>/<sha1>
+    /// Downloaded files, reused across instances (layout in sync/fetch.rs)
     pub cache: PathBuf,
     /// Mod and pack icons taken out of their files: cache/icons/<sha1>.png (scan/icons.rs)
     pub icons: PathBuf,

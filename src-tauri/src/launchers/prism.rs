@@ -15,10 +15,12 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 use super::util::{
-    app_data, env_dir, first_existing, free_folder, from_unix_millis, image_ext, mac_app, parse_ini,
+    app_data, env_dir, first_existing, free_folder, from_unix_millis, image_ext, ini_quoted,
+    mac_app, parse_ini, read_json, write_atomic,
 };
 use super::{FoundInstance, NewInstance, ReadResult};
 use crate::dto::Loader;
+use crate::sync::prism_versions::LOADER_UIDS;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Flavor {
@@ -176,21 +178,14 @@ fn read_pack(dir: &Path) -> ReadResult<Pack> {
         uid: String,
         version: Option<String>,
     }
-    let pack: MmcPack = serde_json::from_str(&std::fs::read_to_string(dir.join("mmc-pack.json"))?)?;
+    let pack: MmcPack = read_json(&dir.join("mmc-pack.json"))?;
     let mut out = Pack::default();
     for c in pack.components {
-        let loader = match c.uid.as_str() {
-            "net.minecraft" => {
-                out.minecraft = c.version;
-                continue;
-            }
-            "net.fabricmc.fabric-loader" => Loader::Fabric,
-            "org.quiltmc.quilt-loader" => Loader::Quilt,
-            "net.minecraftforge" => Loader::Forge,
-            "net.neoforged" => Loader::Neoforge,
-            _ => continue,
-        };
-        out.loader = Some((loader, c.version));
+        if c.uid == "net.minecraft" {
+            out.minecraft = c.version;
+        } else if let Some((loader, _)) = LOADER_UIDS.iter().find(|(_, uid)| *uid == c.uid) {
+            out.loader = Some((*loader, c.version));
+        }
     }
     Ok(out)
 }
@@ -225,13 +220,7 @@ pub fn create(flavor: Flavor, root: &Path, new: &NewInstance) -> ReadResult<Stri
     let mut components = vec![serde_json::json!({
         "uid": "net.minecraft", "version": new.minecraft, "important": true
     })];
-    let loader_uid = match new.loader {
-        Loader::Vanilla => None,
-        Loader::Fabric => Some("net.fabricmc.fabric-loader"),
-        Loader::Quilt => Some("org.quiltmc.quilt-loader"),
-        Loader::Forge => Some("net.minecraftforge"),
-        Loader::Neoforge => Some("net.neoforged"),
-    };
+    let loader_uid = crate::sync::prism_versions::loader_uid(new.loader);
     if let (Some(uid), Some(version)) = (loader_uid, loader_version) {
         if matches!(new.loader, Loader::Fabric | Loader::Quilt) {
             components.push(serde_json::json!({
@@ -248,17 +237,23 @@ pub fn create(flavor: Flavor, root: &Path, new: &NewInstance) -> ReadResult<Stri
 
     let instance = dir.join(&folder);
     std::fs::create_dir_all(instance.join("minecraft"))?;
-    std::fs::write(
-        instance.join("instance.cfg"),
+    // ConfigVersion 1.2: Prism reads the file as Qt settings, where names need quoting.
+    // MultiMC reads the line as it is.
+    let name = match flavor {
+        Flavor::Prism => ini_quoted(&new.name),
+        Flavor::MultiMc => new.name.replace(['\r', '\n'], " "),
+    };
+    write_atomic(
+        &instance.join("instance.cfg"),
         format!(
-            "[General]\nConfigVersion=1.2\nInstanceType=OneSix\niconKey={}\nname={}\n",
+            "[General]\nConfigVersion=1.2\nInstanceType=OneSix\niconKey={}\nname={name}\n",
             icon_key.as_deref().unwrap_or("default"),
-            new.name.replace(['\r', '\n'], " ")
-        ),
+        )
+        .as_bytes(),
     )?;
-    std::fs::write(
-        instance.join("mmc-pack.json"),
-        serde_json::to_vec_pretty(&pack)?,
+    write_atomic(
+        &instance.join("mmc-pack.json"),
+        &serde_json::to_vec_pretty(&pack)?,
     )?;
     Ok(folder)
 }
@@ -353,6 +348,49 @@ mod tests {
         assert_eq!(neo.loader_version.as_deref(), Some("21.1.77"));
         assert!(create(Flavor::Prism, &tmp, &new_instance(Loader::Forge, None)).is_err());
         std::fs::remove_dir_all(&tmp).ok();
+    }
+
+    #[test]
+    fn names_with_commas_and_semicolons_read_back() {
+        let tmp = super::super::util::TempDir::new("atlas-prism").unwrap();
+        std::fs::write(tmp.join("prismlauncher.cfg"), "InstanceDir=instances\n").unwrap();
+        for name in ["Create, Above and Beyond", r#"A; "quoted" \ name"#] {
+            let folder = create(
+                Flavor::Prism,
+                &tmp,
+                &NewInstance {
+                    name: name.into(),
+                    ..new_instance(Loader::Vanilla, None)
+                },
+            )
+            .unwrap();
+            let found = list(Flavor::Prism, &tmp).unwrap();
+            let it = found
+                .iter()
+                .find(|f| f.launcher_instance_id == folder)
+                .unwrap();
+            assert_eq!(it.name, name);
+        }
+        let cfg =
+            std::fs::read_to_string(tmp.join("instances/Create, Above and Beyond/instance.cfg"))
+                .unwrap();
+        assert!(cfg.contains("name=\"Create, Above and Beyond\"\n"), "{cfg}");
+    }
+
+    #[test]
+    fn a_bom_in_mmc_pack_is_skipped() {
+        let tmp = super::super::util::TempDir::new("atlas-prism").unwrap();
+        std::fs::write(
+            tmp.join("mmc-pack.json"),
+            "\u{feff}{\"components\":[{\"uid\":\"net.minecraft\",\"version\":\"1.21.1\"},{\"uid\":\"net.neoforged\",\"version\":\"21.1.77\"}]}",
+        )
+        .unwrap();
+        let pack = read_pack(&tmp).unwrap();
+        assert_eq!(pack.minecraft.as_deref(), Some("1.21.1"));
+        assert_eq!(
+            pack.loader,
+            Some((Loader::Neoforge, Some("21.1.77".into())))
+        );
     }
 
     #[test]

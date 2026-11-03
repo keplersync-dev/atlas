@@ -159,14 +159,6 @@ pub async fn add<R: Runtime>(
         .ok_or_else(|| AppError::unknown("Couldn't add the launcher"))
 }
 
-pub async fn remove<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) -> AppResult<()> {
-    if !db::launchers::delete(&state.db, id).await? {
-        return Err(AppError::not_found("That launcher isn't in Atlas anymore"));
-    }
-    emit(app, AtlasEvent::LaunchersChanged {});
-    Ok(())
-}
-
 /// Every instance in every known launcher, with `instanceId` set when it's tracked.
 pub async fn detected_instances(state: &AppState) -> AppResult<Vec<DetectedInstance>> {
     ensure_detected(state).await?;

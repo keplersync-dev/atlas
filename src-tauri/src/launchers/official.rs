@@ -20,7 +20,8 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::util::{
-    any_running, app_data, env_dir, first_existing, free_folder, mac_app, parse_time,
+    TempDir, any_running, app_data, env_dir, first_existing, free_folder, mac_app, parse_time,
+    read_json, running_at, write_atomic,
 };
 use super::{FoundInstance, NewInstance, ReadError, ReadResult};
 use crate::dto::Loader;
@@ -101,11 +102,7 @@ impl Latest {
         struct VersionList {
             latest: Latest,
         }
-        std::fs::read_to_string(root.join("versions").join("version_manifest_v2.json"))
-            .ok()
-            .and_then(|t| {
-                serde_json::from_str::<VersionList>(t.trim_start_matches('\u{feff}')).ok()
-            })
+        read_json::<VersionList>(&root.join("versions").join("version_manifest_v2.json"))
             .map(|v| v.latest)
             .unwrap_or_default()
     }
@@ -124,8 +121,7 @@ pub fn list(root: &Path) -> ReadResult<Vec<FoundInstance>> {
     if !file.is_file() {
         return Ok(vec![]);
     }
-    let text = std::fs::read_to_string(&file)?;
-    let parsed: Profiles = serde_json::from_str(text.trim_start_matches('\u{feff}'))?;
+    let parsed: Profiles = read_json(&file)?;
 
     // One instance per game dir: keep its most recently used profile.
     let mut by_dir: HashMap<String, (PathBuf, Profile, Option<String>)> = HashMap::new();
@@ -244,6 +240,10 @@ fn neoforge_minecraft(version: &str) -> Option<String> {
 /// Is the launcher open? It keeps profiles in memory and saves them over the file, so
 /// a profile added meanwhile would be lost.
 pub fn running() -> bool {
+    if cfg!(target_os = "macos") {
+        // Its program there is just "launcher" (`program`).
+        return running_at("Minecraft.app/Contents/MacOS/launcher");
+    }
     any_running(&["minecraft", "minecraftlauncher"])
 }
 
@@ -338,90 +338,86 @@ pub async fn install_forge(
     })?;
     let didnt_work = || ReadError::Shown(format!("{name}'s installer didn't work. Try again."));
 
-    let dir = std::env::temp_dir().join(format!("atlas-forge-{}", crate::util::ids::new_id()));
-    std::fs::create_dir_all(&dir)?;
-    let result = async {
-        let jar = dir.join("installer.jar");
-        let failed = |e: reqwest::Error| {
-            tracing::warn!(url = %installer.url, error = %e, "couldn't download the installer");
-            ReadError::Shown(format!(
-                "Couldn't download {name}'s installer. Check your internet connection and try again."
-            ))
-        };
-        let bytes = http
-            .get(&installer.url)
-            .send()
-            .await
-            .and_then(|r| r.error_for_status())
-            .map_err(failed)?
-            .bytes()
-            .await
-            .map_err(failed)?;
-        std::fs::write(&jar, &bytes)?;
-
-        let before = version_dirs(root);
-        let (root2, dir2, flag) = (root.to_path_buf(), dir.clone(), installer.flag);
-        let status = tokio::time::timeout(
-            INSTALLER_TIMEOUT,
-            tokio::task::spawn_blocking(move || {
-                let mut run = std::process::Command::new(&java);
-                run.arg("-jar")
-                    .arg(&jar)
-                    .arg(flag)
-                    .arg(&root2)
-                    .current_dir(&dir2);
-                #[cfg(windows)]
-                {
-                    use std::os::windows::process::CommandExt;
-                    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-                    run.creation_flags(CREATE_NO_WINDOW);
-                }
-                run.output()
-            }),
-        )
+    let dir = TempDir::new("atlas-forge")?;
+    let jar = dir.join("installer.jar");
+    let failed = |e: reqwest::Error| {
+        tracing::warn!(url = %installer.url, error = %e, "couldn't download the installer");
+        ReadError::Shown(format!(
+            "Couldn't download {name}'s installer. Check your internet connection and try again."
+        ))
+    };
+    let bytes = http
+        .get(&installer.url)
+        // The client's own limit is for small requests; an installer is several MB.
+        .timeout(INSTALLER_TIMEOUT)
+        .send()
         .await
-        .map_err(|_| ReadError::Shown(format!("{name}'s installer took too long. Try again.")))?
-        .map_err(|e| {
-            tracing::warn!(error = %e, "the installer's thread failed");
-            didnt_work()
-        })?
-        .map_err(|e| {
-            tracing::warn!(error = %e, "couldn't run the installer");
+        .and_then(|r| r.error_for_status())
+        .map_err(failed)?
+        .bytes()
+        .await
+        .map_err(failed)?;
+    std::fs::write(&jar, &bytes)?;
+
+    let before = version_dirs(root);
+    let (root2, dir2, flag) = (root.to_path_buf(), dir.to_path_buf(), installer.flag);
+    let status = tokio::time::timeout(
+        INSTALLER_TIMEOUT,
+        tokio::task::spawn_blocking(move || {
+            let mut run = std::process::Command::new(&java);
+            run.arg("-jar")
+                .arg(&jar)
+                .arg(flag)
+                .arg(&root2)
+                .current_dir(&dir2);
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+                run.creation_flags(CREATE_NO_WINDOW);
+            }
+            run.output()
+        }),
+    )
+    .await
+    .map_err(|_| ReadError::Shown(format!("{name}'s installer took too long. Try again.")))?
+    .map_err(|e| {
+        tracing::warn!(error = %e, "the installer's thread failed");
+        didnt_work()
+    })?
+    .map_err(|e| {
+        tracing::warn!(error = %e, "couldn't run the installer");
+        didnt_work()
+    })?;
+    if !status.status.success() {
+        tracing::warn!(
+            stdout = %String::from_utf8_lossy(&status.stdout),
+            "the Forge installer failed"
+        );
+        return Err(didnt_work());
+    }
+    // Its usual name, or whatever new Forge version folder it made (older ones name
+    // theirs differently).
+    let made = Some(installer.id.clone())
+        .filter(|id| {
+            root.join("versions")
+                .join(id)
+                .join(format!("{id}.json"))
+                .is_file()
+        })
+        .or_else(|| {
+            version_dirs(root)
+                .into_iter()
+                .find(|d| !before.contains(d) && d.to_lowercase().contains("forge"))
+        })
+        .ok_or_else(|| {
+            tracing::warn!("the installer didn't add a version");
             didnt_work()
         })?;
-        if !status.status.success() {
-            tracing::warn!(
-                stdout = %String::from_utf8_lossy(&status.stdout),
-                "the Forge installer failed"
-            );
-            return Err(didnt_work());
-        }
-        // Its usual name, or whatever new Forge version folder it made (older ones name
-        // theirs differently).
-        let made = Some(installer.id.clone())
-            .filter(|id| {
-                root.join("versions")
-                    .join(id)
-                    .join(format!("{id}.json"))
-                    .is_file()
-            })
-            .or_else(|| {
-                version_dirs(root)
-                    .into_iter()
-                    .find(|d| !before.contains(d) && d.to_lowercase().contains("forge"))
-            })
-            .ok_or_else(|| {
-                tracing::warn!("the installer didn't add a version");
-                didnt_work()
-            })?;
-        Ok(VersionFile {
-            id: made,
-            json: None,
-        })
-    }
-    .await;
-    let _ = std::fs::remove_dir_all(&dir);
-    result
+    Ok(VersionFile {
+        id: made,
+        json: None,
+    })
 }
 
 /// Installers can download a few hundred MB of libraries.
@@ -530,8 +526,7 @@ fn safe_id(id: &str) -> bool {
 /// which is the instance's launcher id.
 pub fn create(root: &Path, new: &NewInstance, version: Option<VersionFile>) -> ReadResult<String> {
     let file = root.join("launcher_profiles.json");
-    let text = std::fs::read_to_string(&file)?;
-    let mut doc: Value = serde_json::from_str(text.trim_start_matches('\u{feff}'))?;
+    let mut doc: Value = read_json(&file)?;
     let Some(top) = doc.as_object_mut() else {
         return Err(ReadError::Format(
             "launcher_profiles.json isn't an object".into(),
@@ -596,10 +591,9 @@ pub fn create(root: &Path, new: &NewInstance, version: Option<VersionFile>) -> R
         }),
     );
 
-    // Written next to it and swapped in, so the launcher never reads half a file.
-    let tmp = root.join("launcher_profiles.json.atlas");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(&doc)?)?;
-    std::fs::rename(&tmp, &file)?;
+    // The launcher keeps no copy of its own: the one before, in case this one goes wrong.
+    std::fs::copy(&file, root.join("launcher_profiles.json.bak"))?;
+    write_atomic(&file, &serde_json::to_vec_pretty(&doc)?)?;
     Ok(game_dir)
 }
 
@@ -782,6 +776,8 @@ mod tests {
         assert_eq!(second.loader, Some(Loader::Vanilla));
         assert_eq!(second.icon, None, "built-in block");
 
+        assert!(root.join("launcher_profiles.json.bak").is_file());
+        assert!(!root.join("launcher_profiles.json.atlas").exists());
         // what was there is kept
         let doc: Value = serde_json::from_str(
             &std::fs::read_to_string(root.join("launcher_profiles.json")).unwrap(),

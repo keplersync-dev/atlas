@@ -637,56 +637,29 @@ mod real {
     async fn real_instance_scan() {
         use crate::{db, launchers};
         let pool = db::open_in_memory().await.unwrap();
-        for kind in launchers::KINDS {
-            for root in launchers::detect(kind) {
-                for found in launchers::list_instances(kind, &root)
-                    .await
-                    .unwrap_or_default()
-                {
-                    let row = db::instances::insert(
-                        &pool,
-                        db::instances::NewInstance {
-                            launcher_id: None,
-                            kind,
-                            launcher_instance_id: Some(found.launcher_instance_id.clone()),
-                            game_dir: found.game_dir.to_string_lossy().into_owned(),
-                            meta: db::instances::Metadata {
-                                name: found.name.clone(),
-                                icon: None,
-                                minecraft_version: None,
-                                loader: None,
-                                loader_version: None,
-                                last_played_at: None,
-                                total_playtime_seconds: None,
-                            },
-                        },
-                    )
-                    .await
-                    .unwrap();
-                    let start = std::time::Instant::now();
-                    let first = super::scan(&pool, &row.id, &found.game_dir, None)
-                        .await
-                        .unwrap();
-                    let first_time = start.elapsed();
-                    let start = std::time::Instant::now();
-                    let second = super::scan(&pool, &row.id, &found.game_dir, None)
-                        .await
-                        .unwrap();
-                    let rows = db::content::list(&pool, &row.id).await.unwrap();
-                    let mb: i64 = rows.iter().map(|r| r.size_bytes).sum::<i64>() / 1_048_576;
-                    let disabled = rows.iter().filter(|r| !r.enabled).count();
-                    println!(
-                        "{:38} {:4} files {:5} MB {:3} disabled  first {:>6.2?}  again {:>6.2?} (changed: {})",
-                        found.name,
-                        first.added,
-                        mb,
-                        disabled,
-                        first_time,
-                        start.elapsed(),
-                        second.changed()
-                    );
-                }
-            }
+        for (found, id) in launchers::track_on_this_pc(&pool).await {
+            let start = std::time::Instant::now();
+            let first = super::scan(&pool, &id, &found.game_dir, None)
+                .await
+                .unwrap();
+            let first_time = start.elapsed();
+            let start = std::time::Instant::now();
+            let second = super::scan(&pool, &id, &found.game_dir, None)
+                .await
+                .unwrap();
+            let rows = db::content::list(&pool, &id).await.unwrap();
+            let mb: i64 = rows.iter().map(|r| r.size_bytes).sum::<i64>() / 1_048_576;
+            let disabled = rows.iter().filter(|r| !r.enabled).count();
+            println!(
+                "{:38} {:4} files {:5} MB {:3} disabled  first {:>6.2?}  again {:>6.2?} (changed: {})",
+                found.name,
+                first.added,
+                mb,
+                disabled,
+                first_time,
+                start.elapsed(),
+                second.changed()
+            );
         }
     }
 }

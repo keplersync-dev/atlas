@@ -2,6 +2,7 @@
 //!
 //! A rescan = launcher metadata + the file scan.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
@@ -26,16 +27,6 @@ use crate::state::AppState;
 
 /// Reading this many files or more shows progress (a newly tracked pack); fewer is quick.
 const READ_PROGRESS_FROM: usize = 20;
-
-fn not_found() -> AppError {
-    AppError::not_found("That instance isn't there anymore. It may have just been removed.")
-}
-
-async fn row(state: &AppState, id: &str) -> AppResult<InstanceRow> {
-    db::instances::get(&state.db, id)
-        .await?
-        .ok_or_else(not_found)
-}
 
 /// What the launcher says, as stored: its picture is copied into Atlas's cache first.
 async fn metadata(state: &AppState, found: &FoundInstance) -> Metadata {
@@ -138,7 +129,7 @@ pub async fn summary_of(state: &AppState, row: &InstanceRow) -> AppResult<Instan
 }
 
 pub async fn summary_by_id(state: &AppState, id: &str) -> AppResult<InstanceSummary> {
-    summary_of(state, &row(state, id).await?).await
+    summary_of(state, &db::instances::require(&state.db, id).await?).await
 }
 
 /// Every tracked instance. No file or network access, so it's always fast.
@@ -152,7 +143,7 @@ pub async fn list(state: &AppState) -> AppResult<Vec<InstanceSummary>> {
 }
 
 pub async fn detail(state: &AppState, id: &str) -> AppResult<InstanceDetail> {
-    let row = row(state, id).await?;
+    let row = db::instances::require(&state.db, id).await?;
     let content: Vec<_> = db::content::list(&state.db, id)
         .await?
         .iter()
@@ -279,7 +270,7 @@ pub async fn untrack(state: &AppState, id: &str) -> AppResult<()> {
         return Err(AppError::conflict("Wait for the update to finish"));
     }
     if !db::instances::delete(&state.db, id).await? {
-        return Err(not_found());
+        return Err(db::instances::gone());
     }
     state.watcher.unwatch(id);
     state.running.remove(id);
@@ -297,7 +288,7 @@ pub async fn update(
     id: &str,
     patch: &UpdateInstanceInput,
 ) -> AppResult<InstanceSummary> {
-    row(state, id).await?;
+    db::instances::require(&state.db, id).await?;
     db::instances::update_prefs(&state.db, id, patch.is_favorite, patch.hide_activity).await?;
     if let Some(on) = patch.auto_update {
         db::instances::set_auto_update(&state.db, id, on).await?;
@@ -305,14 +296,14 @@ pub async fn update(
     if patch.hide_activity.is_some() && state.is_running(id) {
         super::presence::refresh(state).await;
     }
-    summary_of(state, &row(state, id).await?).await
+    summary_of(state, &db::instances::require(&state.db, id).await?).await
 }
 
 /// A new instance in a launcher that only takes a picture while it's closed (the Modrinth
 /// App, still open from making it): give it now if the launcher is closed, else the next
 /// time it is (see `give_pending_pictures`).
 pub async fn picture_when_closed(state: &AppState, id: &str) {
-    let Ok(row) = row(state, id).await else {
+    let Ok(row) = db::instances::require(&state.db, id).await else {
         return;
     };
     if !launchers::sets_icon_later(row.kind()) || row.icon.is_some() {
@@ -341,7 +332,7 @@ pub async fn give_pending_pictures<R: Runtime>(state: &AppState, app: &AppHandle
         return;
     }
     for id in pending {
-        let gave = match row(state, &id).await {
+        let gave = match db::instances::require(&state.db, &id).await {
             Ok(row) => give_launcher_picture(state, &row).await,
             Err(_) => false,
         };
@@ -385,21 +376,37 @@ pub async fn give_launcher_picture(state: &AppState, row: &InstanceRow) -> bool 
     }
 }
 
-/// Re-read the launcher's metadata and whether the folder still exists.
-/// Returns the updated row and whether anything changed.
-async fn refresh_metadata(state: &AppState, id: &str) -> AppResult<(InstanceRow, bool)> {
-    let before = row(state, id).await?;
+/// Each launcher's instances by launcher id, read once for a batch of rescans.
+type Listed = HashMap<String, Vec<FoundInstance>>;
+
+/// Re-read the launcher's metadata (from `listed` when it has the launcher) and whether
+/// the folder still exists. Returns the updated row and whether anything changed.
+async fn refresh_metadata(
+    state: &AppState,
+    id: &str,
+    listed: Option<&Listed>,
+) -> AppResult<(InstanceRow, bool)> {
+    let before = db::instances::require(&state.db, id).await?;
     let found = match (&before.launcher_id, &before.launcher_instance_id) {
-        (Some(launcher_id), Some(lid)) => match db::launchers::get(&state.db, launcher_id).await? {
-            Some(launcher) => launcher_service::instances_in(&launcher)
-                .await
-                .into_iter()
+        (Some(launcher_id), Some(lid)) => {
+            let fresh;
+            let list = match listed.and_then(|l| l.get(launcher_id)) {
+                Some(list) => list,
+                None => {
+                    fresh = match db::launchers::get(&state.db, launcher_id).await? {
+                        Some(launcher) => launcher_service::instances_in(&launcher).await,
+                        None => vec![],
+                    };
+                    &fresh
+                }
+            };
+            list.iter()
                 .find(|f| {
                     f.launcher_instance_id == *lid
                         || clean_path(&f.game_dir).eq_ignore_ascii_case(&before.game_dir)
-                }),
-            None => None,
-        },
+                })
+                .cloned()
+        }
         _ => None,
     };
     let status = if Path::new(&before.game_dir).is_dir() {
@@ -414,7 +421,7 @@ async fn refresh_metadata(state: &AppState, id: &str) -> AppResult<(InstanceRow,
     let changed =
         status != before.status() || meta.as_ref().is_some_and(|m| *m != Metadata::of(&before));
     db::instances::update_scan(&state.db, id, meta.as_ref(), status).await?;
-    Ok((row(state, id).await?, changed))
+    Ok((db::instances::require(&state.db, id).await?, changed))
 }
 
 /// Re-read an instance: launcher metadata, then its files. Sends `instance.changed`
@@ -424,14 +431,23 @@ pub async fn rescan<R: Runtime>(
     app: &AppHandle<R>,
     id: &str,
 ) -> AppResult<InstanceSummary> {
+    rescan_listed(state, app, id, None).await
+}
+
+async fn rescan_listed<R: Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    id: &str,
+    listed: Option<&Listed>,
+) -> AppResult<InstanceSummary> {
     if state.jobs.is_busy(id) {
         // An update is writing the folder; it rescans when it's done.
         return summary_by_id(state, id).await;
     }
     let _scanning = state.scan_lock(id).await;
-    let (mut row, mut meta_changed) = refresh_metadata(state, id).await?;
+    let (mut row, mut meta_changed) = refresh_metadata(state, id, listed).await?;
     if give_launcher_picture(state, &row).await {
-        (row, _) = refresh_metadata(state, id).await?;
+        (row, _) = refresh_metadata(state, id, None).await?;
         meta_changed = true;
     }
     let game_dir = Path::new(&row.game_dir);
@@ -543,12 +559,29 @@ pub async fn rescan_all<R: Runtime>(state: &AppState, app: &AppHandle<R>, older_
         Err(e) => return tracing::warn!(error = %e, "couldn't list instances to rescan"),
     };
     let cutoff = crate::util::time::iso(chrono::Utc::now() - older_than);
-    for r in rows {
-        let stale = older_than.is_zero()
-            || r.last_scanned_at
-                .as_deref()
-                .is_none_or(|t| t < cutoff.as_str());
-        if stale && let Err(e) = rescan(state, app, &r.id).await {
+    let stale: Vec<InstanceRow> = rows
+        .into_iter()
+        .filter(|r| {
+            older_than.is_zero()
+                || r.last_scanned_at
+                    .as_deref()
+                    .is_none_or(|t| t < cutoff.as_str())
+        })
+        .collect();
+    // Each launcher read once, not once per instance in it (a CurseForge install is a
+    // big JSON file per instance; the Modrinth App, its database).
+    let mut listed = Listed::new();
+    for launcher in db::launchers::list(&state.db).await.unwrap_or_default() {
+        if stale
+            .iter()
+            .any(|r| r.launcher_id.as_deref() == Some(&launcher.id))
+        {
+            let found = launcher_service::instances_in(&launcher).await;
+            listed.insert(launcher.id, found);
+        }
+    }
+    for r in stale {
+        if let Err(e) = rescan_listed(state, app, &r.id, Some(&listed)).await {
             tracing::warn!(instance = %r.name, error = %e, "rescan failed");
         }
     }
@@ -563,7 +596,7 @@ pub async fn open_in_launcher(state: &AppState, id: &str) -> AppResult<()> {
 /// True when the game itself starts.
 pub async fn play<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) -> AppResult<bool> {
     let (kind, root, instance) = in_launcher(state, id).await?;
-    let game_dir = PathBuf::from(row(state, id).await?.game_dir);
+    let game_dir = PathBuf::from(db::instances::require(&state.db, id).await?.game_dir);
     match launchers::play(kind, &root, &instance, &game_dir)
         .await
         .map_err(|e| open_error(kind, e))?
@@ -595,7 +628,7 @@ fn open_error(kind: LauncherKind, e: OpenError) -> AppError {
 
 /// The launcher, its folder and the instance's key in it.
 async fn in_launcher(state: &AppState, id: &str) -> AppResult<(LauncherKind, PathBuf, String)> {
-    let row = row(state, id).await?;
+    let row = db::instances::require(&state.db, id).await?;
     if row.status() == InstanceStatus::Missing {
         return Err(AppError::conflict(
             "The instance's folder is missing. If you moved it, add it to Atlas again from its new place.",
@@ -622,7 +655,7 @@ pub async fn open_folder<R: Runtime>(
     app: &AppHandle<R>,
     id: &str,
 ) -> AppResult<()> {
-    let row = row(state, id).await?;
+    let row = db::instances::require(&state.db, id).await?;
     if row.status() == InstanceStatus::Missing || !Path::new(&row.game_dir).is_dir() {
         return Err(AppError::conflict(
             "The instance's folder is missing. If you moved it, add it to Atlas again from its new place.",
@@ -644,7 +677,7 @@ pub async fn set_content_enabled<R: Runtime>(
     content_id: &str,
     enabled: bool,
 ) -> AppResult<()> {
-    let instance = row(state, instance_id).await?;
+    let instance = db::instances::require(&state.db, instance_id).await?;
     if state.is_running(instance_id) {
         return Err(AppError::conflict("Close the game first"));
     }
@@ -667,7 +700,7 @@ pub async fn set_content_enabled<R: Runtime>(
     if to.exists() {
         return Err(AppError::conflict("A file with that name is already there"));
     }
-    rename_with_retry(&from, &to).await?;
+    rename_with_retry(from, to).await?;
     db::content::set_enabled(&state.db, content_id, enabled).await?;
     emit(
         app,
@@ -679,27 +712,22 @@ pub async fn set_content_enabled<R: Runtime>(
 }
 
 /// Antivirus and launchers hold new files open for a moment; retry briefly before giving up.
-async fn rename_with_retry(from: &Path, to: &Path) -> AppResult<()> {
-    let mut attempt = 0;
-    loop {
-        match std::fs::rename(from, to) {
-            Ok(()) => return Ok(()),
-            // 32 = sharing violation, 33 = lock violation (Windows)
-            Err(e) if matches!(e.raw_os_error(), Some(32 | 33)) && attempt < 5 => {
-                attempt += 1;
-                tokio::time::sleep(Duration::from_millis(200)).await;
-            }
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                return Err(AppError::conflict(
-                    "The file isn't there anymore. Atlas will rescan the folder.",
-                ));
-            }
-            Err(e) => {
-                tracing::warn!(error = %e, from = %from.display(), "rename failed");
-                return Err(AppError::conflict(
-                    "A file is in use. Close the launcher and try again.",
-                ));
-            }
+async fn rename_with_retry(from: PathBuf, to: PathBuf) -> AppResult<()> {
+    let from2 = from.clone();
+    let renamed = tokio::task::spawn_blocking(move || {
+        crate::util::files::retry_in_use(|| std::fs::rename(&from2, &to))
+    })
+    .await?;
+    match renamed {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(AppError::conflict(
+            "The file isn't there anymore. Atlas will rescan the folder.",
+        )),
+        Err(e) => {
+            tracing::warn!(error = %e, from = %from.display(), "rename failed");
+            Err(AppError::conflict(
+                "A file is in use. Close the launcher and try again.",
+            ))
         }
     }
 }
@@ -712,7 +740,7 @@ pub async fn set_share_mode<R: Runtime>(
     content_id: &str,
     mode: ShareMode,
 ) -> AppResult<()> {
-    let instance = row(state, instance_id).await?;
+    let instance = db::instances::require(&state.db, instance_id).await?;
     if instance.shared_role.as_deref().and_then(from_wire) == Some(MemberRole::Viewer) {
         return Err(AppError::forbidden(
             "Only the owner and editors choose how files are shared",

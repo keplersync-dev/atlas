@@ -1,10 +1,13 @@
 //! Small parsers shared by the adapters.
 
 use std::collections::HashMap;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, NaiveDateTime, Utc};
+use serde::de::DeserializeOwned;
 
+use super::ReadResult;
 use crate::dto::Loader;
 use crate::util::time::iso;
 
@@ -62,6 +65,65 @@ pub fn any_running(names: &[&str]) -> bool {
         .any(|p| names.contains(&program_name(p.name()).as_str()))
 }
 
+/// Is a program whose path ends in `tail` running? For programs named too plainly to tell
+/// apart by name ("Minecraft.app/Contents/MacOS/launcher").
+pub fn running_at(tail: &str) -> bool {
+    use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+    let mut system = System::new();
+    system.refresh_processes_specifics(
+        ProcessesToUpdate::All,
+        true,
+        ProcessRefreshKind::nothing().with_exe(UpdateKind::OnlyIfNotSet),
+    );
+    system
+        .processes()
+        .values()
+        .any(|p| p.exe().is_some_and(|exe| exe.ends_with(tail)))
+}
+
+/// A launcher's JSON file, which may start with a UTF-8 BOM (CurseForge's do).
+pub fn read_json<T: DeserializeOwned>(file: &Path) -> ReadResult<T> {
+    let text = std::fs::read_to_string(file)?;
+    Ok(serde_json::from_str(text.trim_start_matches('\u{feff}'))?)
+}
+
+/// Write a launcher's file whole or not at all: next to it, on disk, then swapped in, so
+/// the launcher never reads half of one.
+pub fn write_atomic(file: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let mut name = file.file_name().unwrap_or_default().to_os_string();
+    name.push(".atlas");
+    let tmp = file.with_file_name(name);
+    let mut out = std::fs::File::create(&tmp)?;
+    out.write_all(bytes)?;
+    out.sync_all()?;
+    drop(out);
+    std::fs::rename(&tmp, file)
+}
+
+/// A new folder in the system's temp folder, removed with what's in it when dropped.
+pub struct TempDir(PathBuf);
+
+impl TempDir {
+    pub fn new(prefix: &str) -> std::io::Result<Self> {
+        let dir = std::env::temp_dir().join(format!("{prefix}-{}", crate::util::ids::new_id()));
+        std::fs::create_dir_all(&dir)?;
+        Ok(Self(dir))
+    }
+}
+
+impl std::ops::Deref for TempDir {
+    type Target = Path;
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TempDir {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
 /// A folder name for a new instance in `dir`: the name with the characters Windows
 /// forbids replaced, and " (2)", " (3)", ... added when it's taken.
 pub fn free_folder(dir: &Path, name: &str) -> String {
@@ -94,6 +156,12 @@ pub fn file_stem(name: &str) -> String {
         .to_owned();
     if safe.is_empty() {
         "Atlas".to_owned()
+    } else if crate::sync::manifest::is_reserved_name(&safe) {
+        // Windows reserves the part before the first dot: "nul" → "nul_", "aux.x" → "aux_.x".
+        match safe.split_once('.') {
+            Some((stem, rest)) => format!("{stem}_.{rest}"),
+            None => format!("{safe}_"),
+        }
     } else {
         safe
     }
@@ -123,13 +191,39 @@ pub fn parse_ini(text: &str) -> HashMap<String, String> {
         .filter_map(|l| l.split_once('='))
         .map(|(k, v)| {
             let v = v.trim();
-            let v = v
-                .strip_prefix('"')
-                .and_then(|v| v.strip_suffix('"'))
-                .unwrap_or(v);
-            (k.trim().to_string(), v.to_string())
+            let v = match v.strip_prefix('"').and_then(|v| v.strip_suffix('"')) {
+                Some(quoted) => ini_unescape(quoted),
+                None => v.to_string(),
+            };
+            (k.trim().to_string(), v)
         })
         .collect()
+}
+
+/// A value for a Qt settings file, quoted: unquoted, Qt reads `,` as a list separator and
+/// `;` as the start of a comment. Inside quotes it escapes `\` and `"`.
+pub fn ini_quoted(value: &str) -> String {
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace(['\r', '\n'], " ");
+    format!("\"{escaped}\"")
+}
+
+/// Undo `ini_quoted`'s escapes inside a quoted value.
+fn ini_unescape(quoted: &str) -> String {
+    let mut out = String::with_capacity(quoted.len());
+    let mut chars = quoted.chars().peekable();
+    while let Some(c) = chars.next() {
+        match (c, chars.peek()) {
+            ('\\', Some(&next @ ('"' | '\\'))) => {
+                out.push(next);
+                chars.next();
+            }
+            _ => out.push(c),
+        }
+    }
+    out
 }
 
 /// Loader names as launchers write them ("fabric", "NeoForge", "net.neoforged", ...).
@@ -207,10 +301,66 @@ mod tests {
     }
 
     #[test]
+    fn names_windows_keeps_for_devices_get_an_underscore() {
+        assert_eq!(file_stem("CON"), "CON_");
+        assert_eq!(file_stem("aux.pack"), "aux_.pack");
+        assert_eq!(file_stem("Com1"), "Com1_");
+        assert_eq!(file_stem("Console SMP"), "Console SMP");
+        assert_eq!(file_stem("a:b"), "a_b");
+    }
+
+    #[test]
     fn program_names_without_exe() {
         assert_eq!(program_name("Modrinth App.exe".as_ref()), "modrinth app");
         assert_eq!(program_name("java".as_ref()), "java");
         assert_eq!(program_name("JAVAW.EXE".as_ref()), "javaw");
+    }
+
+    #[test]
+    fn quoted_ini_values_round_trip() {
+        for name in [
+            "Create, Above and Beyond",
+            r#"Mods; "quoted" \ and more"#,
+            "Plain",
+        ] {
+            let ini = parse_ini(&format!("[General]\nname={}\n", ini_quoted(name)));
+            assert_eq!(ini["name"], name);
+        }
+        assert_eq!(
+            ini_quoted("Create, Above and Beyond"),
+            r#""Create, Above and Beyond""#
+        );
+    }
+
+    #[test]
+    fn a_bom_is_skipped_in_launcher_json() {
+        let dir = TempDir::new("atlas-json").unwrap();
+        let file = dir.join("mmc-pack.json");
+        std::fs::write(&file, "\u{feff}{\"formatVersion\": 1}").unwrap();
+        let v: serde_json::Value = read_json(&file).unwrap();
+        assert_eq!(v["formatVersion"], 1);
+        write_atomic(&file, b"{}").unwrap();
+        assert_eq!(std::fs::read(&file).unwrap(), b"{}");
+        assert_eq!(
+            std::fs::read_dir(&*dir).unwrap().count(),
+            1,
+            "no temp file left"
+        );
+        let kept = dir.to_path_buf();
+        drop(dir);
+        assert!(!kept.exists(), "removed when dropped");
+    }
+
+    #[test]
+    fn programs_are_found_by_where_they_are() {
+        let me = std::env::current_exe().unwrap();
+        let tail = format!(
+            "{}/{}",
+            me.parent().unwrap().file_name().unwrap().to_string_lossy(),
+            me.file_name().unwrap().to_string_lossy()
+        );
+        assert!(running_at(&tail), "{tail}");
+        assert!(!running_at("No Such.app/Contents/MacOS/launcher"));
     }
 
     #[test]

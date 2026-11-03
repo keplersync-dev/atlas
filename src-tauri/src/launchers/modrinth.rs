@@ -21,8 +21,8 @@ use sqlx::sqlite::{SqliteConnectOptions, SqliteConnection, SqliteRow};
 use sqlx::{Connection, FromRow};
 
 use super::util::{
-    any_running, app_data, env_dir, file_stem, first_existing, from_unix_seconds, image_ext,
-    loader_from, mac_app,
+    TempDir, any_running, app_data, env_dir, file_stem, first_existing, from_unix_seconds,
+    image_ext, loader_from, mac_app,
 };
 use super::{FoundInstance, NewInstance, ReadError, ReadResult};
 use crate::dto::Loader;
@@ -127,13 +127,26 @@ where
         return Ok(vec![]);
     }
     match read(&db, true, current, legacy).await {
-        Ok(rows) => Ok(rows),
         // Locked or mid-write: read a copy instead of waiting on the app.
-        Err(e) => {
+        Err(e) if copy_helps(&e) => {
             tracing::debug!(error = %e, "reading a copy of Modrinth's app.db");
             read_copy(&db, current, legacy).await
         }
+        other => other,
     }
+}
+
+/// The app holds the database (busy, locked), or it can't be opened read-only as it is
+/// now: a copy reads fine. Anything else (a table this build doesn't know) fails the
+/// same way on a copy.
+fn copy_helps(e: &ReadError) -> bool {
+    let ReadError::Db(sqlx::Error::Database(e)) = e else {
+        return false;
+    };
+    // SQLITE_BUSY, SQLITE_LOCKED, SQLITE_READONLY, SQLITE_CANTOPEN, under their extended codes.
+    e.code()
+        .and_then(|c| c.parse::<i32>().ok())
+        .is_some_and(|c| matches!(c & 0xff, 5 | 6 | 8 | 14))
 }
 
 async fn read<T>(
@@ -169,20 +182,16 @@ async fn read_copy<T>(db: &Path, current: &'static str, legacy: &'static str) ->
 where
     T: for<'r> FromRow<'r, SqliteRow> + Send + Unpin,
 {
-    let dir = std::env::temp_dir().join(format!("atlas-modrinth-{}", crate::util::ids::new_id()));
-    std::fs::create_dir_all(&dir)?;
-    let result = async {
-        for suffix in ["", "-wal", "-shm"] {
-            let from = PathBuf::from(format!("{}{suffix}", db.display()));
-            if from.is_file() {
-                std::fs::copy(&from, dir.join(format!("app.db{suffix}")))?;
-            }
+    let dir = TempDir::new("atlas-modrinth")?;
+    for suffix in ["", "-wal", "-shm"] {
+        let from = PathBuf::from(format!("{}{suffix}", db.display()));
+        if from.is_file() {
+            std::fs::copy(&from, dir.join(format!("app.db{suffix}")))?;
         }
-        read(&dir.join("app.db"), false, current, legacy).await
     }
-    .await;
-    let _ = std::fs::remove_dir_all(&dir);
-    result.map_err(|e| ReadError::Format(format!("Modrinth app.db: {e}")))
+    read(&dir.join("app.db"), false, current, legacy)
+        .await
+        .map_err(|e| ReadError::Format(format!("Modrinth app.db: {e}")))
 }
 
 #[derive(FromRow)]
@@ -232,37 +241,31 @@ pub async fn create(root: &Path, new: &NewInstance) -> ReadResult<String> {
         .into_iter()
         .map(|s| s.path)
         .collect();
-    let dir = std::env::temp_dir().join(format!("atlas-mrpack-{}", crate::util::ids::new_id()));
-    std::fs::create_dir_all(&dir)?;
-    let result = async {
-        // The app names the instance after the file at first, then after the pack.
-        let pack = dir.join(format!("{}.mrpack", file_stem(&new.name)));
-        write_pack(&pack, new, loader_version)?;
-        open_pack(&pack)?;
-        let deadline = Instant::now() + CONFIRM_WAIT;
-        loop {
-            tokio::time::sleep(Duration::from_secs(2)).await;
-            match made(root, &before, &new.name, &pack).await {
-                Ok(Made::Done(path)) => return Ok(path),
-                Ok(Made::Waiting) => {}
-                Ok(Made::Failed) => {
-                    return Err(ReadError::Shown(
-                        "The Modrinth App couldn't set up the instance. Try again.".into(),
-                    ));
-                }
-                Ok(Made::Cancelled) => return Err(ReadError::NotCreated),
-                Err(e) => {
-                    tracing::debug!(error = %e, "couldn't look for the new Modrinth instance")
-                }
+    let dir = TempDir::new("atlas-mrpack")?;
+    // The app names the instance after the file at first, then after the pack.
+    let pack = dir.join(format!("{}.mrpack", file_stem(&new.name)));
+    write_pack(&pack, new, loader_version)?;
+    open_pack(&pack)?;
+    let deadline = Instant::now() + CONFIRM_WAIT;
+    loop {
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        match made(root, &before, &new.name, &pack).await {
+            Ok(Made::Done(path)) => return Ok(path),
+            Ok(Made::Waiting) => {}
+            Ok(Made::Failed) => {
+                return Err(ReadError::Shown(
+                    "The Modrinth App couldn't set up the instance. Try again.".into(),
+                ));
             }
-            if Instant::now() > deadline {
-                return Err(ReadError::NotCreated);
+            Ok(Made::Cancelled) => return Err(ReadError::NotCreated),
+            Err(e) => {
+                tracing::debug!(error = %e, "couldn't look for the new Modrinth instance")
             }
         }
+        if Instant::now() > deadline {
+            return Err(ReadError::NotCreated);
+        }
     }
-    .await;
-    let _ = std::fs::remove_dir_all(&dir);
-    result
 }
 
 /// A loader's key in a pack's `dependencies` ("fabric-loader"). None for vanilla.
@@ -512,6 +515,26 @@ mod tests {
         }
         c.close().await.unwrap();
         root
+    }
+
+    #[tokio::test]
+    async fn a_database_atlas_cant_read_isnt_copied() {
+        let root = fixture().await;
+        let missing: ReadResult<Vec<IdRow>> = rows(
+            &root,
+            "SELECT id, path FROM no_such_table",
+            "SELECT 1 WHERE 0",
+        )
+        .await;
+        let Err(e) = missing else {
+            panic!("there's no such table");
+        };
+        assert!(!copy_helps(&e), "{e}");
+        assert!(
+            !e.to_string().contains("app.db:"),
+            "it wasn't read again from a copy: {e}"
+        );
+        std::fs::remove_dir_all(&root).ok();
     }
 
     #[tokio::test]

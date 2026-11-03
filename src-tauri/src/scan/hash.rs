@@ -28,7 +28,7 @@ fn is_ignored(b: u8) -> bool {
     matches!(b, b'\t' | b'\n' | b'\r' | b' ')
 }
 
-/// `is_ignored` as a table, for the in-memory path's tight loop.
+/// `is_ignored` as a table, for the tight loops.
 const KEEP: [bool; 256] = {
     let mut t = [true; 256];
     t[b'\t' as usize] = false;
@@ -59,13 +59,8 @@ fn hash_file_with(path: &Path, in_memory: u64) -> io::Result<Hashes> {
 
     // Pass 2: murmur2 over the kept bytes.
     let mut murmur = Murmur2::new(kept as u32);
-    for_each_chunk(path, |chunk| {
-        for &b in chunk {
-            if !is_ignored(b) {
-                murmur.push(b);
-            }
-        }
-    })?;
+    let mut scratch = vec![0u8; CHUNK];
+    for_each_chunk(path, |chunk| murmur.feed_kept(chunk, &mut scratch))?;
 
     Ok(Hashes {
         sha1: hex::encode(sha1.finalize()),
@@ -76,29 +71,22 @@ fn hash_file_with(path: &Path, in_memory: u64) -> io::Result<Hashes> {
 
 /// All three hashes of a file read into memory.
 pub fn hash_bytes(data: &[u8]) -> Hashes {
-    // Copy every byte, but only move past the kept ones: no branch per byte.
-    let mut kept = vec![0u8; data.len()];
-    let mut n = 0;
-    for &b in data {
-        kept[n] = b;
-        n += usize::from(KEEP[b as usize]);
-    }
-    kept.truncate(n);
     Hashes {
         sha1: hex::encode(Sha1::digest(data)),
         sha256: hex::encode(Sha256::digest(data)),
-        murmur2: murmur2(&kept),
+        murmur2: murmur2(data),
     }
 }
 
-/// MurmurHash2 (seed 1) over bytes already stripped of whitespace, four at a time.
-fn murmur2(kept: &[u8]) -> u32 {
-    let mut m = Murmur2::new(kept.len() as u32);
-    let mut words = kept.chunks_exact(4);
-    for w in &mut words {
-        m.word(u32::from_le_bytes([w[0], w[1], w[2], w[3]]));
+/// MurmurHash2 (seed 1) over `data` without its whitespace. Its length comes first, so
+/// one pass counts and one mixes, a chunk at a time: no copy of the whole file.
+fn murmur2(data: &[u8]) -> u32 {
+    let kept: usize = data.iter().map(|&b| usize::from(KEEP[b as usize])).sum();
+    let mut m = Murmur2::new(kept as u32);
+    let mut scratch = vec![0u8; CHUNK];
+    for chunk in data.chunks(CHUNK) {
+        m.feed_kept(chunk, &mut scratch);
     }
-    words.remainder().iter().for_each(|&b| m.push(b));
     m.finish()
 }
 
@@ -130,6 +118,26 @@ impl Murmur2 {
             block: [0; 4],
             filled: 0,
         }
+    }
+
+    /// Mix in a chunk's kept bytes: compacted into `scratch` (every byte copied, only kept
+    /// ones moved past, so no branch per byte), then four at a time.
+    fn feed_kept(&mut self, chunk: &[u8], scratch: &mut [u8]) {
+        let mut n = 0;
+        for &b in chunk {
+            scratch[n] = b;
+            n += usize::from(KEEP[b as usize]);
+        }
+        let mut kept = &scratch[..n];
+        while self.filled != 0 && !kept.is_empty() {
+            self.push(kept[0]);
+            kept = &kept[1..];
+        }
+        let mut words = kept.chunks_exact(4);
+        for w in &mut words {
+            self.word(u32::from_le_bytes([w[0], w[1], w[2], w[3]]));
+        }
+        words.remainder().iter().for_each(|&b| self.push(b));
     }
 
     fn push(&mut self, b: u8) {
@@ -201,7 +209,7 @@ mod tests {
     #[test]
     fn read_once_and_streamed_give_the_same_hashes() {
         // Whitespace spread through it, and every tail length for the word-at-a-time path.
-        for len in [0, 1, 2, 3, 4, 5, 200_003] {
+        for len in [0, 1, 2, 3, 4, 5, 200_003, CHUNK * 3 + 1] {
             let data: Vec<u8> = (0..len as u32)
                 .map(|i| if i % 7 == 0 { b'\n' } else { (i % 251) as u8 })
                 .collect();
@@ -251,20 +259,21 @@ mod real {
     /// Atlas's fingerprints against the ones CurseForge saved for the files in this PC's
     /// CurseForge instances (`installedAddons` in minecraftinstance.json). Reads only.
     /// `cargo test --release --lib real_fingerprints -- --ignored --nocapture`
-    #[test]
+    #[tokio::test]
     #[ignore]
-    fn real_fingerprints() {
+    async fn real_fingerprints() {
         use crate::dto::LauncherKind;
         let (mut same, mut differ) = (0, 0);
-        for root in crate::launchers::detect(LauncherKind::Curseforge) {
-            let Ok(dirs) = std::fs::read_dir(root.join("Instances")) else {
+        for (kind, _, found) in crate::launchers::on_this_pc().await {
+            if kind != LauncherKind::Curseforge {
                 continue;
-            };
-            for dir in dirs.flatten().map(|d| d.path()) {
-                let Ok(text) = std::fs::read_to_string(dir.join("minecraftinstance.json")) else {
+            }
+            for dir in found.unwrap_or_default().into_iter().map(|i| i.game_dir) {
+                let Ok(json) = crate::launchers::read_json::<serde_json::Value>(
+                    &dir.join("minecraftinstance.json"),
+                ) else {
                     continue;
                 };
-                let json: serde_json::Value = serde_json::from_str(&text).unwrap();
                 for addon in json["installedAddons"].as_array().into_iter().flatten() {
                     let file = &addon["installedFile"];
                     let (Some(name), Some(expected)) = (

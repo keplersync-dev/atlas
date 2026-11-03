@@ -18,7 +18,7 @@ use serde_json::{Map, Value, json};
 
 use super::util::{
     any_running, env_dir, first_existing, free_folder, home, image_ext, loader_from, mac_app,
-    parse_time,
+    parse_time, read_json, write_atomic,
 };
 use super::{FoundInstance, NewInstance, ReadError, ReadResult};
 use crate::dto::Loader;
@@ -100,16 +100,14 @@ struct FileHash {
 
 /// The instance's id in CurseForge (its `guid`), which its launch link needs.
 pub fn instance_guid(instance_dir: &Path) -> Option<String> {
-    let text = std::fs::read_to_string(instance_dir.join("minecraftinstance.json")).ok()?;
-    let value: Value = serde_json::from_str(text.trim_start_matches('\u{feff}')).ok()?;
+    let value: Value = read_json(&instance_dir.join("minecraftinstance.json")).ok()?;
     Some(value.get("guid")?.as_str()?.to_owned())
 }
 
 /// The modpack CurseForge installed the instance from, with its download. None when it
 /// wasn't from one, or the pack's author doesn't allow downloads outside CurseForge.
 pub fn installed_pack(instance_dir: &Path) -> Option<super::InstalledPack> {
-    let text = std::fs::read_to_string(instance_dir.join("minecraftinstance.json")).ok()?;
-    let i: Instance = serde_json::from_str(text.trim_start_matches('\u{feff}')).ok()?;
+    let i: Instance = read_json(&instance_dir.join("minecraftinstance.json")).ok()?;
     let pack = i.installed_modpack?;
     if pack.allow_mod_distribution == Some(false) {
         return None;
@@ -121,9 +119,8 @@ pub fn installed_pack(instance_dir: &Path) -> Option<super::InstalledPack> {
         .find(|h| h.kind == 1)
         .map(|h| h.value.to_ascii_lowercase())?;
     // The pack's own manifest has the version players know ("2.0.4").
-    let version_label = std::fs::read_to_string(instance_dir.join("manifest.json"))
+    let version_label = read_json::<Value>(&instance_dir.join("manifest.json"))
         .ok()
-        .and_then(|t| serde_json::from_str::<Value>(t.trim_start_matches('\u{feff}')).ok())
         .and_then(|m| m["version"].as_str().map(str::to_owned))
         .or(file.display_name)
         .or(file.file_name_on_disk);
@@ -193,8 +190,7 @@ struct Read {
 }
 
 fn read_instance(file: &Path) -> ReadResult<Read> {
-    let text = std::fs::read_to_string(file)?;
-    let i: Instance = serde_json::from_str(text.trim_start_matches('\u{feff}'))?;
+    let i: Instance = read_json(file)?;
     let loader = i
         .base_mod_loader
         .and_then(|b| b.name)
@@ -348,10 +344,10 @@ pub fn create(root: &Path, new: &NewInstance, loader_data: Option<Value>) -> Rea
     if let (Value::Object(all), Value::Object(rest)) = (&mut instance, rest) {
         all.extend(rest);
     }
-    let file = dir.join("minecraftinstance.json");
-    let tmp = dir.join("minecraftinstance.json.atlas");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(&instance)?)?;
-    std::fs::rename(&tmp, &file)?;
+    write_atomic(
+        &dir.join("minecraftinstance.json"),
+        &serde_json::to_vec_pretty(&instance)?,
+    )?;
     Ok(folder)
 }
 

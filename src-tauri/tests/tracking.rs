@@ -55,11 +55,6 @@ fn launchers_can_be_added_once_and_only_where_they_exist() {
         ),
         "invalid_input"
     );
-
-    let id = launcher["id"].as_str().unwrap();
-    app.ok("remove_launcher", json!({ "id": id }));
-    assert_eq!(app.ok("list_launchers", json!({})), json!([]));
-    assert_eq!(app.err("remove_launcher", json!({ "id": id })), "not_found");
 }
 
 #[test]

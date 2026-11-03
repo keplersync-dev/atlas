@@ -33,14 +33,19 @@ pub fn change(row: &InstanceRow, m: &Manifest) -> Option<LauncherChange> {
     })
 }
 
-fn loader_uid(l: Loader) -> Option<&'static str> {
-    match l {
-        Loader::Fabric => Some("net.fabricmc.fabric-loader"),
-        Loader::Quilt => Some("org.quiltmc.quilt-loader"),
-        Loader::Forge => Some("net.minecraftforge"),
-        Loader::Neoforge => Some("net.neoforged"),
-        Loader::Vanilla => None,
-    }
+/// Each loader's component in Prism's mmc-pack.json (vanilla has none).
+pub const LOADER_UIDS: [(Loader, &str); 4] = [
+    (Loader::Fabric, "net.fabricmc.fabric-loader"),
+    (Loader::Quilt, "org.quiltmc.quilt-loader"),
+    (Loader::Forge, "net.minecraftforge"),
+    (Loader::Neoforge, "net.neoforged"),
+];
+
+pub fn loader_uid(l: Loader) -> Option<&'static str> {
+    LOADER_UIDS
+        .iter()
+        .find(|(loader, _)| *loader == l)
+        .map(|(_, uid)| *uid)
 }
 
 /// Edit Prism's mmc-pack.json if the versions differ. Logs instead of failing: the files
@@ -58,7 +63,7 @@ pub fn update_if_needed(row: &InstanceRow, m: &Manifest) {
 }
 
 fn edit_pack(file: &Path, m: &Manifest) -> Result<(), Box<dyn std::error::Error>> {
-    let mut pack: Value = serde_json::from_str(&std::fs::read_to_string(file)?)?;
+    let mut pack: Value = crate::launchers::read_json(file)?;
     let components = pack["components"].as_array_mut().ok_or("no components")?;
     let loader = loader_uid(m.minecraft.loader);
     for c in components.iter_mut() {
@@ -75,9 +80,7 @@ fn edit_pack(file: &Path, m: &Manifest) -> Result<(), Box<dyn std::error::Error>
             obj.remove("cachedVersion");
         }
     }
-    let tmp = file.with_extension("json.atlas-tmp");
-    std::fs::write(&tmp, serde_json::to_vec_pretty(&pack)?)?;
-    std::fs::rename(tmp, file)?;
+    crate::launchers::write_atomic(file, &serde_json::to_vec_pretty(&pack)?)?;
     Ok(())
 }
 
