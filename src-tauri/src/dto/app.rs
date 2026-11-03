@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::Id;
 
 /// How Atlas behaves on this PC, outside any account.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -21,8 +22,10 @@ pub struct AppSettings {
 }
 
 /// Only the fields given change.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, ts(optional_fields))]
 pub struct AppSettingsPatch {
     pub notifications: Option<bool>,
     pub notification_sound: Option<bool>,
@@ -35,6 +38,7 @@ pub struct AppSettingsPatch {
 /// Something that needs the player: a pack shared with them, a friend request, or an
 /// update that can't go ahead without them. Shown inside Atlas when its window is
 /// visible, else as a Windows notification.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Notice {
@@ -44,6 +48,7 @@ pub struct Notice {
     pub target: NoticeTarget,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
@@ -69,6 +74,7 @@ pub enum NoticeTarget {
 }
 
 /// A newer Atlas on the release page.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AvailableUpdate {

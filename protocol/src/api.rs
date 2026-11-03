@@ -16,6 +16,7 @@ use crate::{Id, IsoDate};
 // ── Users ──────────────────────────────────────────────────────────────
 
 /// Any Atlas user as seen by others.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublicUser {
@@ -30,6 +31,7 @@ pub struct PublicUser {
     pub minecraft_username: Option<String>,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LinkedIdentity {
@@ -39,6 +41,7 @@ pub struct LinkedIdentity {
     pub linked_at: IsoDate,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Storage {
@@ -48,6 +51,7 @@ pub struct Storage {
 }
 
 /// `GET /me/uploads`: one file the user uploaded, and what still uses it.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MyUpload {
@@ -63,6 +67,7 @@ pub struct MyUpload {
 }
 
 /// `POST /me/uploads/remove-unused`: what removing every unused upload freed.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RemovedUploads {
@@ -70,7 +75,8 @@ pub struct RemovedUploads {
     pub size_bytes: u64,
 }
 
-/// The signed-in user, with private fields. `extends PublicUser` in types.ts.
+/// The signed-in user, with private fields.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Me {
@@ -94,8 +100,10 @@ pub struct Me {
 }
 
 /// `PATCH /me`. Missing fields stay as they are.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", ts(optional_fields))]
 pub struct UpdateProfileInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub username: Option<String>,
@@ -113,6 +121,7 @@ fn discord() -> AvatarSource {
 
 // ── Friends ────────────────────────────────────────────────────────────
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Presence {
@@ -126,6 +135,7 @@ pub struct Presence {
     pub updated_at: IsoDate,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Friend {
@@ -134,6 +144,7 @@ pub struct Friend {
     pub presence: Presence,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FriendRequest {
@@ -153,6 +164,7 @@ pub struct SendFriendRequest {
 // ── Shared instances ───────────────────────────────────────────────────
 
 /// `{ id, name }`: how a group is named on a member row.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupRef {
@@ -160,6 +172,7 @@ pub struct GroupRef {
     pub name: String,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SharedMember {
@@ -170,6 +183,7 @@ pub struct SharedMember {
     pub last_synced_revision: Option<u32>,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupLinkGroup {
@@ -178,6 +192,7 @@ pub struct GroupLinkGroup {
     pub icon: Option<String>,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SharedGroupLink {
@@ -186,6 +201,7 @@ pub struct SharedGroupLink {
 }
 
 /// An optional file a friend can choose to download.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OptionalItem {
@@ -196,6 +212,7 @@ pub struct OptionalItem {
     pub size_bytes: u64,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SharedInstance {
@@ -231,6 +248,7 @@ pub struct SharedInstance {
     pub uploaded_files: Vec<String>,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdatedItem {
@@ -239,6 +257,7 @@ pub struct UpdatedItem {
     pub to: String,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RevisionChanges {
@@ -247,6 +266,7 @@ pub struct RevisionChanges {
     pub updated: Vec<UpdatedItem>,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RevisionSummary {
@@ -257,7 +277,8 @@ pub struct RevisionSummary {
     pub changes: RevisionChanges,
 }
 
-/// `SharedInstanceDetail extends SharedInstance` in types.ts.
+/// A shared instance with its versions.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SharedInstanceDetail {
@@ -354,6 +375,7 @@ pub struct ShareToGroup {
 
 // ── Groups ─────────────────────────────────────────────────────────────
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupMember {
@@ -362,6 +384,7 @@ pub struct GroupMember {
     pub joined_at: IsoDate,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupInvite {
@@ -376,6 +399,7 @@ pub struct GroupInvite {
     pub created_at: IsoDate,
 }
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Group {
@@ -390,6 +414,7 @@ pub struct Group {
 }
 
 /// `GET /groups/{id}`.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupDetail {
@@ -404,6 +429,7 @@ pub struct GroupDetail {
 }
 
 /// `GET /group-invites/{code}`: what an invite leads to, before joining.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GroupInvitePreview {
@@ -424,11 +450,13 @@ pub struct InviteToGroup {
 }
 
 /// `POST /groups`.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateGroup {
     pub name: String,
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(optional = nullable))]
     pub icon: Option<String>,
 }
 
@@ -447,8 +475,10 @@ pub struct UpdateGroup {
 }
 
 /// `POST /groups/{id}/invites`.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct CreateGroupInvite {
     /// None = any number of people.
     #[serde(default)]
@@ -635,23 +665,11 @@ pub struct World {
     pub ends_at: Option<IsoDate>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum LeaseState {
+crate::wire_enum!(LeaseState {
     Downloading,
     Hosting,
-    Uploading,
-}
-
-impl LeaseState {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Downloading => "downloading",
-            Self::Hosting => "hosting",
-            Self::Uploading => "uploading",
-        }
-    }
-}
+    Uploading
+});
 
 /// "Alex is hosting this world": one at a time, and it runs out unless renewed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -746,25 +764,12 @@ pub struct WorldBlobCheck {
     pub files: Vec<WorldFile>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SnapshotKind {
+crate::wire_enum!(SnapshotKind {
     Checkpoint,
     Session,
     Restore,
-    Import,
-}
-
-impl SnapshotKind {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Self::Checkpoint => "checkpoint",
-            Self::Session => "session",
-            Self::Restore => "restore",
-            Self::Import => "import",
-        }
-    }
-}
+    Import
+});
 
 /// `POST /worlds/{id}/snapshots`: the world at one moment, built on `parent`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -924,8 +929,10 @@ pub struct CurseForgeFile {
 /// `POST /reports`: tell Atlas about something that breaks the rules. Only things the
 /// reporter can see: a member's shared instance, a group they're in, any user, or an
 /// uploaded file (`target_id` is its sha256) in `shared_instance_id`, which they're in.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", ts(optional_fields = nullable))]
 pub struct NewReport {
     pub target_type: ReportTarget,
     pub target_id: String,
@@ -938,6 +945,7 @@ pub struct NewReport {
 
 // ── Activity ───────────────────────────────────────────────────────────
 
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActivityItem {
@@ -955,6 +963,7 @@ pub struct ActivityItem {
     pub revision: Option<u32>,
     /// `role_changed`: the role they have now.
     #[serde(default)]
+    #[cfg_attr(feature = "ts", ts(optional = nullable))]
     pub role: Option<MemberRole>,
 }
 

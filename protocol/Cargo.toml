@@ -13,3 +13,8 @@ sha2 = "0.11.1"
 hex = "0.4.3"
 base64 = "0.23.1"
 thiserror = "2.0.21"
+ts-rs = { version = "12.0.1", optional = true }
+
+[features]
+# TypeScript declarations of the types the app's UI receives (src-tauri's tests write them).
+ts = ["dep:ts-rs"]

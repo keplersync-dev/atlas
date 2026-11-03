@@ -3,14 +3,14 @@ use serde::{Deserialize, Serialize};
 pub use atlas_protocol::api::{
     AddMembers, CreateRevision, CreateSharedInstance, GroupLinkGroup, GroupRef, OptionalItem,
     Revision, RevisionChanges, RevisionSummary, SetMemberRole, ShareToGroup, SharedGroupLink,
-    SharedInstance, SharedInstanceDetail, SharedMember, Synced, Transfer, UpdateSharedInstance,
-    UpdatedItem,
+    SharedInstance, SharedInstanceDetail, SharedMember, Synced, Transfer, UpdatedItem,
 };
 
 use super::{
     ContentKind, ContentSource, Id, IsoDate, LeftOutReason, ManualDownload, ShareMode, Storage,
 };
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ConfigConflict {
@@ -19,6 +19,7 @@ pub struct ConfigConflict {
     pub theirs: String,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionChange {
@@ -26,6 +27,7 @@ pub struct VersionChange {
     pub to: String,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LauncherChange {
@@ -36,6 +38,7 @@ pub struct LauncherChange {
 }
 
 /// Shown on the Review update page before syncing.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncPreview {
@@ -56,6 +59,7 @@ pub struct SyncPreview {
 
 /// A file in the share dialog's tree: anything in the instance folder except mods and
 /// packs (listed apart) and what's never shared.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShareFile {
@@ -75,6 +79,7 @@ pub struct ShareFile {
 /// Which tree files are shared: paths ticked or unticked, a folder ending in '/' and ""
 /// for everything. The longest matching rule wins; with none, config and script folders
 /// and the pack's own files are shared. Saved with each share for the next one.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct FileRules {
@@ -86,6 +91,7 @@ pub struct FileRules {
 
 /// A config file that won't be shared as it is here, and why. Listed in the dialog
 /// before anything uploads.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LeftOutFile {
@@ -94,6 +100,7 @@ pub struct LeftOutFile {
 }
 
 /// The modpack a share is based on: its own files come from its download.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PackInfo {
@@ -105,6 +112,7 @@ pub struct PackInfo {
 }
 
 /// One file in the share/publish picker.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublishItem {
@@ -127,6 +135,7 @@ pub struct PublishItem {
     pub contents_changed: bool,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublishPlan {

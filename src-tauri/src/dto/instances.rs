@@ -5,6 +5,7 @@ use super::{
     MemberRole, PublicUser, ShareMode, Side, SyncStage, SyncState, WorkStage,
 };
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Launcher {
@@ -20,6 +21,7 @@ pub struct Launcher {
 }
 
 /// An instance found in a launcher, before or after tracking.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DetectedInstance {
@@ -36,6 +38,7 @@ pub struct DetectedInstance {
     pub instance_id: Option<Id>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManualDownload {
@@ -48,6 +51,8 @@ pub struct ManualDownload {
 /// reading its files after it's tracked, or uploading files and saving a version while
 /// sharing. `done` of `total`: files while reading, bytes while uploading, both 0 for
 /// `Saving`.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[cfg_attr(test, ts(rename = "InstanceWork"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Work {
@@ -57,6 +62,7 @@ pub struct Work {
 }
 
 /// Progress of an update/restore Atlas is applying to a folder.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncProgress {
@@ -68,6 +74,7 @@ pub struct SyncProgress {
     pub manual_downloads: Vec<ManualDownload>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstanceSyncInfo {
@@ -83,7 +90,8 @@ pub struct InstanceSyncInfo {
     pub auto_update: bool,
 }
 
-/// `{ kind: LauncherKind; name: string }` in InstanceSummary.
+/// The launcher an instance is in, as InstanceSummary shows it.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LauncherRef {
@@ -92,6 +100,7 @@ pub struct LauncherRef {
 }
 
 /// What the sidebar, tiles and lists need. Cheap to build for every instance.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstanceSummary {
@@ -119,6 +128,7 @@ pub struct InstanceSummary {
     pub progress: Option<SyncProgress>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstanceContent {
@@ -142,6 +152,7 @@ pub struct InstanceContent {
     pub installed: bool,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Backup {
@@ -154,7 +165,8 @@ pub struct Backup {
     pub created_at: IsoDate,
 }
 
-/// `InstanceDetail extends InstanceSummary` in types.ts.
+/// What the instance page needs.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstanceDetail {

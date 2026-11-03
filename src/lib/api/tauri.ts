@@ -41,7 +41,6 @@ export const tauriApi: AtlasApi = {
   listLaunchers: () => call("list_launchers"),
   detectLaunchers: () => call("detect_launchers"),
   addLauncher: (kind, rootPath) => call("add_launcher", { kind, rootPath }),
-  removeLauncher: (id) => call("remove_launcher", { id }),
   listDetectedInstances: () => call("list_detected_instances"),
 
   listInstances: () => call("list_instances"),
@@ -101,18 +100,12 @@ export const tauriApi: AtlasApi = {
     call("sync_instance", { instanceId, options: options ?? {} }),
   revertLocalChanges: (instanceId) =>
     call("revert_local_changes", { instanceId }),
-  updateSharedInstance: (id, patch) =>
-    call("update_shared_instance", { id, patch }),
   inviteToSharedInstance: (id, input) =>
     call("invite_to_shared_instance", { id, input }),
   setSharedMemberRole: (id, userId, role) =>
     call("set_shared_member_role", { id, userId, role }),
   removeSharedMember: (id, userId) =>
     call("remove_shared_member", { id, userId }),
-  unshareFromGroup: (id, groupId) =>
-    call("unshare_from_group", { id, groupId }),
-  transferSharedInstance: (id, userId) =>
-    call("transfer_shared_instance", { id, userId }),
   leaveSharedInstance: (id) => call("leave_shared_instance", { id }),
   archiveSharedInstance: (id) => call("archive_shared_instance", { id }),
 
@@ -149,20 +142,15 @@ export const tauriApi: AtlasApi = {
   listGroups: () => call("list_groups"),
   getGroup: (id) => call("get_group", { id }),
   createGroup: (input) => call("create_group", { input }),
-  updateGroup: (id, patch) => call("update_group", { id, patch }),
   deleteGroup: (id) => call("delete_group", { id }),
   createGroupInvite: (groupId, input) =>
     call("create_group_invite", { groupId, input }),
-  revokeGroupInvite: (groupId, code) =>
-    call("revoke_group_invite", { groupId, code }),
   previewGroupInvite: (code) => call("preview_group_invite", { code }),
   joinGroup: (code) => call("join_group", { code }),
   inviteFriendsToGroup: (groupId, friendIds) =>
     call("invite_friends_to_group", { groupId, friendIds }),
   listGroupInvites: () => call("list_group_invites"),
   declineGroupInvite: (code) => call("decline_group_invite", { code }),
-  setGroupMemberRole: (groupId, userId, role) =>
-    call("set_group_member_role", { groupId, userId, role }),
   removeGroupMember: (groupId, userId) =>
     call("remove_group_member", { groupId, userId }),
   transferGroup: (groupId, userId) =>

@@ -13,38 +13,55 @@ macro_rules! wire_enum {
     };
 }
 
-wire_enum!(Loader {
-    Vanilla,
-    Fabric,
-    Quilt,
-    Forge,
-    Neoforge
-});
-
-wire_enum!(ContentKind {
-    Mod,
-    Resourcepack,
-    Shaderpack,
-    Datapack
-});
-wire_enum!(ContentSource {
-    Modrinth,
-    Curseforge,
-    Upload,
-    Local
-});
-
-wire_enum!(Side {
-    Client,
-    Server,
-    Both
-});
-wire_enum!(MemberRole {
-    Owner,
-    Editor,
-    Viewer
-});
 wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+    Loader {
+        Vanilla,
+        Fabric,
+        Quilt,
+        Forge,
+        Neoforge
+    }
+);
+
+wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+    ContentKind {
+        Mod,
+        Resourcepack,
+        Shaderpack,
+        Datapack
+    }
+);
+wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+    ContentSource {
+        Modrinth,
+        Curseforge,
+        Upload,
+        Local
+    }
+);
+
+wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+    Side {
+        Client,
+        Server,
+        Both
+    }
+);
+wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+    MemberRole {
+        Owner,
+        Editor,
+        Viewer
+    }
+);
+wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+
     /// A role you can give someone: any but owner.
     InviteRole { Editor, Viewer }
 );
@@ -57,17 +74,25 @@ impl From<InviteRole> for MemberRole {
     }
 }
 
-wire_enum!(MemberStatus {
-    Invited,
-    Active,
-    Declined
-});
-wire_enum!(GroupRole {
-    Owner,
-    Admin,
-    Member
-});
 wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+    MemberStatus {
+        Invited,
+        Active,
+        Declined
+    }
+);
+wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+    GroupRole {
+        Owner,
+        Admin,
+        Member
+    }
+);
+wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+
     /// A group role you can give someone: any but owner.
     GroupMemberRole { Admin, Member }
 );
@@ -80,40 +105,69 @@ impl From<GroupMemberRole> for GroupRole {
         }
     }
 }
-wire_enum!(PresenceState {
-    Offline,
-    Online,
-    Playing
-});
-// Where someone's picture comes from: their Minecraft skin's face or their Discord avatar.
-wire_enum!(AvatarSource { Minecraft, Discord });
-
-wire_enum!(AuthProvider { Minecraft, Discord });
-
-wire_enum!(RequestDirection { Incoming, Outgoing });
-
-wire_enum!(ActivityType {
-    FriendRequest,
-    FriendAccepted,
-    InstanceInvite,
-    InstanceUpdated,
-    InstanceSharedToGroup,
-    MemberJoined,
-    MemberLeft,
-    OwnershipTransferred,
-    InstanceFrozen,
-    GroupJoined,
-    RoleChanged,
-});
-
 wire_enum!(
-    /// What a report is about.
-    ReportTarget { User, SharedInstance, Group, Blob }
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+    PresenceState {
+        Offline,
+        Online,
+        Playing
+    }
+);
+// Where someone's picture comes from: their Minecraft skin's face or their Discord avatar.
+wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+    AvatarSource { Minecraft, Discord }
 );
 
 wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+    AuthProvider { Minecraft, Discord }
+);
+
+wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+    RequestDirection { Incoming, Outgoing }
+);
+
+wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+    ActivityType {
+        FriendRequest,
+        FriendAccepted,
+        InstanceInvite,
+        InstanceUpdated,
+        InstanceSharedToGroup,
+        MemberJoined,
+        MemberLeft,
+        OwnershipTransferred,
+        InstanceFrozen,
+        GroupJoined,
+        RoleChanged,
+    }
+);
+
+wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+
+    /// What a report is about.
+    ReportTarget {
+        User,
+        SharedInstance,
+        Group,
+        Blob
+    }
+);
+
+wire_enum!(
+    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+
     /// Why something was reported.
-    ReportReason { Copyright, Malware, Abuse, Other }
+    ReportReason {
+        Copyright,
+        Malware,
+        Abuse,
+        Other
+    }
 );
 
 /// Which program a session belongs to.

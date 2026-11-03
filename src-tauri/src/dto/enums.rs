@@ -1,57 +1,112 @@
-// Each enum mirrors a string union in types.ts. snake_case on the wire. The ones the
-// server uses too live in atlas-protocol.
+// String unions for the UI, snake_case on the wire. The ones the server uses too live in
+// atlas-protocol.
 
 use atlas_protocol::wire_enum;
 
 pub use atlas_protocol::enums::*;
 
 wire_enum!(
+    #[cfg_attr(test, derive(ts_rs::TS))]
+
     /// Launchers Atlas can read. `Folder` = a game folder added by hand.
-    LauncherKind { Prism, Multimc, Modrinth, Curseforge, Official, Folder }
+    LauncherKind {
+        Prism,
+        Multimc,
+        Modrinth,
+        Curseforge,
+        Official,
+        Folder
+    }
 );
 
 wire_enum!(
+    #[cfg_attr(test, derive(ts_rs::TS))]
+
     /// `Syncing` is never stored: it comes from the job manager at response time.
-    InstanceStatus { Ready, Syncing, Missing }
+    InstanceStatus {
+        Ready,
+        Syncing,
+        Missing
+    }
 );
 
 wire_enum!(
+    #[cfg_attr(test, derive(ts_rs::TS))]
+
     /// How a file in an instance is shared. New files start `Required`.
-    ShareMode { Required, Optional, Private }
+    ShareMode {
+        Required,
+        Optional,
+        Private
+    }
 );
 
 wire_enum!(
+    #[cfg_attr(test, derive(ts_rs::TS))]
+
     /// Derived, never stored.
-    SyncState { LocalOnly, UpToDate, UpdateAvailable, LocalChanges, Conflict, Frozen }
+    SyncState {
+        LocalOnly,
+        UpToDate,
+        UpdateAvailable,
+        LocalChanges,
+        Conflict,
+        Frozen
+    }
 );
 
-wire_enum!(BackupReason {
-    BeforeUpdate,
-    BeforeRestore,
-    BeforeRevert
-});
+wire_enum!(
+    #[cfg_attr(test, derive(ts_rs::TS))]
+    BackupReason {
+        BeforeUpdate,
+        BeforeRestore,
+        BeforeRevert
+    }
+);
 
 wire_enum!(
+    #[cfg_attr(test, derive(ts_rs::TS))]
+
     /// Work on an instance outside a job: see `Work`.
-    WorkStage { Reading, Uploading, Saving, Downloading }
+    WorkStage {
+        Reading,
+        Uploading,
+        Saving,
+        Downloading
+    }
 );
 
 wire_enum!(
+    #[cfg_attr(test, derive(ts_rs::TS))]
+
     /// Why a config file isn't shared as it is (see `LeftOutFile`): not in a folder
     /// Atlas uploads from, not a file type it uploads, too big, past the count or total
     /// limit, or changed here but not uploadable so the modpack's own copy goes instead.
-    LeftOutReason { Folder, Login, Program, FileType, TooBig, OverLimit, PackCopy }
+    LeftOutReason {
+        Folder,
+        Login,
+        Program,
+        FileType,
+        TooBig,
+        OverLimit,
+        PackCopy
+    }
 );
 
-wire_enum!(SyncStage {
-    WaitingForGameExit,
-    Backup,
-    Download,
-    WaitingForManualDownloads,
-    Apply,
-});
+wire_enum!(
+    #[cfg_attr(test, derive(ts_rs::TS))]
+    SyncStage {
+        WaitingForGameExit,
+        Backup,
+        Download,
+        WaitingForManualDownloads,
+        Apply,
+    }
+);
 
 wire_enum!(
+    #[cfg_attr(test, derive(ts_rs::TS))]
+
     /// SyncOptions.configChoices values.
     ConfigChoice { Mine, Theirs }
 );

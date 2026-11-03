@@ -41,7 +41,6 @@ fn commands_in_tauri_ts() -> Vec<(String, Vec<String>)> {
 /// A valid value for an argument, shaped like what the UI sends (see types.ts).
 fn sample(command: &str, key: &str) -> Value {
     match (command, key) {
-        ("set_group_member_role", "role") => json!("member"),
         (_, "role") => json!("viewer"),
         ("create_group", "input") => json!({ "name": "The Boys" }),
         ("create_group_invite", "input") => json!({ "maxUses": null, "expiresInHours": 24 }),

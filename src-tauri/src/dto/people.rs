@@ -5,6 +5,7 @@ pub use atlas_protocol::api::{
     Storage,
 };
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Session {
@@ -16,6 +17,7 @@ pub struct Session {
     pub server: bool,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LinkKind {
@@ -24,6 +26,7 @@ pub enum LinkKind {
 }
 
 /// A friend or group link Atlas was opened with (`atlas://friend/<code>`).
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenedLink {

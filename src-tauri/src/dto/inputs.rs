@@ -1,27 +1,17 @@
 //! What the UI sends: command arguments that are objects.
 //!
-//! Optional fields (`x?: T`) are `#[serde(default)] Option<T>`. Fields that can be
-//! missing *or* null with different meanings (`x?: T | null`) are `Option<Option<T>>`:
-//! `None` = leave as is, `Some(None)` = clear it.
+//! Optional fields (`x?: T`) are `#[serde(default)] Option<T>`.
 
 use std::collections::HashMap;
 
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 pub use atlas_protocol::api::{NewReport, UpdateProfileInput};
 
 use super::{ConfigChoice, FileRules, Id, InviteRole, LauncherKind, ShareMode};
 
-/// Lets `Option<Option<T>>` tell "field missing" (outer None) from "field is null" (Some(None)).
-fn double_option<'de, D, T>(d: D) -> Result<Option<Option<T>>, D::Error>
-where
-    D: Deserializer<'de>,
-    T: Deserialize<'de>,
-{
-    Option::<T>::deserialize(d).map(Some)
-}
-
 /// Identifies a detected instance to track.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrackInstanceRef {
@@ -30,8 +20,10 @@ pub struct TrackInstanceRef {
 }
 
 /// Atlas-only preferences. Name, versions and settings belong to the launcher.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(test, ts(optional_fields))]
 pub struct UpdateInstanceInput {
     #[serde(default)]
     pub is_favorite: Option<bool>,
@@ -41,22 +33,27 @@ pub struct UpdateInstanceInput {
     pub auto_update: Option<bool>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncOptions {
     /// Missing path = theirs.
     #[serde(default)]
+    #[cfg_attr(test, ts(as = "Option<_>", optional))]
     pub config_choices: HashMap<String, ConfigChoice>,
     /// Keys from SyncPreview.newOptional to download. Missing = don't.
     #[serde(default)]
+    #[cfg_attr(test, ts(as = "Option<_>", optional))]
     pub install_optional: Vec<String>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShareInstanceInput {
-    #[serde(default, deserialize_with = "double_option")]
-    pub description: Option<Option<String>>,
+    #[serde(default)]
+    #[cfg_attr(test, ts(optional = nullable))]
+    pub description: Option<String>,
     pub friend_ids: Vec<Id>,
     pub group_ids: Vec<Id>,
     pub role: InviteRole,
@@ -65,9 +62,11 @@ pub struct ShareInstanceInput {
     pub confirmed_upload_rights: bool,
     /// The tree's ticks, saved for later publishes. Missing = keep the saved ones.
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub files: Option<FileRules>,
 }
 
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublishInput {
@@ -76,53 +75,18 @@ pub struct PublishInput {
     pub confirmed_upload_rights: bool,
     /// As in ShareInstanceInput.
     #[serde(default)]
+    #[cfg_attr(test, ts(optional))]
     pub files: Option<FileRules>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateGroupInviteInput {
-    pub max_uses: Option<u32>,
-    /// None = never expires.
-    pub expires_in_hours: Option<u32>,
-}
-
-/// `updateSharedInstance` patch.
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateSharedInstanceInput {
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default, deserialize_with = "double_option")]
-    pub description: Option<Option<String>>,
-    #[serde(default, deserialize_with = "double_option")]
-    pub icon: Option<Option<String>>,
-}
-
 /// `inviteToSharedInstance` input.
+#[cfg_attr(test, derive(ts_rs::TS))]
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InviteInput {
     pub friend_ids: Vec<Id>,
     pub group_ids: Vec<Id>,
     pub role: InviteRole,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CreateGroupInput {
-    pub name: String,
-    #[serde(default, deserialize_with = "double_option")]
-    pub icon: Option<Option<String>>,
-}
-
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UpdateGroupInput {
-    #[serde(default)]
-    pub name: Option<String>,
-    #[serde(default, deserialize_with = "double_option")]
-    pub icon: Option<Option<String>>,
 }
 
 /// `markActivityRead(ids: Id[] | "all")`.
@@ -144,18 +108,6 @@ pub enum AllLiteral {
 mod tests {
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn missing_and_null_mean_different_things() {
-        let p: UpdateSharedInstanceInput = serde_json::from_value(json!({ "name": "x" })).unwrap();
-        assert_eq!(p.description, None, "missing = leave as is");
-        let p: UpdateSharedInstanceInput =
-            serde_json::from_value(json!({ "description": null })).unwrap();
-        assert_eq!(p.description, Some(None), "null = clear it");
-        let p: UpdateSharedInstanceInput =
-            serde_json::from_value(json!({ "description": "hi" })).unwrap();
-        assert_eq!(p.description, Some(Some("hi".into())));
-    }
 
     #[test]
     fn activity_ids_take_all_or_a_list() {

@@ -3,13 +3,14 @@ import type {
   RemovedUploads,
   ActivityItem,
   AppSettings,
+  AppSettingsPatch,
   AvailableUpdate,
-  ReportInput,
+  NewReport,
   ReportReason,
   AtlasEvent,
   AuthProvider,
   Backup,
-  CreateGroupInviteInput,
+  CreateGroupInvite,
   DetectedInstance,
   Friend,
   FriendRequest,
@@ -17,7 +18,6 @@ import type {
   GroupDetail,
   GroupInvite,
   GroupInvitePreview,
-  GroupRole,
   Id,
   InstanceDetail,
   InstanceSummary,
@@ -76,7 +76,6 @@ export interface AtlasApi {
     kind: Exclude<LauncherKind, "folder">,
     rootPath: string,
   ): Promise<Launcher>;
-  removeLauncher(id: Id): Promise<void>;
   /** Every instance in every known launcher, tracked or not. */
   listDetectedInstances(): Promise<DetectedInstance[]>;
 
@@ -173,10 +172,6 @@ export interface AtlasApi {
   syncInstance(instanceId: Id, options?: SyncOptions): Promise<InstanceSummary>;
   /** Viewers: throw away local changes to managed content. */
   revertLocalChanges(instanceId: Id): Promise<InstanceSummary>;
-  updateSharedInstance(
-    id: Id,
-    patch: { name?: string; description?: string | null; icon?: string | null },
-  ): Promise<SharedInstance>;
   inviteToSharedInstance(
     id: Id,
     input: {
@@ -191,8 +186,6 @@ export interface AtlasApi {
     role: Exclude<MemberRole, "owner">,
   ): Promise<SharedInstance>;
   removeSharedMember(id: Id, userId: Id): Promise<SharedInstance>;
-  unshareFromGroup(id: Id, groupId: Id): Promise<SharedInstance>;
-  transferSharedInstance(id: Id, userId: Id): Promise<SharedInstance>;
   /** Members: stop receiving it. The folder stays as it is, now only on this PC. */
   leaveSharedInstance(id: Id): Promise<void>;
   /** Owner: stop sharing for everyone. Members keep their folders as they are. */
@@ -218,7 +211,7 @@ export interface AtlasApi {
 
   // ── Reports and legal pages ──────────────────────────────────────────
   /** A shared instance, group or person that breaks the rules. */
-  report(input: ReportInput): Promise<void>;
+  report(input: NewReport): Promise<void>;
   /** An uploaded file in a shared instance, by its content row. */
   reportFile(
     instanceId: Id,
@@ -240,7 +233,7 @@ export interface AtlasApi {
   // ── This PC ──────────────────────────────────────────────────────────
   getAppSettings(): Promise<AppSettings>;
   /** Only the fields given change. */
-  updateAppSettings(patch: Partial<AppSettings>): Promise<AppSettings>;
+  updateAppSettings(patch: AppSettingsPatch): Promise<AppSettings>;
   /** The page has drawn: show the window, unless Atlas started with Windows (it stays in the tray). */
   windowReady(): Promise<void>;
   /** The newest release if it's newer than this one. Always null in development builds. */
@@ -254,16 +247,11 @@ export interface AtlasApi {
   listGroups(): Promise<Group[]>;
   getGroup(id: Id): Promise<GroupDetail>;
   createGroup(input: { name: string; icon?: string | null }): Promise<Group>;
-  updateGroup(
-    id: Id,
-    patch: { name?: string; icon?: string | null },
-  ): Promise<Group>;
   deleteGroup(id: Id): Promise<void>;
   createGroupInvite(
     groupId: Id,
-    input: CreateGroupInviteInput,
+    input: CreateGroupInvite,
   ): Promise<GroupInvite>;
-  revokeGroupInvite(groupId: Id, code: string): Promise<void>;
   previewGroupInvite(code: string): Promise<GroupInvitePreview>;
   joinGroup(code: string): Promise<Group>;
   /** Invite friends by name: each sees it on their Friends page. */
@@ -271,11 +259,6 @@ export interface AtlasApi {
   /** Groups friends invited me to from inside Atlas. */
   listGroupInvites(): Promise<GroupInvitePreview[]>;
   declineGroupInvite(code: string): Promise<void>;
-  setGroupMemberRole(
-    groupId: Id,
-    userId: Id,
-    role: Exclude<GroupRole, "owner">,
-  ): Promise<Group>;
   /** Owner/admin kicks someone, or pass your own id to leave. */
   removeGroupMember(groupId: Id, userId: Id): Promise<void>;
   transferGroup(groupId: Id, userId: Id): Promise<Group>;

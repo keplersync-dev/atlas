@@ -1,6 +1,5 @@
-//! Rust mirrors of src/lib/types.ts — the shapes the UI receives and sends.
-//!
-//! Keep these in the same order as types.ts so they're easy to compare side by side.
+//! The shapes the UI receives and sends. src/lib/types.ts is written from them (and the
+//! atlas-protocol ones they use) by typescript.rs's test.
 //! Rules:
 //! - structs are `rename_all = "camelCase"`, enum values are snake_case strings;
 //! - `T | null` is `Option<T>` and serializes as `null` (never skipped);
@@ -14,6 +13,8 @@ pub mod inputs;
 pub mod instances;
 pub mod people;
 pub mod shared;
+#[cfg(test)]
+mod typescript;
 
 pub use activity::*;
 pub use app::*;
@@ -24,7 +25,4 @@ pub use instances::*;
 pub use people::*;
 pub use shared::*;
 
-/// UUIDv7 string (see util::ids).
-pub type Id = String;
-/// ISO-8601 UTC string, e.g. "2026-10-19T16:39:00.000Z" (see util::time).
-pub type IsoDate = String;
+pub use atlas_protocol::{Id, IsoDate};
