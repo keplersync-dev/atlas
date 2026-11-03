@@ -193,9 +193,6 @@
       Friends and sharing aren't available in this copy of Atlas.
     </p>
     {@render settingsRow()}
-  {:else if social.loaded && !social.signingIn && (isActive( { page: "shared" } ) || isActive( { page: "friends" } ))}
-    <!-- These pages ask to sign in themselves; one set of buttons is enough. -->
-    {@render settingsRow()}
   {:else if social.loaded}
     <div class="border-t border-(--line) px-3.5 pt-3 pb-3">
       <p class="text-[13px] font-semibold">Sign in to share with friends</p>
