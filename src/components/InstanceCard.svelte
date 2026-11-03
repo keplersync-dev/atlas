@@ -190,14 +190,11 @@
   };
   // Coloured states are pills (dot and words, never colour alone); quiet ones plain text.
   const TEXT = {
-    warn: "rounded-full bg-(--warn)/13 px-2 py-0.5 font-semibold text-(--warn)",
-    accent:
-      "rounded-full bg-(--accent)/14 px-2 py-0.5 font-semibold text-(--accent)",
-    online:
-      "rounded-full bg-(--online)/13 px-2 py-0.5 font-semibold text-(--online)",
+    warn: "bg-(--warn)/13 px-2 py-0.5 font-semibold text-(--warn)",
+    accent: "bg-(--accent)/14 px-2 py-0.5 font-semibold text-(--accent)",
+    online: "bg-(--online)/13 px-2 py-0.5 font-semibold text-(--online)",
     muted: "text-(--text-muted)",
-    shared:
-      "rounded-full bg-(--online)/13 px-2 py-0.5 font-semibold text-(--online)",
+    shared: "bg-(--online)/13 px-2 py-0.5 font-semibold text-(--online)",
     faint: "text-(--text-faint)",
   };
 </script>
@@ -365,11 +362,17 @@
               title={openError}>{openError}</span
             >
           {:else}
-            <span class="flex max-w-full min-w-0 shrink-0">
+            <!-- With a button beside it, the status takes the rest of the row and wraps,
+                 so the button stays on the same line. -->
+            <span
+              class="flex min-w-0 {status.action
+                ? 'flex-1 basis-0'
+                : 'max-w-full shrink-0'}"
+            >
               <span
-                class="flex min-w-0 items-center gap-1.5 text-[13px] {TEXT[
-                  status.tone
-                ]}"
+                class="flex min-w-0 items-center gap-1.5 text-[13px] {status.action
+                  ? 'rounded-lg'
+                  : 'rounded-full'} {TEXT[status.tone]}"
               >
                 <i class="size-2 shrink-0 rounded-full {DOT[status.tone]}"></i>
                 <span class="line-clamp-2">{status.text}</span>
