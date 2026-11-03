@@ -67,7 +67,14 @@ impl TestApp {
                 cmd: cmd.into(),
                 callback: CallbackFn(0),
                 error: CallbackFn(1),
-                url: "http://tauri.localhost".parse().unwrap(),
+                // The app's own page: Windows serves it from http://tauri.localhost, macOS from tauri://localhost.
+                url: if cfg!(windows) {
+                    "http://tauri.localhost"
+                } else {
+                    "tauri://localhost"
+                }
+                .parse()
+                .unwrap(),
                 body: InvokeBody::Json(args),
                 headers: Default::default(),
                 invoke_key: INVOKE_KEY.to_string(),
