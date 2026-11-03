@@ -5,7 +5,7 @@ on:
     tags: ["mac-test-*"]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   macos:
@@ -40,15 +40,14 @@ jobs:
 
       - uses: tauri-apps/tauri-action@v0
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ATLAS_SERVER_URL: ${{ vars.ATLAS_SERVER_URL }}
           CARGO_PROFILE_RELEASE_LTO: "false"
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: Atlas Mac test ${{ github.ref_name }}
-          releaseBody: A test build for macOS. Not an update; nothing installed gets it.
-          releaseDraft: true
-          prerelease: true
-          includeUpdaterJson: false
           args: --target aarch64-apple-darwin
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Atlas-${{ github.ref_name }}
+          path: src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
+          retention-days: 14
