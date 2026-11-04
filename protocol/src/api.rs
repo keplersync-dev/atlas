@@ -796,6 +796,10 @@ pub struct NewSnapshot {
     pub manifest: BTreeMap<String, WorldFile>,
     #[serde(default)]
     pub mods: Vec<String>,
+    /// The client's own name for this snapshot. Sending the same key again returns the
+    /// snapshot it already made, so a retry after a lost answer doesn't save it twice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
