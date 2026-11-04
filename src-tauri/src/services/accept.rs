@@ -55,17 +55,13 @@ pub async fn into_new<R: Runtime>(
 
     let root = Path::new(&launcher.root_path);
     // A launcher instance with the same name reads as yours being replaced, so the new one
-    // says whose it is.
+    // gets a number.
     let taken: Vec<String> = launchers::list_instances(kind, root)
         .await
         .map(|found| found.into_iter().map(|f| f.name).collect())
         .unwrap_or_default();
     let new = launchers::NewInstance {
-        name: new_name(
-            &invite.name,
-            invite.owner.as_ref().map(|o| o.display_name.as_str()),
-            &taken,
-        ),
+        name: new_name(&invite.name, &taken),
         minecraft: invite.minecraft_version.clone(),
         loader: invite.loader,
         loader_version: invite.loader_version.clone(),
@@ -268,24 +264,13 @@ async fn install<R: Runtime>(
 
 /// The name for a new launcher instance: the shared one's, unless the launcher already
 /// has one called that; then whose it is, then a number.
-fn new_name(name: &str, owner: Option<&str>, taken: &[String]) -> String {
+fn new_name(name: &str, taken: &[String]) -> String {
     let free = |n: &str| !taken.iter().any(|t| t.eq_ignore_ascii_case(n));
     if free(name) {
         return name.to_owned();
     }
-    // The count goes inside the brackets: "SkyFactory 5 (from Haloxx, 2)".
-    let whose = match owner {
-        Some(owner) => format!("from {owner}"),
-        None => "shared".to_owned(),
-    };
     (1..)
-        .map(|i| {
-            if i == 1 {
-                format!("{name} ({whose})")
-            } else {
-                format!("{name} ({whose}, {i})")
-            }
-        })
+        .map(|i| format!("{name} ({i})"))
         .find(|n| free(n))
         .expect("some name is free")
 }
@@ -296,18 +281,8 @@ mod tests {
 
     #[test]
     fn new_instances_never_share_a_name_with_yours() {
-        let taken = vec![
-            "SkyFactory 5".to_owned(),
-            "SkyFactory 5 (from Haloxx)".to_owned(),
-        ];
-        assert_eq!(new_name("PPTools", Some("Haloxx"), &taken), "PPTools");
-        assert_eq!(
-            new_name("skyfactory 5", Some("Haloxx"), &taken),
-            "skyfactory 5 (from Haloxx, 2)"
-        );
-        assert_eq!(
-            new_name("SkyFactory 5", None, &taken),
-            "SkyFactory 5 (shared)"
-        );
+        let taken = vec!["SkyFactory 5".to_owned(), "SkyFactory 5 (1)".to_owned()];
+        assert_eq!(new_name("PPTools", &taken), "PPTools");
+        assert_eq!(new_name("skyfactory 5", &taken), "skyfactory 5 (2)");
     }
 }
