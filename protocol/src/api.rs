@@ -891,6 +891,10 @@ pub struct JoinInfo {
     pub mods: Vec<String>,
     pub direct: Vec<String>,
     pub relay: Option<RelayTicket>,
+    /// Why there's no relay ticket when the server has a relay: "off" (switched off for now) or "allowance" (this
+    /// month's relay allowance is used).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relay_off: Option<String>,
 }
 
 // ── CurseForge ─────────────────────────────────────────────────────────
@@ -1102,6 +1106,9 @@ pub enum ErrorCode {
     QuotaExceeded,
     ClientOutdated,
     RateLimited,
+    /// Uploads are paused for this account or for everyone: an unusual amount today, or KeplerSync turned them off.
+    /// The message says when they work again.
+    AtCapacity,
     /// Also any code this build doesn't know yet.
     #[serde(other)]
     Unknown,
@@ -1118,6 +1125,7 @@ impl ErrorCode {
             Self::QuotaExceeded => 413,
             Self::ClientOutdated => 426,
             Self::RateLimited => 429,
+            Self::AtCapacity => 503,
             Self::Unknown => 500,
         }
     }

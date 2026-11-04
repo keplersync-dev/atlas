@@ -588,6 +588,8 @@ fn server_error(status: StatusCode, bytes: &[u8]) -> AppError {
         WireCode::QuotaExceeded => ErrorCode::QuotaExceeded,
         WireCode::RateLimited => ErrorCode::RateLimited,
         WireCode::ClientOutdated => ErrorCode::ClientOutdated,
+        // Shown with the server's message, which says when uploads work again.
+        WireCode::AtCapacity => ErrorCode::Unknown,
         WireCode::Unknown => ErrorCode::Unknown,
     };
     AppError::new(code, error.message)
