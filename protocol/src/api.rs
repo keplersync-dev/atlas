@@ -905,6 +905,10 @@ pub struct JoinInfo {
     /// month's relay allowance is used).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub relay_off: Option<String>,
+    /// A ticket for the relay to introduce this game to the host's over UDP (hole punching), on the relay address's
+    /// port and the next. Given even when the relay is switched off or the allowance is used: it carries no game.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub punch: Option<RelayTicket>,
 }
 
 // ── CurseForge ─────────────────────────────────────────────────────────
