@@ -21,6 +21,7 @@ pub async fn refresh(state: &AppState) {
         None => PresenceUpdate::online(),
         Some(i) if i.hide_activity => PresenceUpdate {
             state: PresenceState::Playing,
+            in_minecraft: true,
             ..PresenceUpdate::online()
         },
         Some(i) => PresenceUpdate {
@@ -28,6 +29,7 @@ pub async fn refresh(state: &AppState) {
             instance_name: Some(i.name.clone()),
             minecraft_version: i.minecraft_version.clone(),
             shared_instance_id: i.shared_instance_id.clone(),
+            in_minecraft: true,
         },
     };
     state.cloud.set_presence(update);

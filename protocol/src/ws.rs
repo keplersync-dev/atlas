@@ -33,6 +33,9 @@ pub struct PresenceUpdate {
     pub minecraft_version: Option<String>,
     #[serde(default)]
     pub shared_instance_id: Option<Id>,
+    /// Minecraft is open (Tandem runs inside it), not just the Atlas app.
+    #[serde(default)]
+    pub in_minecraft: bool,
 }
 
 impl PresenceUpdate {
@@ -42,6 +45,7 @@ impl PresenceUpdate {
             instance_name: None,
             minecraft_version: None,
             shared_instance_id: None,
+            in_minecraft: false,
         }
     }
 }
@@ -83,6 +87,9 @@ pub enum ServerMessage {
     /// joins them once they're hosting.
     #[serde(rename = "world.handoff", rename_all = "camelCase")]
     WorldHandoff { world_id: Id, from_id: Id, to_id: Id },
+    /// To the host of a game: the world's owner removed `user_id` from it. Kick them.
+    #[serde(rename = "play.kick", rename_all = "camelCase")]
+    PlayKick { session_id: Id, user_id: Id },
     #[serde(rename = "notification.new")]
     NotificationNew { item: Box<ActivityItem> },
     #[serde(rename = "session.revoked")]
@@ -112,7 +119,7 @@ mod tests {
             serde_json::to_value(&msg).unwrap(),
             json!({ "type": "presence.set", "data": {
                 "state": "online", "instanceName": null, "minecraftVersion": null,
-                "sharedInstanceId": null } })
+                "sharedInstanceId": null, "inMinecraft": false } })
         );
         assert_eq!(
             serde_json::to_value(ClientMessage::Ping {}).unwrap(),

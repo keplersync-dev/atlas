@@ -255,6 +255,7 @@ impl Cloud {
             | ServerMessage::InviteReceived { .. }
             | ServerMessage::InvitesChanged {}
             | ServerMessage::WorldHandoff { .. }
+            | ServerMessage::PlayKick { .. }
             | ServerMessage::Unknown => return,
         };
         self.emit(event);

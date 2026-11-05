@@ -131,6 +131,9 @@ pub struct Presence {
     pub minecraft_version: Option<String>,
     /// Set when playing a shared instance you can see too.
     pub shared_instance_id: Option<Id>,
+    /// Minecraft is open, not just the Atlas app. Always true when playing.
+    #[serde(default)]
+    pub in_minecraft: bool,
     /// When offline, this is "last seen".
     pub updated_at: IsoDate,
 }
@@ -891,6 +894,9 @@ pub struct JoinInfo {
     pub session_id: Id,
     pub host: PublicUser,
     pub world_name: String,
+    /// The synced world being hosted, if it is one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub world_id: Option<Id>,
     pub minecraft_version: String,
     pub mods: Vec<String>,
     pub direct: Vec<String>,

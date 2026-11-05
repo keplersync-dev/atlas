@@ -217,6 +217,10 @@ instanceName: string | null, minecraftVersion: string | null,
  */
 sharedInstanceId: string | null, 
 /**
+ * Minecraft is open, not just the Atlas app. Always true when playing.
+ */
+inMinecraft: boolean, 
+/**
  * When offline, this is "last seen".
  */
 updatedAt: string, };
