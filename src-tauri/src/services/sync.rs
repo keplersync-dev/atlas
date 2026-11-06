@@ -18,8 +18,7 @@ use crate::state::AppState;
 use crate::sync::backup::{self, FileAction, FileRecord};
 use crate::sync::fetch::{self, Route};
 use crate::sync::source::{self, Source};
-use crate::sync::{adopt, apply, pack, prism_versions, state as sync_state};
-use crate::util::ids::new_id;
+use crate::sync::{apply, pack, prism_versions, state as sync_state};
 
 /// The instance's source, or `conflict` if it isn't shared.
 async fn linked(state: &AppState, row: &InstanceRow) -> AppResult<Source> {
@@ -390,6 +389,7 @@ async fn restore_job<R: Runtime>(
 /// Debug builds only: link an instance to a dev source folder (sync/source.rs) with a
 /// role. `adopt_revision` = treat the folder as already on that revision (marks its files
 /// as shared); None = nothing installed yet, so an update installs everything.
+#[cfg(debug_assertions)]
 pub async fn dev_link(
     state: &AppState,
     id: &str,
@@ -397,9 +397,6 @@ pub async fn dev_link(
     role: MemberRole,
     adopt_revision: Option<u32>,
 ) -> AppResult<()> {
-    if !cfg!(debug_assertions) {
-        return Err(AppError::forbidden("Only available in development builds"));
-    }
     db::instances::require(&state.db, id).await?;
     let folder = PathBuf::from(folder);
     let src = Source::Dev(folder.clone());
@@ -408,11 +405,11 @@ pub async fn dev_link(
             "That folder has no revisions/<n>.json",
         ));
     }
-    let shared_id = format!("dev:{}", new_id());
+    let shared_id = format!("dev:{}", crate::util::ids::new_id());
     source::save_dev(&state.db, &shared_id, &folder).await?;
     db::instances::set_link(&state.db, id, Some((&shared_id, role))).await?;
     if let Some(n) = adopt_revision {
-        adopt::adopt(&state.db, id, n, &src.manifest(state, n).await?).await?;
+        crate::sync::adopt::adopt(&state.db, id, n, &src.manifest(state, n).await?).await?;
     }
     Ok(())
 }

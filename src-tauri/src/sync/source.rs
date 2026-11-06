@@ -8,7 +8,7 @@
 //!   <folder>/revisions/1.json, 2.json, ...   one manifest per revision
 //!   <folder>/files/<relative path>            the bytes: files/mods/sodium.jar, files/config/a.json
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use reqwest::Method;
 use sqlx::SqlitePool;
@@ -56,7 +56,12 @@ pub async fn for_shared(
     })
 }
 
-pub async fn save_dev(db: &SqlitePool, shared_instance_id: &str, folder: &Path) -> AppResult<()> {
+#[cfg(debug_assertions)]
+pub async fn save_dev(
+    db: &SqlitePool,
+    shared_instance_id: &str,
+    folder: &std::path::Path,
+) -> AppResult<()> {
     db::settings::set(
         db,
         &setting_key(shared_instance_id),

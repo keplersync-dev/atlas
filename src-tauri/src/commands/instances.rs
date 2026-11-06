@@ -1,10 +1,10 @@
 use tauri::{AppHandle, Runtime, State};
 
 use crate::dto::{
-    Id, InstanceDetail, InstanceSummary, MemberRole, ShareMode, TrackInstanceRef,
-    UpdateInstanceInput,
+    Id, InstanceDetail, InstanceSummary, ShareMode, TrackInstanceRef, UpdateInstanceInput,
 };
 use crate::error::AppResult;
+#[cfg(debug_assertions)]
 use crate::events::{AtlasEvent, emit};
 use crate::services::{instances, sync};
 use crate::state::AppState;
@@ -190,18 +190,19 @@ pub async fn set_optional_installed<R: Runtime>(
     sync::set_optional_installed(&state, &app, &instance_id, &content_id, installed).await
 }
 
-// ── Development only ───────────────────────────────────────────────────
+// ── Development only: left out of release builds ───────────────────────
 
 /// Debug builds: link an instance to a folder of manifests (see sync/source.rs).
 /// From the devtools console:
 ///   __TAURI_INTERNALS__.invoke("dev_link_manifest", { instanceId, folder, role: "viewer", adoptRevision: 1 })
+#[cfg(debug_assertions)]
 #[tauri::command]
 pub async fn dev_link_manifest<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
     instance_id: Id,
     folder: String,
-    role: MemberRole,
+    role: crate::dto::MemberRole,
     adopt_revision: Option<u32>,
 ) -> AppResult<InstanceSummary> {
     sync::dev_link(&state, &instance_id, &folder, role, adopt_revision).await?;
@@ -215,17 +216,13 @@ pub async fn dev_link_manifest<R: Runtime>(
 }
 
 /// Debug builds: undo dev_link_manifest. The folder stays as it is.
+#[cfg(debug_assertions)]
 #[tauri::command]
 pub async fn dev_unlink_manifest<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
     instance_id: Id,
 ) -> AppResult<InstanceSummary> {
-    if !cfg!(debug_assertions) {
-        return Err(crate::error::AppError::forbidden(
-            "Only available in development builds",
-        ));
-    }
     sync::unlink(&state, &instance_id).await?;
     emit(
         &app,

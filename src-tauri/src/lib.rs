@@ -78,7 +78,9 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::launchers::import_mrpack,
         commands::instances::set_share_mode,
         commands::instances::set_optional_installed,
+        #[cfg(debug_assertions)]
         commands::instances::dev_link_manifest,
+        #[cfg(debug_assertions)]
         commands::instances::dev_unlink_manifest,
         // Sharing
         commands::sharing::list_shared_instances,
