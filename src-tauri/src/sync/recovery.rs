@@ -3,7 +3,7 @@
 //!
 //! Runs at startup, before anything else touches instance folders.
 
-use std::path::Path;
+use std::path::{Component, Path};
 
 use super::apply::{Journal, STAGING};
 use super::backup::FileAction;
@@ -41,6 +41,18 @@ fn ignore_missing(e: std::io::Error) -> std::io::Result<()> {
     }
 }
 
+fn plain(path: &Path) -> bool {
+    path.components().all(|c| matches!(c, Component::Normal(_)))
+}
+
+/// Whether Atlas wrote this journal for the instance whose backups are in `backups`. The
+/// staging folder is in the game folder, where a modpack or shared pack can put a journal of
+/// its own: undoing that one would delete or write files anywhere on the PC.
+fn is_ours(journal: &Journal, backups: &Path) -> bool {
+    journal.backup_dir.strip_prefix(backups).is_ok_and(plain)
+        && journal.done.iter().all(|step| plain(Path::new(&step.path)))
+}
+
 /// Recover every tracked instance that has leftover staging folders. Returns the ids of
 /// instances that were put back.
 pub async fn run(state: &AppState) -> Vec<String> {
@@ -54,11 +66,16 @@ pub async fn run(state: &AppState) -> Vec<String> {
         let Ok(jobs) = std::fs::read_dir(&staging_root) else {
             continue;
         };
+        let backups = state.paths.backups.join(&i.id);
         for job in jobs.flatten() {
             if let Some(j) = Journal::read(&job.path()) {
-                tracing::warn!(instance = %i.name, steps = j.done.len(), "undoing an update that was interrupted");
-                undo(game_dir, &j);
-                recovered.push(i.id.clone());
+                if is_ours(&j, &backups) {
+                    tracing::warn!(instance = %i.name, steps = j.done.len(), "undoing an update that was interrupted");
+                    undo(game_dir, &j);
+                    recovered.push(i.id.clone());
+                } else {
+                    tracing::warn!(instance = %i.name, "ignoring a journal Atlas didn't write");
+                }
             }
             // No journal: nothing had been moved yet. Either way the staging folder goes.
             let _ = std::fs::remove_dir_all(job.path());
@@ -161,6 +178,35 @@ mod tests {
         undo(&game, &Journal::read(&staging).unwrap());
         assert!(files(&game.join("mods")).is_empty());
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_journal_a_pack_planted_is_not_trusted() {
+        let backups = PathBuf::from("app").join("backups").join("instance-1");
+        let journal = |backup: PathBuf, path: &str| {
+            let mut journal = Journal::default();
+            journal.backup_dir = backup;
+            journal.done.push(crate::sync::backup::FileRecord {
+                path: path.into(),
+                action: FileAction::Added,
+            });
+            journal
+        };
+        let mine = backups.join("backup-1");
+        assert!(is_ours(&journal(mine.clone(), "mods/a.jar"), &backups));
+        let mut planted = vec![
+            (PathBuf::from("elsewhere"), "mods/a.jar"),
+            (PathBuf::from("app").join("backups").join("instance-2").join("b"), "mods/a.jar"),
+            (mine.join("..").join("..").join("x"), "mods/a.jar"),
+            (mine.clone(), "../../Users/Public/x.js"),
+            (mine.clone(), "/Windows/x.js"),
+        ];
+        if cfg!(windows) {
+            planted.push((mine.clone(), "C:/Users/Public/x.js"));
+        }
+        for (backup, path) in planted {
+            assert!(!is_ours(&journal(backup.clone(), path), &backups), "{backup:?} {path}");
+        }
     }
 
     #[test]

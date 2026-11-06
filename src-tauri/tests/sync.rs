@@ -441,7 +441,8 @@ fn an_interrupted_update_is_undone_at_startup() {
     let w = World::new();
     // As if Atlas died mid-apply: it had removed old.jar (backed up) and added new.jar.
     std::fs::write(w.game.join("mods/new.jar"), b"half-applied").unwrap();
-    let backup = w.game.parent().unwrap().join("backup");
+    // Where `backup::create` puts a backup: only a journal pointing there is Atlas's own.
+    let backup = w.app.state().paths.backups.join(&w.id).join("backup1");
     std::fs::create_dir_all(backup.join("mods")).unwrap();
     std::fs::write(backup.join("mods/old.jar"), b"the original").unwrap();
     let staging = w.game.join(".atlas-staging/job1");
@@ -461,6 +462,36 @@ fn an_interrupted_update_is_undone_at_startup() {
     assert!(w.read("mods/new.jar").is_none());
     assert_eq!(w.read("mods/old.jar").as_deref(), Some("the original"));
     assert!(!w.game.join(".atlas-staging").exists());
+}
+
+#[test]
+fn a_journal_that_came_with_a_pack_is_not_undone() {
+    let w = World::new();
+    // A pack can carry any file into the game folder, a journal included. This one would
+    // delete a file outside the instance and copy another over a mod.
+    let outside = w.game.parent().unwrap().join("not-the-packs.txt");
+    std::fs::write(&outside, b"mine").unwrap();
+    std::fs::write(w.game.join("mods/new.jar"), b"in the instance").unwrap();
+    let staging = w.game.join(".atlas-staging/planted");
+    std::fs::create_dir_all(&staging).unwrap();
+    std::fs::write(
+        staging.join("journal.json"),
+        serde_json::to_vec(&json!({
+            "backup_dir": w.game.parent().unwrap(),
+            "done": [
+                { "path": "../not-the-packs.txt", "action": "added" },
+                { "path": "mods/new.jar", "action": "added" }
+            ]
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+
+    let recovered = tauri::async_runtime::block_on(atlas_lib::sync::recovery::run(&w.app.state()));
+    assert!(recovered.is_empty());
+    assert_eq!(std::fs::read(&outside).unwrap(), b"mine");
+    assert_eq!(w.read("mods/new.jar").as_deref(), Some("in the instance"));
+    assert!(!w.game.join(".atlas-staging").exists(), "its folder is cleared");
 }
 
 #[test]

@@ -196,7 +196,8 @@ pub const CONTENT_DIRS: [&str; 4] = ["mods/", "resourcepacks/", "shaderpacks/", 
 /// Never uploaded or written from a pack: worlds, what the game or launcher writes about
 /// this PC, and the official launcher's own files, there when the game folder is its root
 /// (`.minecraft`): its profiles and accounts, and the versions, libraries and Java it runs.
-pub const NEVER_SHARED: [&str; 17] = [
+/// Also Atlas's staging folder and Tandem's: what they keep there decides what they do next.
+pub const NEVER_SHARED: [&str; 19] = [
     "saves/",
     "screenshots/",
     "logs/",
@@ -214,6 +215,8 @@ pub const NEVER_SHARED: [&str; 17] = [
     "libraries/",
     "assets/",
     "runtime/",
+    ".atlas-staging/",
+    ".tandem/",
 ];
 /// What uploaded files may be: text, data and pictures, never programs.
 const OVERRIDE_EXTS: [&str; 28] = [
@@ -906,6 +909,15 @@ mod tests {
             Some(Refusal::Login)
         );
         assert_eq!(upload_refusal("config/launcher_ideas.json", 100), None);
+    }
+
+    #[test]
+    fn atlas_and_tandem_keep_their_own_folders() {
+        // A crash-recovery journal is read from the staging folder at start-up.
+        for path in [".atlas-staging/job/journal.json", ".tandem/state.json"] {
+            assert_eq!(upload_refusal(path, 100), Some(Refusal::Folder), "{path}");
+            assert!(!can_come_from_pack(path), "{path}");
+        }
     }
 
     #[test]
