@@ -255,9 +255,10 @@ const RISKY_EXTS: [&str; 21] = [
     "vbe", "wsf", "hta", "msi", "lnk", "reg", "jar", "sh",
 ];
 /// Files known to hold a Minecraft login (ReAuth keeps Microsoft tokens, readable when
-/// its encryption is off), and the official launcher's `launcher_accounts*.json`.
+/// its encryption is off), the official launcher's `launcher_accounts*.json`, and the
+/// game's command history, which keeps passwords typed in `/login` and `/register`.
 /// Never uploaded, whatever the owner ticks.
-const LOGIN_FILES: [&str; 2] = [".reauth.cfg", "reauth.toml"];
+const LOGIN_FILES: [&str; 3] = [".reauth.cfg", "reauth.toml", "command_history.txt"];
 const DOWNLOAD_HOSTS: [&str; 3] = [
     "cdn.modrinth.com",
     "edge.forgecdn.net",
@@ -902,6 +903,10 @@ mod tests {
         );
         assert_eq!(
             upload_refusal("config/.ReAuth.cfg", 100),
+            Some(Refusal::Login)
+        );
+        assert_eq!(
+            upload_refusal("command_history.txt", 100),
             Some(Refusal::Login)
         );
         for never in [
