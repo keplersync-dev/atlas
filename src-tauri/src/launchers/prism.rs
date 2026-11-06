@@ -207,6 +207,30 @@ pub fn installed_pack(game_dir: &Path) -> Option<super::InstalledPack> {
     })
 }
 
+/// Have the launcher start with this instance selected: it keeps the last one picked as
+/// `SelectedInstance` in its config and selects it again when it opens. A launcher that's
+/// already open doesn't read it.
+pub fn select(flavor: Flavor, root: &Path, folder: &str) -> std::io::Result<()> {
+    let file = root.join(flavor.config_file());
+    let text = std::fs::read_to_string(&file)?;
+    let value = match flavor {
+        Flavor::Prism => ini_quoted(folder),
+        Flavor::MultiMc => folder.replace(['\r', '\n'], " "),
+    };
+    let line = format!("SelectedInstance={value}");
+    let mut lines: Vec<&str> = text.lines().collect();
+    match lines
+        .iter()
+        .position(|l| l.starts_with("SelectedInstance="))
+    {
+        Some(at) => lines[at] = &line,
+        // Before any [section]: Qt reads keys there as the general ones.
+        None => lines.insert(0, &line),
+    }
+    let eol = if text.contains("\r\n") { "\r\n" } else { "\n" };
+    write_atomic(&file, format!("{}{eol}", lines.join(eol)).as_bytes())
+}
+
 /// Create an empty instance for a shared one: `instance.cfg`, `mmc-pack.json` with the
 /// Minecraft and loader versions, the game folder, and the picture in Prism's icons
 /// folder. Prism downloads the game itself the first time it's played. Returns the
@@ -375,6 +399,30 @@ mod tests {
             std::fs::read_to_string(tmp.join("instances/Create, Above and Beyond/instance.cfg"))
                 .unwrap();
         assert!(cfg.contains("name=\"Create, Above and Beyond\"\n"), "{cfg}");
+    }
+
+    #[test]
+    fn selecting_an_instance_keeps_the_rest_of_the_config() {
+        let tmp = super::super::util::TempDir::new("atlas-prism").unwrap();
+        let cfg = tmp.join("prismlauncher.cfg");
+        std::fs::write(
+            &cfg,
+            "InstanceDir=instances\nSelectedInstance=old\nTheme=dark\n",
+        )
+        .unwrap();
+        select(Flavor::Prism, &tmp, "Create, Above and Beyond").unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&cfg).unwrap(),
+            "InstanceDir=instances\nSelectedInstance=\"Create, Above and Beyond\"\nTheme=dark\n"
+        );
+        std::fs::write(&cfg, "[General]\nInstanceDir=instances\n").unwrap();
+        select(Flavor::Prism, &tmp, "SMP").unwrap();
+        let text = std::fs::read_to_string(&cfg).unwrap();
+        assert!(text.starts_with("SelectedInstance=\"SMP\"\n"), "{text}");
+        assert_eq!(
+            parse_ini(&text).get("SelectedInstance").map(String::as_str),
+            Some("SMP")
+        );
     }
 
     #[test]

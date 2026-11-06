@@ -348,10 +348,21 @@ pub fn import_pack(kind: LauncherKind, root: &Path, pack: &Path) -> Result<(), R
     }
 }
 
-/// Open the launcher, launching the instance directly where the launcher allows it.
-/// Falls back to opening the install folder when the program can't be found.
+/// Open the launcher, never the instance's own window (Prism's `--show` is its settings)
+/// nor the game: Prism and MultiMC start with the instance selected; the others open as
+/// they are. Falls back to opening the install folder when the program can't be found.
 pub fn open(kind: LauncherKind, root: &Path, launcher_instance_id: &str) -> Result<(), OpenError> {
-    start(kind, root, open_args(kind, launcher_instance_id))
+    let flavor = match kind {
+        LauncherKind::Prism => Some(prism::Flavor::Prism),
+        LauncherKind::Multimc => Some(prism::Flavor::MultiMc),
+        _ => None,
+    };
+    if let Some(flavor) = flavor
+        && let Err(e) = prism::select(flavor, root, launcher_instance_id)
+    {
+        tracing::info!(error = %e, "couldn't preselect the instance in the launcher");
+    }
+    start(kind, root, vec![])
 }
 
 /// How Play starts an instance.
@@ -435,18 +446,6 @@ fn start(kind: LauncherKind, root: &Path, args: Vec<String>) -> Result<(), OpenE
         .map_err(OpenError::Spawn)
 }
 
-/// What to pass the launcher so it opens on the instance, where it can. Prism's `--show`
-/// opens the instance's own window (only when Prism isn't already running: a running
-/// Prism just comes to the front). The others can only launch the game for a specific
-/// instance (MultiMC's `--launch`, the Modrinth App's `modrinth://launch/…`) or have no
-/// way at all, so they open as they are.
-fn open_args(kind: LauncherKind, launcher_instance_id: &str) -> Vec<String> {
-    match kind {
-        LauncherKind::Prism => vec!["--show".into(), launcher_instance_id.into()],
-        _ => vec![],
-    }
-}
-
 /// What the adapters find in this PC's real launchers, for the opt-in tests that read them.
 #[cfg(test)]
 pub async fn on_this_pc() -> Vec<(LauncherKind, PathBuf, ReadResult<Vec<FoundInstance>>)> {
@@ -526,22 +525,6 @@ mod tests {
         );
         std::fs::remove_dir_all(&dir).ok();
         assert!(play_link(LauncherKind::Official, "x", Path::new("x")).is_none());
-    }
-
-    #[test]
-    fn opening_never_starts_the_game() {
-        assert_eq!(
-            open_args(LauncherKind::Prism, "Fabric 1.21.1"),
-            ["--show", "Fabric 1.21.1"]
-        );
-        for kind in [
-            LauncherKind::Multimc,
-            LauncherKind::Modrinth,
-            LauncherKind::Curseforge,
-            LauncherKind::Official,
-        ] {
-            assert!(open_args(kind, "x").is_empty(), "{kind:?}");
-        }
     }
 
     /// Lists what the adapters find in this PC's real launchers. Opt-in, prints only:
