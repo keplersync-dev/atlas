@@ -293,12 +293,17 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
             "It has too many files: at most {MAX_CONTENT} mods and packs, and {MAX_OVERRIDES} other files."
         ));
     }
+    if !plain(&m.minecraft.version) || !m.minecraft.loader_version.as_deref().is_none_or(plain) {
+        return bad("Its Minecraft or loader version can't be read.".into());
+    }
     if let Some(b) = &m.base {
         if !matches!(
             b.source,
             ContentSource::Modrinth | ContentSource::Curseforge
         ) || b.project_id.is_empty()
             || b.version_id.is_empty()
+            || !plain(&b.project_id)
+            || !plain(&b.version_id)
             || b.name.trim().is_empty()
             || !is_sha1(&b.sha1)
             || b.size_bytes > MAX_FILE_BYTES
@@ -324,7 +329,12 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
         if !e.path.to_ascii_lowercase().ends_with(&format!(".{ext}")) {
             return bad(format!("{} has to be a .{ext} file.", e.path));
         }
-        if !is_sha1(&e.sha1) || !is_sha256(&e.sha256) {
+        if !is_sha1(&e.sha1)
+            || !is_sha256(&e.sha256)
+            || ![&e.project_id, &e.version_id]
+                .into_iter()
+                .all(|id| id.as_deref().is_none_or(plain))
+        {
             return bad(format!("{} couldn't be read properly. Try again.", e.path));
         }
         if e.size_bytes > MAX_FILE_BYTES {
@@ -525,6 +535,14 @@ pub fn is_reserved_name(name: &str) -> bool {
     matches!(stem.as_str(), "con" | "prn" | "aux" | "nul")
         || stem.strip_prefix("com").is_some_and(port)
         || stem.strip_prefix("lpt").is_some_and(port)
+}
+
+/// A version or id as a manifest may name one: these end up in launchers' files and in
+/// lookups, so letters, digits, `.-_+` and spaces, up to 64.
+fn plain(s: &str) -> bool {
+    s.len() <= 64
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b".-_+ ".contains(&b))
 }
 
 /// A sha1 as both sides write it: 40 lowercase hex digits.
@@ -819,6 +837,24 @@ mod tests {
         let mut m = parse(&example()).unwrap();
         m.content[0].source = ContentSource::Local;
         assert!(validate(&m).is_err());
+
+        let long = "1".repeat(65);
+        for odd in ["../../1.21.1", "1.21.1\"}", "1.21.1?x=1", long.as_str()] {
+            let mut m = parse(&example()).unwrap();
+            m.minecraft.version = odd.into();
+            assert!(validate(&m).is_err(), "Minecraft {odd}");
+            let mut m = parse(&example()).unwrap();
+            m.minecraft.loader_version = Some(odd.into());
+            assert!(validate(&m).is_err(), "loader {odd}");
+            let mut m = parse(&example()).unwrap();
+            m.content[0].version_id = Some(odd.into());
+            assert!(validate(&m).is_err(), "version id {odd}");
+        }
+        for fine in ["1.21.1", "24w14a", "1.21.2-pre1", "0.16.5+build.1", "47.4.10", "1.20.1 forge"] {
+            let mut m = parse(&example()).unwrap();
+            m.minecraft.loader_version = Some(fine.into());
+            assert!(validate(&m).is_ok(), "{fine}");
+        }
 
         let mut m = parse(&example()).unwrap();
         m.overrides[0].path = "config/run.bat".into();
