@@ -57,7 +57,7 @@
   role="menu"
   bind:this={list}
   {style}
-  class="z-30 w-max max-w-80 min-w-52 rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-[0_16px_40px_#0009] {className}"
+  class="z-30 w-max max-w-80 min-w-52 rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-(--shadow-menu) {className}"
 >
   {#each shown as item, i (i)}
     {#if item === "divider"}

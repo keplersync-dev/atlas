@@ -23,9 +23,17 @@
 
   --accent: #7dd3e8;
   --accent-ink: #062a33;
+  --accent-hover: #a6e5f3;
   --warn: #f0bf6a;
+  --warn-ink: #2e1f05;
+  --warn-hover: #f2c983;
   --danger: #ff8f94;
+  --danger-ink: #2b0a0d;
+  --danger-hover: #f4959a;
   --online: #77d892;
+
+  --shadow-card: 0 8px 24px #0000004d;
+  --shadow-menu: 0 16px 40px #0009;
 
   --font: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-display:

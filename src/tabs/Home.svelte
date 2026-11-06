@@ -151,7 +151,7 @@
         >
           {#each STEPS as step, i (step.title)}
             <li
-              class="rounded-xl border border-(--line) bg-(--bg-raise) px-4 py-3.5 shadow-[0_8px_24px_#0000004d]"
+              class="rounded-xl border border-(--line) bg-(--bg-raise) px-4 py-3.5 shadow-(--shadow-card)"
             >
               <span
                 class="grid size-8 place-items-center rounded-full bg-(--accent)/14 text-(--accent)"

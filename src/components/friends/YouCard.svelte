@@ -135,7 +135,7 @@
             {#if statusOpen}
               <div
                 role="menu"
-                class="absolute top-full left-0 z-30 mt-1.5 w-64 rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-[0_16px_40px_#0009]"
+                class="absolute top-full left-0 z-30 mt-1.5 w-64 rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-(--shadow-menu)"
               >
                 {#each [{ offline: false, label: "Online", hint: "Friends see when you're on and what you're playing" }, { offline: true, label: "Appear offline", hint: "Friends see you as offline" }] as o (o.label)}
                   <button

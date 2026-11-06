@@ -55,7 +55,7 @@
   {#if open}
     <div
       role="menu"
-      class="absolute top-full right-0 z-30 mt-1.5 w-72 rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-[0_16px_40px_#0009]"
+      class="absolute top-full right-0 z-30 mt-1.5 w-72 rounded-lg border border-(--line) bg-(--bg-raise-2) p-1.25 shadow-(--shadow-menu)"
     >
       <div class="max-h-80 overflow-y-auto">
         {#each all as i (i.id)}

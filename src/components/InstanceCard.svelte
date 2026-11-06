@@ -210,7 +210,7 @@
 <!-- Right-click: the same menu as its page, plus Open and Share (instanceItems). -->
 <article
   oncontextmenu={(e) => openContextMenu(e, instanceItems(instance))}
-  class="group flex flex-col overflow-hidden rounded-xl border bg-(--bg-raise) shadow-[0_8px_24px_#0000004d] transition-colors hover:bg-(--bg-raise-2)
+  class="group flex flex-col overflow-hidden rounded-xl border bg-(--bg-raise) shadow-(--shadow-card) transition-colors hover:bg-(--bg-raise-2)
     {needsAttention(instance) ? 'border-(--warn)/45' : 'border-(--line)'}
     {instance.status === 'missing' ? 'opacity-75' : ''}"
 >
