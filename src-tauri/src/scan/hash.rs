@@ -133,11 +133,11 @@ impl Murmur2 {
             self.push(kept[0]);
             kept = &kept[1..];
         }
-        let mut words = kept.chunks_exact(4);
-        for w in &mut words {
-            self.word(u32::from_le_bytes([w[0], w[1], w[2], w[3]]));
+        let (words, rest) = kept.as_chunks::<4>();
+        for w in words {
+            self.word(u32::from_le_bytes(*w));
         }
-        words.remainder().iter().for_each(|&b| self.push(b));
+        rest.iter().for_each(|&b| self.push(b));
     }
 
     fn push(&mut self, b: u8) {
