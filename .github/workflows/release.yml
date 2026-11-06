@@ -17,7 +17,6 @@ jobs:
       - run: cargo test --manifest-path src-tauri/Cargo.toml
 
   windows:
-    needs: test
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -59,3 +58,14 @@ jobs:
           releaseDraft: true
           includeUpdaterJson: true
           args: --config src-tauri/tauri.release.conf.json
+
+  # The build runs beside the tests, so a draft can exist before they finish: it goes
+  # when they or the build didn't pass, so only a tested build is left to publish.
+  discard:
+    needs: [test, windows]
+    if: ${{ always() && (needs.test.result != 'success' || needs.windows.result != 'success') }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: gh release delete "${{ github.ref_name }}" --yes --repo "${{ github.repository }}" || echo "No draft to delete."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
