@@ -64,7 +64,10 @@ pub fn update_if_needed(row: &InstanceRow, m: &Manifest) {
 
 fn edit_pack(file: &Path, m: &Manifest) -> Result<(), Box<dyn std::error::Error>> {
     let mut pack: Value = crate::launchers::read_json(file)?;
-    let components = pack["components"].as_array_mut().ok_or("no components")?;
+    let components = pack
+        .get_mut("components")
+        .and_then(Value::as_array_mut)
+        .ok_or("no components")?;
     let loader = loader_uid(m.minecraft.loader);
     for c in components.iter_mut() {
         let uid = c["uid"].as_str().unwrap_or_default().to_string();
