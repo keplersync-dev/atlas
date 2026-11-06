@@ -235,6 +235,8 @@ async fn share_now<R: Runtime>(
     if row.shared_instance_id.is_some() {
         return Err(AppError::conflict("This instance is already shared"));
     }
+    // A scan under way (a just-added instance's first) finishes first: its files are what's shared.
+    drop(state.scan_lock(id).await);
     if let Some(files) = &input.files {
         save_file_rules(state, id, files).await?;
     }
