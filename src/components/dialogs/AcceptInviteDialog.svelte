@@ -87,18 +87,24 @@
   const newWhat = (l: Launcher) =>
     l.kind === "official" ? "profile" : "instance";
 
+  /** "the 12 items"; "the files" for a pack of only config files, or while it loads. */
+  const theItems = () =>
+    invite?.contentCount
+      ? `the ${plural(invite.contentCount, "item")}`
+      : "the files";
+
   /** One line on what happens when this launcher is picked. */
   function newHint(l: Launcher) {
-    const items = invite ? plural(invite.contentCount, "item") : "the files";
+    const items = theItems();
     switch (l.kind) {
       case "modrinth":
-        return `The Modrinth App asks you to confirm, then Atlas adds the ${items}`;
+        return `The Modrinth App asks you to confirm, then Atlas adds ${items}`;
       case "official":
-        return `Close the launcher first, then Atlas adds the ${items}`;
+        return `Close the launcher first, then Atlas adds ${items}`;
       case "curseforge":
-        return `Close CurseForge first, then Atlas adds the ${items}`;
+        return `Close CurseForge first, then Atlas adds ${items}`;
       default:
-        return `Atlas creates it and adds the ${items}`;
+        return `Atlas creates it and adds ${items}`;
     }
   }
 
@@ -277,21 +283,21 @@
           >
           <p class="mt-1 text-(--text-muted)">
             It has opened and is asking whether to add “{invite.name}”. Confirm
-            there, and Atlas adds the {plural(invite.contentCount, "item")} by itself.
+            there, and Atlas adds {theItems()} by itself.
           </p>
         {:else if pickedLauncher}
           <b class="block text-[14px] font-semibold"
             >Creating the {newWhat(pickedLauncher)} in {pickedLauncher.name}…</b
           >
           <p class="mt-1 text-(--text-muted)">
-            Then Atlas adds the {plural(invite.contentCount, "item")}.
+            Then Atlas adds {theItems()}.
           </p>
         {:else}
           <b class="block text-[14px] font-semibold"
             >Linking {pickedInstance?.name ?? "the instance"}…</b
           >
           <p class="mt-1 text-(--text-muted)">
-            Then Atlas adds the {plural(invite.contentCount, "item")}.
+            Then Atlas adds {theItems()}.
           </p>
         {/if}
       </div>
