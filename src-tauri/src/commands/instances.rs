@@ -221,6 +221,11 @@ pub async fn dev_unlink_manifest<R: Runtime>(
     state: State<'_, AppState>,
     instance_id: Id,
 ) -> AppResult<InstanceSummary> {
+    if !cfg!(debug_assertions) {
+        return Err(crate::error::AppError::forbidden(
+            "Only available in development builds",
+        ));
+    }
     sync::unlink(&state, &instance_id).await?;
     emit(
         &app,
