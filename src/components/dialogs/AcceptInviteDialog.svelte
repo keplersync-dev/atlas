@@ -386,7 +386,7 @@
             {one ? "1 file isn't" : `${uploaded.length} files aren't`} from Modrinth
             or CurseForge
           </h3>
-          <span class="shrink-0 text-[12.5px] text-(--text-faint)"
+          <span class="shrink-0 text-[13px] text-(--text-faint)"
             >Atlas can't check {one ? "it" : "them"}</span
           >
         </div>
@@ -407,20 +407,20 @@
                 >{f.name}</b
               >
               {#if f.fileName}
-                <span class="min-w-0 truncate text-[12px] text-(--text-faint)"
+                <span class="min-w-0 truncate text-[13px] text-(--text-faint)"
                   >{f.fileName}</span
                 >
               {/if}
               {#if f.sizeBytes != null}
                 <span
-                  class="w-14 shrink-0 text-right text-[12px] text-(--text-faint) tabular-nums"
+                  class="w-14 shrink-0 text-right text-[13px] text-(--text-faint) tabular-nums"
                   >{fileSize(f.sizeBytes)}</span
                 >
               {/if}
             </li>
           {/each}
         </ul>
-        <p class="mt-2 text-[12.5px] text-(--text-muted)">
+        <p class="mt-2 text-[13px] text-(--text-muted)">
           {invite.owner?.displayName ?? "The owner"} added {one ? "it" : "these"} from
           their own PC. Only add the pack if you trust them.
         </p>

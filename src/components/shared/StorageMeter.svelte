@@ -24,7 +24,7 @@
         <button
           type="button"
           onclick={() => openDialog({ kind: "storage" })}
-          class="rounded px-1 text-[13px] text-(--accent) hover:underline"
+          class="tap rounded px-1 text-[13px] text-(--accent) hover:underline"
           >See files</button
         >
       </span>

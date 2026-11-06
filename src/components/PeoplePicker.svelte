@@ -100,7 +100,7 @@
             role="tab"
             aria-selected={showing === t.id}
             onclick={() => (tab = t.id)}
-            class="rounded px-2.5 py-0.5 text-[13px] font-medium tabular-nums {showing ===
+            class="h-6 rounded px-2.5 text-[13px] font-medium tabular-nums {showing ===
             t.id
               ? 'bg-(--bg-raise-2) text-(--text-primary)'
               : 'text-(--text-muted) hover:text-(--text-primary)'}"
@@ -210,7 +210,7 @@
       <span class="tabular-nums">Picked: {pickedSummary}</span>
       <button
         type="button"
-        class="rounded px-1.5 text-(--accent) hover:bg-(--bg-hover)"
+        class="h-6 rounded px-1.5 text-(--accent) hover:bg-(--bg-hover)"
         onclick={() => {
           friendIds = [];
           groupIds = [];
@@ -228,8 +228,11 @@
             type="button"
             aria-label="Remove {g.name}"
             onclick={() => (groupIds = groupIds.filter((id) => id !== g.id))}
-            class="grid size-4.5 shrink-0 place-items-center rounded-full hover:bg-(--accent)/20"
-            ><Icon name="close" class="size-2.5" /></button
+            class="group/x -m-0.75 grid size-6 shrink-0 place-items-center"
+            ><span
+              class="grid size-4.5 place-items-center rounded-full group-hover/x:bg-(--accent)/20"
+              ><Icon name="close" class="size-2.5" /></span
+            ></button
           >
         </span>
       {/each}
@@ -237,22 +240,25 @@
         <span
           class="flex max-w-56 items-center gap-1.5 rounded-full bg-(--accent)/14 py-0.5 pr-1 pl-1 text-[13px] text-(--accent)"
         >
-          <Head user={f.user} size={18} />
+          <Head user={f.user} size={20} />
           <span class="truncate">{f.user.displayName}</span>
           <button
             type="button"
             aria-label="Remove {f.user.displayName}"
             onclick={() =>
               (friendIds = friendIds.filter((id) => id !== f.user.id))}
-            class="grid size-4.5 shrink-0 place-items-center rounded-full hover:bg-(--accent)/20"
-            ><Icon name="close" class="size-2.5" /></button
+            class="group/x -m-0.75 grid size-6 shrink-0 place-items-center"
+            ><span
+              class="grid size-4.5 place-items-center rounded-full group-hover/x:bg-(--accent)/20"
+              ><Icon name="close" class="size-2.5" /></span
+            ></button
           >
         </span>
       {/each}
       {#if hiddenChips > 0 || allChips}
         <button
           type="button"
-          class="rounded-full px-2.5 py-0.5 text-[13px] text-(--accent) hover:bg-(--bg-hover)"
+          class="h-6 rounded-full px-2.5 text-[13px] text-(--accent) hover:bg-(--bg-hover)"
           onclick={() => (allChips = !allChips)}
           >{allChips ? "Show fewer" : `+${hiddenChips} more`}</button
         >

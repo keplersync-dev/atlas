@@ -115,7 +115,8 @@ export function audit(): Promise<Finding[]> {
         !el.closest("[title]")
       )
         out.push({ kind: "cut off, no tooltip", detail: say(el) });
-      if (text && parseFloat(cs.fontSize) < 13)
+      // A picture's initials are decoration (aria-hidden), with the name beside them.
+      if (text && parseFloat(cs.fontSize) < 13 && !el.closest("[aria-hidden=true]"))
         out.push({
           kind: "text under 13px",
           detail: `${cs.fontSize} ${say(el)}`,

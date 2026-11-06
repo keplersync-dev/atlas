@@ -54,7 +54,7 @@
       title={m.hint}
       {disabled}
       onclick={() => value !== m.id && onchange(m.id)}
-      class="rounded px-2 py-0.5 text-[13px] font-medium whitespace-nowrap transition-colors disabled:cursor-not-allowed
+      class="h-6 rounded px-2 text-[13px] font-medium whitespace-nowrap transition-colors disabled:cursor-not-allowed
         {value === m.id
         ? ACTIVE[m.id]
         : 'text-(--text-faint) hover:text-(--text-primary)'}"

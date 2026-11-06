@@ -191,7 +191,7 @@
     <input
       bind:value={query}
       placeholder="Search {plural(instance.content.length, 'file')}"
-      class="w-full bg-transparent text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-faint)"
+      class="h-full w-full bg-transparent text-[13px] text-(--text-primary) outline-none placeholder:text-(--text-faint)"
     />
   </label>
   <KindChips items={instance.content} bind:kind counts />

@@ -73,7 +73,7 @@
   <h2 class="text-[15px] font-semibold">Friends</h2>
   {#if social.signedIn}
     <button
-      class="text-[13px] text-(--accent) hover:underline"
+      class="tap text-[13px] text-(--accent) hover:underline"
       onclick={() => go({ page: "friends" })}>Add friend</button
     >
   {/if}

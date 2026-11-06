@@ -565,7 +565,7 @@
           <button
             type="button"
             onclick={() => openDialog({ kind: "storage" })}
-            class="rounded px-1 text-[13px] text-(--accent) hover:underline"
+            class="tap rounded px-1 text-[13px] text-(--accent) hover:underline"
             >See files</button
           >
         </div>
@@ -591,7 +591,7 @@
       {#if i}<span aria-hidden="true">{" · "}</span>{/if}
       <button
         type="button"
-        class="hover:text-(--text-primary) hover:underline"
+        class="tap hover:text-(--text-primary) hover:underline"
         onclick={() =>
           api
             .openLegalPage(l.page)

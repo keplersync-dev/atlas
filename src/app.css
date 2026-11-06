@@ -90,3 +90,9 @@ textarea,
     outline: none;
   }
 }
+
+/* A small text button 6 px taller to click (24 px for 13 px text) without taking more room. */
+@utility tap {
+  padding-block: 3px;
+  margin-block: -3px;
+}

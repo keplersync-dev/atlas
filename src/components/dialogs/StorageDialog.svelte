@@ -118,7 +118,7 @@
   <button
     type="button"
     onclick={() => sortOn(s)}
-    class="flex items-center gap-1 text-left font-medium hover:text-(--text-primary)"
+    class="tap flex items-center gap-1 text-left font-medium hover:text-(--text-primary)"
   >
     {label}
     {#if sortBy === s && !query.trim()}

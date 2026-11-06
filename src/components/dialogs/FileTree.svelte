@@ -146,7 +146,7 @@
   <button
     type="button"
     onclick={() => sortOn(s)}
-    class="flex items-center gap-1 text-left font-medium hover:text-(--text-primary) {cls}"
+    class="tap flex items-center gap-1 text-left font-medium hover:text-(--text-primary) {cls}"
   >
     {label}
     {#if sortBy === s}

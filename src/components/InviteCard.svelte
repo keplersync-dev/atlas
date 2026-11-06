@@ -36,7 +36,7 @@
     <span
       class="mt-0.5 flex items-center gap-1.5 text-[13px] text-(--text-muted)"
     >
-      {#if from}<Head user={from} size={16} ring="var(--bg-raise)" />{/if}
+      {#if from}<Head user={from} size={20} ring="var(--bg-raise)" />{/if}
       <span class="truncate">
         {from?.displayName ?? "Someone"}{invite.myViaGroup
           ? ` · to ${invite.myViaGroup.name}`

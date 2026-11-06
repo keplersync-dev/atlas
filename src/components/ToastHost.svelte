@@ -72,7 +72,7 @@
       <button
         aria-label="Dismiss"
         onclick={() => dismissToast(t.id)}
-        class="grid size-5 shrink-0 place-items-center rounded text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+        class="-m-0.5 grid size-6 shrink-0 place-items-center rounded text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
       >
         <Icon name="close" class="size-3" />
       </button>

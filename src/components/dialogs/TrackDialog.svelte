@@ -259,7 +259,7 @@
     {#if !showFolder}
       <button
         type="button"
-        class="text-[13px] text-(--accent) hover:underline"
+        class="tap text-[13px] text-(--accent) hover:underline"
         onclick={() => (showFolder = true)}
       >
         Not listed? Choose a folder, a pack or a launcher

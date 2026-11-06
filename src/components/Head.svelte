@@ -41,9 +41,11 @@
       class="size-full rounded-full object-cover"
     />
   {:else}
+    <!-- Decoration: the name is shown beside it, or in the tooltip of a row of faces. -->
     <span
       class="grid size-full place-items-center rounded-full bg-[#5865f2] font-semibold text-white"
-      style="font-size:{Math.round(size * 0.42)}px">{user.displayName[0]}</span
+      style="font-size:{Math.round(size * 0.5)}px"
+      aria-hidden="true">{user.displayName[0]}</span
     >
   {/if}
   {#if presence && presence !== "offline"}

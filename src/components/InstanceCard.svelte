@@ -275,7 +275,7 @@
 
   <div class="flex flex-1 flex-col px-3.5 pt-2.5 pb-3">
     <div class="mb-3">
-      <button onclick={open} class="block w-full text-left">
+      <button onclick={open} class="tap block w-full text-left">
         <b
           class="block truncate text-[14px] font-semibold"
           title={instance.name}>{instance.name}</b
@@ -293,7 +293,7 @@
             onclick={openInLauncher}
             disabled={opening}
             title={openLabel(instance.launcher)}
-            class="inline-flex min-w-0 items-center gap-1 rounded transition-colors hover:text-(--accent) disabled:opacity-60"
+            class="tap inline-flex min-w-0 items-center gap-1 rounded transition-colors hover:text-(--accent) disabled:opacity-60"
           >
             <span class="truncate">{instance.launcher.name}</span>
             <Icon name="external" class="size-3 shrink-0" />
@@ -305,7 +305,7 @@
       <button
         onclick={open}
         tabindex="-1"
-        class="mt-1.5 flex w-full min-w-0 items-center gap-3 text-left text-[13px] whitespace-nowrap text-(--text-faint)"
+        class="mt-0.75 -mb-0.75 flex w-full min-w-0 items-center gap-3 py-0.75 text-left text-[13px] whitespace-nowrap text-(--text-faint)"
       >
         <!-- One line on every card: the play time gives way (…), the file count never does. -->
         <span class="flex shrink-0 items-center gap-1">

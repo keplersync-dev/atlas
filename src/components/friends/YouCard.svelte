@@ -122,7 +122,7 @@
               aria-haspopup="menu"
               aria-expanded={statusOpen}
               onclick={() => (statusOpen = !statusOpen)}
-              class="-ml-1 flex items-center gap-1.5 rounded px-1 text-[13px] text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+              class="tap -ml-1 flex items-center gap-1.5 rounded px-1 text-[13px] text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
             >
               <span
                 class="size-2 rounded-full {me.appearOffline

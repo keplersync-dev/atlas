@@ -133,13 +133,13 @@
       <button
         type="button"
         onclick={onrecheck}
-        class="rounded px-2 py-0.5 font-medium text-(--accent) hover:bg-(--bg-hover)"
+        class="h-6 rounded px-2 font-medium text-(--accent) hover:bg-(--bg-hover)"
         >Try again</button
       >
       <button
         type="button"
         onclick={() => keepLocal(unchecked)}
-        class="rounded px-2 py-0.5 text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+        class="h-6 rounded px-2 text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
         >Set to Only me</button
       >
     </div>
@@ -191,7 +191,7 @@
           type="button"
           aria-pressed={filter === f.id}
           onclick={() => (filter = f.id as "new" | "all")}
-          class="rounded px-2.5 py-0.5 text-[13px] font-medium {filter === f.id
+          class="h-6 rounded px-2.5 text-[13px] font-medium {filter === f.id
             ? 'bg-(--bg-raise-2) text-(--text-primary)'
             : 'text-(--text-muted)'}"
         >
@@ -207,7 +207,7 @@
     <input
       bind:value={query}
       placeholder="Search {plural(ofKind.length, 'file')}"
-      class="w-full border-none bg-transparent text-[13px] text-(--text-primary) placeholder:text-(--text-faint) focus:ring-0 focus:outline-hidden!"
+      class="h-full w-full border-none bg-transparent text-[13px] text-(--text-primary) placeholder:text-(--text-faint) focus:ring-0 focus:outline-hidden!"
     />
   </label>
   {#if shown.length > 1}
@@ -216,7 +216,7 @@
       {#each SHARE_MODES as m (m.id)}
         <button
           type="button"
-          class="rounded px-1.5 py-0.5 text-(--accent) hover:bg-(--bg-hover)"
+          class="h-6 rounded px-1.5 text-(--accent) hover:bg-(--bg-hover)"
           onclick={() => setAllShown(m.id)}
         >
           {m.label}

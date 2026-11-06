@@ -209,7 +209,7 @@
               aria-checked={m.role === r.id}
               title={r.hint}
               onclick={() => m.role !== r.id && setRole(m, r.id)}
-              class="rounded px-2.5 py-0.5 text-[13px] font-medium transition-colors
+              class="h-6 rounded px-2.5 text-[13px] font-medium transition-colors
                 {m.role === r.id
                 ? 'bg-(--bg-raise-2) text-(--text-primary)'
                 : 'text-(--text-faint) hover:text-(--text-primary)'}"

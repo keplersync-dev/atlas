@@ -139,7 +139,7 @@
               {#if all.length > SHOWN}
                 <button
                   type="button"
-                  class="rounded px-2 py-0.5 font-medium text-(--accent) hover:bg-(--bg-hover)"
+                  class="h-6 rounded px-2 font-medium text-(--accent) hover:bg-(--bg-hover)"
                   onclick={() =>
                     (expanded = open
                       ? expanded.filter((r) => r !== rev.revision)

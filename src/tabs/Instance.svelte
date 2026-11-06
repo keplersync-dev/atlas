@@ -132,7 +132,7 @@
   {#if backLabel}
     <button
       onclick={back}
-      class="mb-4.5 inline-flex items-center gap-1.5 text-[13px] text-(--text-muted) hover:text-(--text-primary)"
+      class="-mt-0.75 mb-3.75 inline-flex items-center gap-1.5 py-0.75 text-[13px] text-(--text-muted) hover:text-(--text-primary)"
     >
       <Icon name="chev" class="size-3.5 rotate-180" />{backLabel}
     </button>
