@@ -711,6 +711,11 @@ pub struct CreateWorld {
     /// Friends to share it with.
     #[serde(default)]
     pub shared_with: Vec<Id>,
+    /// The client's own name for this world. Sending the same key again returns the world
+    /// it already made, so a retry after a lost answer (or a game that closed) doesn't make
+    /// a second one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub key: Option<String>,
 }
 
 fn keplersync() -> String {
