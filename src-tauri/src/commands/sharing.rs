@@ -1,8 +1,8 @@
 use tauri::{AppHandle, Runtime, State};
 
 use crate::dto::{
-    Id, InstanceSummary, InviteInput, InviteRole, PublishInput, PublishPlan, ShareInstanceInput,
-    SharedInstance, SharedInstanceDetail, SyncOptions, SyncPreview,
+    FileRules, Id, InstanceSummary, InviteInput, InviteRole, PublishInput, PublishPlan,
+    ShareInstanceInput, SharedInstance, SharedInstanceDetail, SyncOptions, SyncPreview,
 };
 use crate::error::AppResult;
 use crate::services::{accept, instances, publish, shared, sync};
@@ -83,6 +83,16 @@ pub async fn prepare_publish<R: Runtime>(
     instance_id: Id,
 ) -> AppResult<PublishPlan> {
     publish::prepare(&state, &app, &instance_id).await
+}
+
+/// Which config and other files are shared, saved for the next update.
+#[tauri::command]
+pub async fn set_file_rules(
+    state: State<'_, AppState>,
+    instance_id: Id,
+    rules: FileRules,
+) -> AppResult<()> {
+    publish::set_file_rules(&state, &instance_id, &rules).await
 }
 
 #[tauri::command]

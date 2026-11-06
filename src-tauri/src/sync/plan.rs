@@ -26,7 +26,7 @@ pub enum Action {
     /// (backed up, then overwritten). `local`: a file on disk with these exact bytes that
     /// can be used instead of downloading (re-enabling a disabled mod).
     Place {
-        entry: Entry,
+        entry: Box<Entry>,
         replaces: bool,
         local: Option<String>,
     },
@@ -56,7 +56,7 @@ pub struct Plan {
 impl Plan {
     pub fn places(&self) -> impl Iterator<Item = (&Entry, Option<&String>)> {
         self.actions.iter().filter_map(|a| match a {
-            Action::Place { entry, local, .. } => Some((entry, local.as_ref())),
+            Action::Place { entry, local, .. } => Some((&**entry, local.as_ref())),
             _ => None,
         })
     }
@@ -125,6 +125,7 @@ pub fn plan(input: &Input) -> Plan {
                 name: e.name.clone(),
                 kind: e.kind,
                 size_bytes: e.size_bytes,
+                icon: None,
             });
         }
         let wanted = e.required
@@ -140,7 +141,7 @@ pub fn plan(input: &Input) -> Plan {
                 // Disabled by the user: enable it again, reusing its own bytes.
                 removes.push(Action::Remove { path: disk_path(r) });
                 places.push(Action::Place {
-                    entry: e.clone(),
+                    entry: Box::new(e.clone()),
                     replaces: false,
                     local: Some(disk_path(r)),
                 });
@@ -163,7 +164,7 @@ pub fn plan(input: &Input) -> Plan {
             None => false,
         };
         places.push(Action::Place {
-            entry: e.clone(),
+            entry: Box::new(e.clone()),
             replaces,
             local: None,
         });
@@ -295,6 +296,7 @@ mod tests {
             page_url: None,
             side: Side::Both,
             required,
+            icon: None,
         }
     }
 

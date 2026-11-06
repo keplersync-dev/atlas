@@ -429,7 +429,11 @@ export type OptionalItem = {
 /**
  * Provider project id, or the file's sha256 for uploads.
  */
-key: string, name: string, kind: ContentKind, sizeBytes: number, };
+key: string, name: string, kind: ContentKind, sizeBytes: number, 
+/**
+ * As `Entry::icon`; the app turns "sha256:" ones into a cached picture's URL.
+ */
+icon: string | null, };
 
 /**
  * A file in a shared pack that isn't from Modrinth or CurseForge: someone uploaded it.
@@ -438,7 +442,11 @@ export type UploadedFile = { name: string,
 /**
  * The file's own name: "tandem-fabric-0.1.0.jar".
  */
-fileName: string, kind: ContentKind, sizeBytes: number, };
+fileName: string, kind: ContentKind, sizeBytes: number, 
+/**
+ * As `OptionalItem::icon`.
+ */
+icon: string | null, };
 
 export type SharedInstance = { id: string, name: string, description: string | null, icon: string | null, 
 /**

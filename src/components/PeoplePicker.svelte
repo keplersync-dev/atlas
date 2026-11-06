@@ -123,7 +123,7 @@
        dialog; past 14rem a long list scrolls here instead of stretching it. -->
   <div
     class="mt-2 overflow-y-auto rounded-lg bg-(--bg-raise) p-1"
-    style="height: min(14rem, {Math.max(friends.length, groups.length, 2) * 2.25 + 0.5}rem)"
+    style="height: min(14rem, {Math.max(friends.length, groups.length, 1) * 2.25 + 0.5}rem)"
     role="group"
     aria-label={showing === "people" ? "People" : "Groups"}
   >

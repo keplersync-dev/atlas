@@ -35,7 +35,7 @@ use crate::sync::adopt;
 use crate::sync::manifest::{
     self, Entry, Manifest, MinecraftSpec, Override, PackBase, SCHEMA_VERSION,
 };
-use uploads::{send_files, send_icon};
+use uploads::{send_file_icons, send_files, send_icon};
 
 fn mode_of(r: &ContentRow) -> ShareMode {
     from_wire(&r.share_mode).unwrap_or(ShareMode::Required)
@@ -102,6 +102,17 @@ async fn save_file_rules(state: &AppState, id: &str, rules: &FileRules) -> AppRe
     Ok(())
 }
 
+/// The tree's ticks, saved from the instance's Sharing tab: they go out with the next update.
+pub async fn set_file_rules(state: &AppState, id: &str, rules: &FileRules) -> AppResult<()> {
+    let row = db::instances::require(&state.db, id).await?;
+    if !matches!(row.role(), Some(MemberRole::Owner | MemberRole::Editor)) {
+        return Err(AppError::forbidden(
+            "Only the owner and editors choose which files are shared",
+        ));
+    }
+    save_file_rules(state, id, rules).await
+}
+
 /// The manifest for these files and settings, with these config files.
 fn build(
     row: &InstanceRow,
@@ -110,6 +121,7 @@ fn build(
     description: Option<String>,
     (overrides, base): (Vec<Override>, Option<PackBase>),
     icon: Option<String>,
+    file_icons: &HashMap<String, String>,
 ) -> AppResult<Manifest> {
     let (Some(version), Some(loader)) = (row.minecraft_version.clone(), row.loader()) else {
         return Err(AppError::invalid_input(
@@ -146,6 +158,7 @@ fn build(
                 .filter(|u| !upload && manifest::allowed_page(u)),
             side: from_wire(&r.side).unwrap_or(Side::Both),
             required: mode == ShareMode::Required,
+            icon: file_icons.get(&r.id).cloned(),
         });
     }
     let m = Manifest {
@@ -251,6 +264,7 @@ async fn share_now<R: Runtime>(
         description.clone(),
         (Vec::new(), None),
         None,
+        &HashMap::new(),
     )?;
     let work = Reporter::new(app, id);
     let configs = send_files(
@@ -263,7 +277,16 @@ async fn share_now<R: Runtime>(
     )
     .await?;
     let icon = send_icon(state, &row).await;
-    let m = build(&row, &rows, &modes, description.clone(), configs, icon)?;
+    let file_icons = send_file_icons(state, &rows, &modes).await;
+    let m = build(
+        &row,
+        &rows,
+        &modes,
+        description.clone(),
+        configs,
+        icon,
+        &file_icons,
+    )?;
     work.report(WorkStage::Saving, 0, 0);
     let body = CreateSharedInstance {
         name: row.name.clone(),
@@ -339,6 +362,7 @@ async fn publish_now<R: Runtime>(
         description.clone(),
         (Vec::new(), None),
         None,
+        &HashMap::new(),
     )?;
     let work = Reporter::new(app, id);
     let configs = send_files(
@@ -356,7 +380,8 @@ async fn publish_now<R: Runtime>(
     } else {
         row.synced_manifest().and_then(|m| m.icon)
     };
-    let m = build(&row, &rows, &modes, description, configs, icon)?;
+    let file_icons = send_file_icons(state, &rows, &modes).await;
+    let m = build(&row, &rows, &modes, description, configs, icon, &file_icons)?;
     if row.synced_manifest_hash.as_deref() == Some(manifest::hash(&m).as_str()) {
         return Err(AppError::invalid_input("Nothing new to send"));
     }

@@ -6,7 +6,7 @@
   import { fileSize, formatCode } from "$lib/format";
   import { isMac } from "$lib/platform";
   import { resource } from "$lib/resource.svelte";
-  import { social } from "$lib/stores";
+  import { social, updates } from "$lib/stores";
   import type { AppSettings, AuthProvider } from "$lib/types";
   import Button from "../Button.svelte";
   import Dialog from "../Dialog.svelte";
@@ -85,6 +85,9 @@
     myId ? api.listBlocked() : Promise.resolve(null),
   );
 
+  const version = resource(() => api.appVersion());
+  let upToDate = $state(false);
+
   // This PC's settings, which aren't part of the account.
   let pc = $state<AppSettings | null>(null);
   api
@@ -136,7 +139,7 @@
   // A section's card, and one setting in it: words on the left, the control on the right.
   const CARD =
     "divide-y divide-(--line) overflow-hidden rounded-lg border border-(--line) bg-(--bg)";
-  const ROW = "flex items-start gap-4 px-4 py-3.5";
+  const ROW = "flex items-center gap-4 px-4 py-3.5";
 
   async function act(key: string, action: () => Promise<unknown>) {
     const mine = ++attempt;
@@ -248,6 +251,49 @@
     {#each ["Updates", "Notifications", "Startup"] as group (group)}
       {@render section(group)}
       <div class={CARD}>
+        {#if group === "Updates"}
+          <div class={ROW}>
+            <div class="min-w-0 flex-1">
+              <b class="block font-medium">Atlas {version.data ?? ""}</b>
+              <small class="block text-[13px] text-(--text-faint)">
+                {updates.available
+                  ? `Atlas ${updates.available.version} is ready. Atlas closes for a few seconds while it updates.`
+                  : upToDate
+                    ? "You have the latest version."
+                    : "Atlas looks for a new version every few hours."}
+              </small>
+              {@render failed("update")}
+              {#if updates.error}<small
+                  class="block text-[13px] text-(--danger)"
+                  role="alert">{updates.error}</small
+                >{/if}
+            </div>
+            {#if updates.available}
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={updates.installing}
+                onclick={() => updates.install()}
+                >{updates.installing
+                  ? "Downloading…"
+                  : "Restart to update"}</Button
+              >
+            {:else}
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy === "update"}
+                onclick={() =>
+                  act("update", async () => {
+                    upToDate = false;
+                    await updates.checkNow();
+                    upToDate = !updates.available;
+                  })}
+                >{busy === "update" ? "Checking…" : "Check for updates"}</Button
+              >
+            {/if}
+          </div>
+        {/if}
         {#each PC_SETTINGS.filter((s) => s.group === group) as s (s.key)}
           <div class={ROW}>
             <div class="min-w-0 flex-1">

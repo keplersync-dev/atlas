@@ -159,7 +159,35 @@ pub(super) async fn send_files<R: Runtime>(
 /// Upload the instance's picture so friends see it too; returns the manifest's `icon`.
 /// A picture that can't be read or sent is left out rather than stopping the share.
 pub(super) async fn send_icon(state: &AppState, row: &InstanceRow) -> Option<String> {
-    let icon = row.icon.as_deref()?;
+    send_picture(state, row.icon.as_deref()?, "The instance picture").await
+}
+
+/// Each shared file's picture, by content row id: Modrinth's and CurseForge's links as
+/// they are, pictures Atlas took out of a file uploaded.
+pub(super) async fn send_file_icons(
+    state: &AppState,
+    rows: &[ContentRow],
+    modes: &HashMap<String, ShareMode>,
+) -> HashMap<String, String> {
+    let shared = live(rows).filter(|r| modes.get(&r.id) != Some(&ShareMode::Private));
+    let found = futures_util::future::join_all(shared.filter_map(|r| {
+        let icon = r.icon_url.as_deref()?;
+        Some(async move {
+            let out = if crate::sync::manifest::allowed_icon(icon) {
+                Some(icon.to_owned())
+            } else {
+                send_picture(state, icon, &format!("{}'s picture", r.name)).await
+            };
+            Some((r.id.clone(), out?))
+        })
+    }))
+    .await;
+    found.into_iter().flatten().collect()
+}
+
+/// Upload a picture ("file:<path>", or an https link) unless the server has it; returns
+/// "sha256:<hex>". None when it can't be read, isn't a picture, is too big, or can't be sent.
+async fn send_picture(state: &AppState, icon: &str, name: &str) -> Option<String> {
     let bytes = if let Some(path) = icon.strip_prefix("file:") {
         tokio::fs::read(path).await.ok()?
     } else if icon.starts_with("https://") {
@@ -171,7 +199,7 @@ pub(super) async fn send_icon(state: &AppState, row: &InstanceRow) -> Option<Str
         return None;
     };
     if bytes.len() as u64 > MAX_ICON_BYTES || !crate::scan::icons::is_image(&bytes) {
-        tracing::info!(size = bytes.len(), "instance picture left out of the share");
+        tracing::info!(size = bytes.len(), name, "picture left out of the share");
         return None;
     }
     let sha256 = hex::encode(Sha256::digest(&bytes));
@@ -185,14 +213,14 @@ pub(super) async fn send_icon(state: &AppState, row: &InstanceRow) -> Option<Str
             path: file,
             sha256: sha256.clone(),
             size: bytes.len() as u64,
-            name: "The instance picture".into(),
+            name: name.into(),
             rights_confirmed: false,
         })
         .await
     {
         Ok(()) => Some(format!("sha256:{sha256}")),
         Err(e) => {
-            tracing::warn!(error = %e, "couldn't upload the instance picture");
+            tracing::warn!(error = %e, name, "couldn't upload a picture");
             None
         }
     }

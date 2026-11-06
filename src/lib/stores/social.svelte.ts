@@ -222,6 +222,15 @@ class SocialStore {
     );
   }
 
+  /** Owner: stop sharing it for everyone. Everyone keeps their copy as a normal instance. */
+  stopSharing(sharedInstanceId: Id) {
+    return this.optimistic(
+      () =>
+        (this.shared = this.shared.filter((s) => s.id !== sharedInstanceId)),
+      () => api.archiveSharedInstance(sharedInstanceId),
+    );
+  }
+
   // ── Groups ──
 
   async createGroup(name: string) {

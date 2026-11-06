@@ -1,4 +1,5 @@
 import type {
+  FileRules,
   MyUpload,
   RemovedUploads,
   ActivityItem,
@@ -157,6 +158,8 @@ export interface AtlasApi {
   declineInvite(sharedInstanceId: Id): Promise<void>;
   /** Step 1 of sharing/publishing: what would be shared, and which files need a decision. */
   preparePublish(instanceId: Id): Promise<PublishPlan>;
+  /** Owners/editors: which config and other files are shared, saved for the next update. */
+  setFileRules(instanceId: Id, rules: FileRules): Promise<void>;
   /** First share: publishes revision 1 and invites friends/groups. */
   shareInstance(
     instanceId: Id,
@@ -236,6 +239,8 @@ export interface AtlasApi {
   updateAppSettings(patch: AppSettingsPatch): Promise<AppSettings>;
   /** The page has drawn: show the window, unless Atlas started with Windows (it stays in the tray). */
   windowReady(): Promise<void>;
+  /** This Atlas's version: "0.4.1". */
+  appVersion(): Promise<string>;
   /** The newest release if it's newer than this one. Always null in development builds. */
   checkForUpdate(): Promise<AvailableUpdate | null>;
   /** Downloads and installs it (`update.progress` events), then Atlas restarts. */

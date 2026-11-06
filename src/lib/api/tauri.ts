@@ -1,6 +1,7 @@
 // Forwards every call to a Rust command of the same name in snake_case.
 // Tauri converts camelCase argument keys to snake_case parameters automatically.
 
+import { getVersion } from "@tauri-apps/api/app";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AtlasEvent } from "$lib/types";
@@ -91,6 +92,8 @@ export const tauriApi: AtlasApi = {
   declineInvite: (sharedInstanceId) =>
     call("decline_invite", { sharedInstanceId }),
   preparePublish: (instanceId) => call("prepare_publish", { instanceId }),
+  setFileRules: (instanceId, rules) =>
+    call("set_file_rules", { instanceId, rules }),
   shareInstance: (instanceId, input) =>
     call("share_instance", { instanceId, input }),
   publishInstance: (instanceId, input) =>
@@ -135,6 +138,7 @@ export const tauriApi: AtlasApi = {
   getAppSettings: () => call("get_app_settings"),
   updateAppSettings: (patch) => call("update_app_settings", { patch }),
   windowReady: () => call("window_ready"),
+  appVersion: () => getVersion(),
   checkForUpdate: () => call("check_for_update"),
   installUpdate: () => call("install_update"),
   openReleasePage: () => call("open_release_page"),

@@ -686,7 +686,7 @@ mod tests {
         // a.jar is replaced, then removing "mods/stuck" (a folder) fails.
         let actions = [
             Action::Place {
-                entry,
+                entry: Box::new(entry),
                 replaces: true,
                 local: None,
             },

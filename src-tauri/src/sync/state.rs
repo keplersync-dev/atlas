@@ -201,6 +201,7 @@ mod tests {
                     page_url: None,
                     side: Side::Both,
                     required: *required,
+                    icon: None,
                 })
                 .collect(),
             overrides: vec![],

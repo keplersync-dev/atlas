@@ -174,11 +174,27 @@
   const leavable = $derived(
     !invited && s.myRole !== "owner" && s.myStatus === "active" && !local,
   );
+  // Yours, but not on this PC: its instance menu isn't here, so the row stops sharing it.
+  const stoppable = $derived(s.myRole === "owner" && !local);
+  const closeLabel = $derived(
+    invited ? "Decline" : stoppable ? "Stop sharing" : "Stop getting updates",
+  );
 
   let busy = $state(false);
   let error = $state<string | null>(null);
   async function decline() {
-    if (leavable) {
+    if (stoppable) {
+      const people = s.members.filter(
+        (m) => m.role !== "owner" && m.status === "active",
+      ).length;
+      const ok = await confirmAction({
+        title: `Stop sharing ${s.name}?`,
+        message: `Nobody gets updates anymore${people ? `, ${plural(people, "person", "people")} included` : ""}. Everyone keeps their copy as a normal instance.`,
+        confirmLabel: "Stop sharing",
+        danger: true,
+      });
+      if (!ok) return;
+    } else if (leavable) {
       const ok = await confirmAction({
         title: `Stop getting updates for ${s.name}?`,
         message: `You won't get its updates anymore. ${s.owner?.displayName ?? "The owner"} can share it with you again.`,
@@ -190,7 +206,11 @@
     busy = true;
     error = null;
     try {
-      await (leavable ? social.leaveShared(s.id) : social.declineInvite(s.id));
+      await (stoppable
+        ? social.stopSharing(s.id)
+        : leavable
+          ? social.leaveShared(s.id)
+          : social.declineInvite(s.id));
     } catch (e) {
       error = (e as Error).message;
     } finally {
@@ -229,11 +249,11 @@
           },
         ]
       : []),
-    ...(invited || leavable
+    ...(invited || leavable || stoppable
       ? [
           "divider" as const,
           {
-            label: invited ? "Decline" : "Stop getting updates",
+            label: closeLabel,
             danger: true,
             onselect: decline,
           },
@@ -307,12 +327,12 @@
         >{st.action.label}</Button
       >
     {/if}
-    {#if invited || leavable}
+    {#if invited || leavable || stoppable}
       <button
         onclick={decline}
         disabled={busy}
-        title={invited ? "Decline" : "Stop getting updates"}
-        aria-label="{invited ? 'Decline' : 'Stop getting updates for'} {s.name}"
+        title={closeLabel}
+        aria-label="{closeLabel}{invited ? '' : ' for'} {s.name}"
         class="grid size-7 place-items-center rounded-md text-(--text-faint) hover:bg-(--bg-hover) hover:text-(--text-primary) disabled:opacity-40"
       >
         <Icon name="close" class="size-3.5" />

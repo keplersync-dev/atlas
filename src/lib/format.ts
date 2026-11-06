@@ -83,6 +83,12 @@ export function plural(
   return `${n} ${n === 1 ? word : pluralWord}`;
 }
 
+/** "A", "A and B", "A, B and 3 more": a long list said in one line. */
+export function nameList(names: string[]): string {
+  if (names.length <= 2) return names.join(" and ");
+  return `${names[0]}, ${names[1]} and ${names.length - 2} more`;
+}
+
 /** "640 MB", "1.2 GB" */
 export function fileSize(bytes: number): string {
   // A few bytes still show as 1 KB; nothing at all is 0 KB.

@@ -51,6 +51,9 @@ fn sample(command: &str, key: &str) -> Value {
         ("publish_instance", "input") => json!({
             "changelog": "Added Iris", "shareModes": { "c1": "private" }, "confirmedUploadRights": false
         }),
+        ("set_file_rules", "rules") => json!({
+            "include": ["config/"], "exclude": ["config/private.json"], "firstInstall": ["options.txt"]
+        }),
         ("invite_to_shared_instance", "input") => {
             json!({ "friendIds": ["u1"], "groupIds": ["g1"], "role": "editor" })
         }

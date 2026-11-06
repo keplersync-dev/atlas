@@ -22,10 +22,15 @@ class UpdatesStore {
 
   async check() {
     try {
-      this.available = await api.checkForUpdate();
+      await this.checkNow();
     } catch {
       // Offline, or GitHub is down: the next check tries again.
     }
+  }
+
+  /** Settings' Check for updates: failures reach the caller. */
+  async checkNow() {
+    this.available = await api.checkForUpdate();
   }
 
   /** The server said this version is too old: look for the update straight away. */

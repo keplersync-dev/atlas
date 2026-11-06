@@ -326,7 +326,8 @@
         {@render sortHeader("modified", "Modified")}
         <span></span>
       </div>
-      <div class="h-72 overflow-y-auto">
+      <!-- As tall as its rows, up to about eight: a short folder leaves no empty space. -->
+      <div class="max-h-72 overflow-y-auto">
         {#if at && !searching}
           <button
             type="button"

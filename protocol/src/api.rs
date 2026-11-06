@@ -213,6 +213,9 @@ pub struct OptionalItem {
     pub name: String,
     pub kind: ContentKind,
     pub size_bytes: u64,
+    /// As `Entry::icon`; the app turns "sha256:" ones into a cached picture's URL.
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 /// A file in a shared pack that isn't from Modrinth or CurseForge: someone uploaded it.
@@ -225,6 +228,9 @@ pub struct UploadedFile {
     pub file_name: String,
     pub kind: ContentKind,
     pub size_bytes: u64,
+    /// As `OptionalItem::icon`.
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 #[cfg_attr(feature = "ts", derive(ts_rs::TS))]

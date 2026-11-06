@@ -32,7 +32,7 @@
   >
     <span
       class="absolute top-0.75 left-0.75 size-3 rounded-full transition-transform
-        {checked ? 'translate-x-3 bg-(--accent-ink)' : 'bg-(--text-muted)'}"
+        {checked ? 'translate-x-3 bg-(--accent-ink)' : 'bg-(--text-primary)'}"
     ></span>
   </span>
 </button>

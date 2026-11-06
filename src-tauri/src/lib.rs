@@ -89,6 +89,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::sharing::accept_invite_into,
         commands::sharing::decline_invite,
         commands::sharing::prepare_publish,
+        commands::sharing::set_file_rules,
         commands::sharing::share_instance,
         commands::sharing::publish_instance,
         commands::sharing::preview_sync,

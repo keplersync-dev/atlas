@@ -12,6 +12,7 @@
     SharedMember,
   } from "$lib/types";
   import { instances } from "$lib/stores";
+  import ConfigFiles from "./ConfigFiles.svelte";
   import Head from "../Head.svelte";
   import Icon from "../Icon.svelte";
   import SearchBox from "../SearchBox.svelte";
@@ -250,4 +251,8 @@
       No members match “{query}”.
     </p>
   {/each}
+{/if}
+
+{#if sync.role !== "viewer"}
+  <ConfigFiles {instanceId} />
 {/if}

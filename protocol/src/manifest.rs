@@ -45,7 +45,7 @@ impl Manifest {
     }
 
     /// Every uploaded file this version needs: uploads, config files (not those from the
-    /// modpack) and the picture.
+    /// modpack), the picture and the files' own pictures.
     pub fn blobs(&self) -> Vec<String> {
         let mut out: Vec<String> = self
             .content
@@ -59,6 +59,11 @@ impl Manifest {
                     .map(|o| o.sha256.clone()),
             )
             .chain(self.icon_sha256().map(str::to_owned))
+            .chain(
+                self.content
+                    .iter()
+                    .filter_map(|e| e.icon_sha256().map(str::to_owned)),
+            )
             .collect();
         out.sort();
         out.dedup();
@@ -102,6 +107,10 @@ pub struct Entry {
     /// false = optional: members choose whether to download it.
     #[serde(default = "yes")]
     pub required: bool,
+    /// Its picture: "sha256:<hex>" when uploaded to Atlas, or an https link on Modrinth's
+    /// or CurseForge's image host.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
 }
 
 fn both() -> Side {
@@ -116,6 +125,14 @@ impl Entry {
     /// project id, or the file hash for uploads. Also `OptionalItem.key`.
     pub fn key(&self) -> &str {
         self.project_id.as_deref().unwrap_or(&self.sha256)
+    }
+
+    /// Its picture's sha256, when it's one uploaded to Atlas.
+    pub fn icon_sha256(&self) -> Option<&str> {
+        self.icon
+            .as_deref()?
+            .strip_prefix("sha256:")
+            .filter(|h| is_sha256(h))
     }
 
     /// An uploaded mod or resource pack: members approve it before it installs. Shaders
@@ -264,6 +281,8 @@ const DOWNLOAD_HOSTS: [&str; 3] = [
     "edge.forgecdn.net",
     "mediafilez.forgecdn.net",
 ];
+/// Where a file's picture may be, when it isn't uploaded: what the app's CSP lets it show.
+const ICON_HOSTS: [&str; 2] = ["cdn.modrinth.com", "media.forgecdn.net"];
 /// Where a file's page may be: Atlas opens it in the browser for hand downloads.
 const PAGE_HOSTS: [&str; 2] = ["modrinth.com", "www.curseforge.com"];
 
@@ -356,6 +375,15 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
             && !allowed_page(url)
         {
             return bad(format!("{} links to a site Atlas doesn't allow.", e.path));
+        }
+        if let Some(icon) = &e.icon
+            && e.icon_sha256().is_none()
+            && !allowed_icon(icon)
+        {
+            return bad(format!(
+                "{}'s picture is on a site Atlas doesn't allow.",
+                e.path
+            ));
         }
         if !seen.insert(e.path.to_lowercase()) {
             return bad(format!("{} is in it twice.", e.path));
@@ -565,6 +593,11 @@ pub fn allowed_download(url: &str) -> bool {
     https_on(url, &DOWNLOAD_HOSTS)
 }
 
+/// A file picture a manifest may link to rather than upload.
+pub fn allowed_icon(url: &str) -> bool {
+    https_on(url, &ICON_HOSTS)
+}
+
 /// A page link a manifest may carry: https on Modrinth or CurseForge. Anything else could
 /// make Windows run a program when it's opened.
 pub fn allowed_page(url: &str) -> bool {
@@ -676,6 +709,26 @@ mod tests {
         e.kind = ContentKind::Mod;
         e.source = ContentSource::Modrinth;
         assert!(!e.needs_approval());
+    }
+
+    #[test]
+    fn file_pictures_are_uploads_or_on_the_mod_sites_image_hosts() {
+        let mut m = parse(&example()).unwrap();
+        let sha = "a".repeat(64);
+        m.content[0].icon = Some(format!("sha256:{sha}"));
+        m.content[1].icon = Some("https://cdn.modrinth.com/data/AANobbMI/icon.png".into());
+        m.content[2].icon = Some("https://media.forgecdn.net/avatars/1/2/x.png".into());
+        assert!(validate(&m).is_ok());
+        assert!(m.blobs().contains(&sha), "uploaded pictures are blobs");
+        for bad in [
+            "https://evil.example/x.png",
+            "http://cdn.modrinth.com/x.png",
+            "sha256:nothex",
+            "file:C:/x.png",
+        ] {
+            m.content[1].icon = Some(bad.into());
+            assert!(validate(&m).is_err(), "{bad:?} should be refused");
+        }
     }
 
     fn with_path(path: &str) -> Result<(), Invalid> {

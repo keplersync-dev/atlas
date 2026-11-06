@@ -304,31 +304,53 @@ async fn unlink<R: Runtime>(
     Ok(())
 }
 
-/// Shared pictures come from the server as "sha256:<hex>". Show the copy in the icon
-/// cache, fetching it first when online. No picture, or one that can't be fetched, leaves
-/// `icon` empty and the UI draws a block.
+/// Shared pictures (the pack's, and its uploaded files' and extras') come from the server
+/// as "sha256:<hex>", or as Modrinth's and CurseForge's links. Show those as they are, and
+/// the rest from the icon cache, fetching them first when online. No picture, or one that
+/// can't be fetched, leaves `icon` empty and the UI draws a block.
 async fn show_icons(state: &AppState, list: &mut [SharedInstance]) {
     let online = state.cloud.is_online();
-    let wanted: Vec<Option<String>> = list
-        .iter()
-        .map(|s| icon_sha256(s).map(str::to_owned))
-        .collect();
-    let found = futures_util::future::join_all(list.iter().zip(&wanted).map(|(s, sha)| async {
-        let sha = sha.as_deref()?;
-        let file = crate::scan::icons::shared_icon_file(&state.paths.icons, sha);
-        if !file.is_file()
-            && online
-            && let Err(e) = fetch_icon(state, &s.id, sha, &file).await
-        {
-            tracing::info!(shared = %s.id, error = %e, "couldn't fetch a shared picture");
-        }
-        file.is_file()
-            .then(|| crate::util::asset::url(&format!("file:{}", file.display())))
-    }))
-    .await;
-    for (s, icon) in list.iter_mut().zip(found) {
-        s.icon = icon;
+    let jobs = list.iter_mut().flat_map(|s| {
+        let SharedInstance {
+            id,
+            icon,
+            optional_items,
+            uploaded,
+            ..
+        } = s;
+        let id = &*id;
+        std::iter::once(icon)
+            .chain(optional_items.iter_mut().map(|o| &mut o.icon))
+            .chain(uploaded.iter_mut().map(|f| &mut f.icon))
+            .map(move |slot| async move {
+                *slot = shown_icon(state, id, slot.take(), online).await;
+            })
+    });
+    futures_util::future::join_all(jobs).await;
+}
+
+async fn shown_icon(
+    state: &AppState,
+    shared: &str,
+    icon: Option<String>,
+    online: bool,
+) -> Option<String> {
+    let icon = icon?;
+    if crate::sync::manifest::allowed_icon(&icon) {
+        return Some(icon);
     }
+    let sha = icon
+        .strip_prefix("sha256:")
+        .filter(|sha| crate::sync::manifest::is_sha256(sha))?;
+    let file = crate::scan::icons::shared_icon_file(&state.paths.icons, sha);
+    if !file.is_file()
+        && online
+        && let Err(e) = fetch_icon(state, shared, sha, &file).await
+    {
+        tracing::info!(shared, error = %e, "couldn't fetch a shared picture");
+    }
+    file.is_file()
+        .then(|| crate::util::asset::url(&format!("file:{}", file.display())))
 }
 
 /// The shared picture of the instance this one is linked to, if it's in the icon cache

@@ -31,7 +31,10 @@
     wide = false,
     onclose,
     onsubmit,
+    onescape,
     header,
+    head,
+    bodyClass = "overflow-y-auto px-5.5 pt-3.5 pb-4.5",
     children,
     footer,
   }: {
@@ -41,8 +44,14 @@
     onclose: () => void;
     /** If given, the body and footer are wrapped in a <form>: Enter and type="submit" buttons submit it. */
     onsubmit?: (e: SubmitEvent) => void;
+    /** Escape was pressed: return true when the dialog handled it (a list page going back, a menu closing), and it stays open. */
+    onescape?: () => boolean;
     /** Optional picture left of the title. */
     header?: Snippet;
+    /** A whole header of the dialog's own instead of title and description. Its heading takes `titleId`. */
+    head?: Snippet<[{ titleId: string; close: () => void }]>;
+    /** The body's own layout, for dialogs that scroll a part of it rather than all of it. */
+    bodyClass?: string;
     children: Snippet;
     footer?: Snippet;
   } = $props();
@@ -87,7 +96,7 @@
 </script>
 
 {#snippet body()}
-  <div class="overflow-y-auto px-5.5 pt-3.5 pb-4.5">{@render children()}</div>
+  <div class={bodyClass}>{@render children()}</div>
   {#if footer}
     <div
       class="flex flex-wrap items-center justify-end gap-2 border-t border-(--line) px-5.5 py-3.5"
@@ -102,27 +111,36 @@
   bind:this={el}
   {onclick}
   onclose={closed}
+  onkeydown={(e) => {
+    // On keydown, before the browser turns it into a close: the cancel event can only be
+    // stopped right after a click.
+    if (e.key === "Escape" && onescape?.()) e.preventDefault();
+  }}
   aria-labelledby={titleId}
   class="m-auto max-h-[calc(100vh-80px)] w-full overflow-hidden rounded-xl border border-(--line) bg-(--bg-raise) p-0 text-(--text-primary) shadow-[0_30px_80px_#000a]
     backdrop:bg-[#05070acc] {wide ? 'max-w-155' : 'max-w-130'}"
 >
   <div class="flex max-h-[calc(100vh-82px)] flex-col">
-    <div class="flex items-start gap-3.5 px-5.5 pt-5 pb-1.5">
-      {@render header?.()}
-      <div class="min-w-0 flex-1">
-        <h2 id={titleId} class="text-base font-semibold">{title}</h2>
-        {#if description}<p class="mt-0.5 text-[13px] text-(--text-muted)">
-            {description}
-          </p>{/if}
+    {#if head}
+      {@render head({ titleId, close: () => el.close() })}
+    {:else}
+      <div class="flex items-start gap-3.5 px-5.5 pt-5 pb-1.5">
+        {@render header?.()}
+        <div class="min-w-0 flex-1">
+          <h2 id={titleId} class="text-base font-semibold">{title}</h2>
+          {#if description}<p class="mt-0.5 text-[13px] text-(--text-muted)">
+              {description}
+            </p>{/if}
+        </div>
+        <button
+          aria-label="Close"
+          onclick={() => el.close()}
+          class="grid size-8 place-items-center rounded-md text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+        >
+          <Icon name="close" class="size-3.5" />
+        </button>
       </div>
-      <button
-        aria-label="Close"
-        onclick={() => el.close()}
-        class="grid size-8 place-items-center rounded-md text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
-      >
-        <Icon name="close" class="size-3.5" />
-      </button>
-    </div>
+    {/if}
 
     {#if onsubmit}
       <form {onsubmit} class="flex min-h-0 flex-col">{@render body()}</form>
