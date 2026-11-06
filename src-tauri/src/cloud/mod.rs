@@ -278,17 +278,20 @@ impl Cloud {
     ) -> AppResult<(String, String)> {
         self.check_reachable().await?;
         let verifier = URL_SAFE_NO_PAD.encode(rand::random::<[u8; 32]>());
+        // Comes back with the code: without it, any page could end the wait by calling the listener.
+        let state = URL_SAFE_NO_PAD.encode(rand::random::<[u8; 16]>());
         let listener = loopback::bind().await?;
         let mut url = self.url("/auth/discord/start")?;
         url.query_pairs_mut()
             .append_pair("port", &listener.port.to_string())
-            .append_pair("challenge", &pkce::challenge(&verifier));
+            .append_pair("challenge", &pkce::challenge(&verifier))
+            .append_pair("state", &state);
 
         let cancelled = self.new_attempt();
         open(url.as_str())?;
         let expect = loopback::Expect {
             path: "/callback",
-            state: None,
+            state: Some(&state),
         };
         let code = tokio::select! {
             code = listener.wait_for_code(expect) => code,

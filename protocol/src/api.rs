@@ -1033,6 +1033,10 @@ pub struct DiscordStart {
     pub port: u16,
     /// PKCE S256 challenge of the verifier the app keeps.
     pub challenge: String,
+    /// The app's own random value, sent back with the code (`?code=…&state=…`), so the app
+    /// can tell the browser came from the sign-in it started. Older apps send none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<String>,
 }
 
 /// The one-time code from the loopback redirect, with the PKCE verifier it was started with.
