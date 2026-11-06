@@ -218,7 +218,7 @@ pub async fn revert<R: Runtime>(state: &AppState, app: &AppHandle<R>, id: &str) 
     let revision = row.synced_revision.unwrap_or(0).max(0) as u32;
     let manifest = row
         .synced_manifest()
-        .ok_or_else(|| AppError::conflict("Nothing to revert to yet"))?;
+        .ok_or_else(|| AppError::conflict("Nothing to go back to yet"))?;
     jobs::run(state, app, id, |progress| async move {
         let req = apply::Request {
             revision,

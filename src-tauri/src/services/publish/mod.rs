@@ -314,7 +314,7 @@ async fn publish_now<R: Runtime>(
         .to_owned();
     if !matches!(row.role(), Some(MemberRole::Owner | MemberRole::Editor)) {
         return Err(AppError::forbidden(
-            "Only the owner and editors can publish",
+            "Only the owner and editors can send updates",
         ));
     }
     let base = row
@@ -358,7 +358,7 @@ async fn publish_now<R: Runtime>(
     };
     let m = build(&row, &rows, &modes, description, configs, icon)?;
     if row.synced_manifest_hash.as_deref() == Some(manifest::hash(&m).as_str()) {
-        return Err(AppError::invalid_input("Nothing to publish"));
+        return Err(AppError::invalid_input("Nothing new to send"));
     }
     work.report(WorkStage::Saving, 0, 0);
     let body = CreateRevision {

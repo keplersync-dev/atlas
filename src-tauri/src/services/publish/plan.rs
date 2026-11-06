@@ -81,7 +81,7 @@ pub async fn prepare<R: Runtime>(
     let row = db::instances::require(&state.db, id).await?;
     if row.shared_instance_id.is_some() && row.role() == Some(MemberRole::Viewer) {
         return Err(AppError::forbidden(
-            "Only the owner and editors can publish",
+            "Only the owner and editors can send updates",
         ));
     }
     // Read the folder now, after any scan already running: a just-tracked instance may

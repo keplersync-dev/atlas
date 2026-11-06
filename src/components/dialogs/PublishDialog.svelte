@@ -81,7 +81,7 @@
       );
       onclose();
     } catch (err) {
-      // e.g. "Someone published a newer version. Update first."
+      // e.g. "Someone sent a newer update. Update first."
       error = (err as Error).message;
     } finally {
       submitting = false;

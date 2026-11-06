@@ -368,7 +368,7 @@ fn describe(a: &ActivityItem, me: Option<&str>) -> (String, String) {
         .as_ref()
         .map(|u| u.display_name.as_str())
         .unwrap_or("Someone");
-    let what = a.shared_instance_name.as_deref().unwrap_or("an instance");
+    let what = a.shared_instance_name.as_deref().unwrap_or("a pack");
     let group = a.group_name.as_deref().unwrap_or("a group");
     let (title, body) = match a.kind {
         ActivityType::FriendRequest => ("Friend request", format!("{who} wants to be friends")),

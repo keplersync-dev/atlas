@@ -219,10 +219,13 @@
     {#if preview.unverified.length}
       <div class="mb-5.5 rounded-lg bg-(--warn)/10 px-4 py-3 text-[13px]">
         <b class="font-semibold text-(--warn)"
-          >Unverified: not from Modrinth or CurseForge.</b
+          >Not from Modrinth or CurseForge.</b
         >
-        {preview.unverified.join(", ")} were uploaded by a member. Only update if
-        you trust whoever shared them.
+        {preview.unverified.join(", ")}
+        {preview.unverified.length === 1 ? "was" : "were"} uploaded by a member. Only
+        update if you trust whoever shared {preview.unverified.length === 1
+          ? "it"
+          : "them"}.
       </div>
     {/if}
 
