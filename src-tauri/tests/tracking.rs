@@ -14,6 +14,14 @@ fn by_name<'a>(list: &'a Value, name: &str) -> &'a Value {
         .unwrap_or_else(|| panic!("no {name} in {list}"))
 }
 
+/// Let the first read of a just-tracked instance finish (a rescan waits for it), then stop
+/// watching its folder: Windows won't move a folder Atlas is reading or watching, so these
+/// moves happen as if Atlas were closed.
+fn settle(app: &TestApp, id: &str) {
+    app.ok("rescan_instance", json!({ "id": id }));
+    app.state().watcher.unwatch(id);
+}
+
 #[test]
 fn launchers_can_be_added_once_and_only_where_they_exist() {
     let app = TestApp::new();
@@ -267,10 +275,8 @@ fn instances_follow_their_launcher_to_another_drive() {
         .unwrap()
         .to_string();
 
-    // Windows won't move a folder Atlas is watching: these moves happen with Atlas closed.
-    let state = app.state();
     // The launcher's instances folder moved in its settings.
-    state.watcher.unwatch(&id);
+    settle(&app, &id);
     std::fs::rename(prism.join("instances"), b.0.join("instances")).unwrap();
     std::fs::write(
         prism.join("prismlauncher.cfg"),
@@ -286,7 +292,7 @@ fn instances_follow_their_launcher_to_another_drive() {
 
     // The whole launcher moved, and was added again from its new place.
     let again = c.0.join("PrismLauncher");
-    state.watcher.unwatch(&id);
+    settle(&app, &id);
     std::fs::rename(&prism, &again).unwrap();
     std::fs::rename(b.0.join("instances"), again.join("instances")).unwrap();
     std::fs::write(again.join("prismlauncher.cfg"), "InstanceDir=instances\n").unwrap();
@@ -364,7 +370,7 @@ fn modrinth_instances_follow_the_apps_folder_to_another_drive() {
         assert_eq!(added[0]["gameDir"], clean(&root.join("profiles/Aged")));
 
         // The app moves its folder to F: and keeps only its database behind.
-        app.state().watcher.unwatch(&id);
+        settle(&app, &id);
         std::fs::remove_dir_all(&root).unwrap();
         modrinth_app(&root, &f.0.join("ModrinthApp"));
         if old_atlas_opened_in_between {
@@ -444,7 +450,7 @@ fn minecraft_launcher_installations_follow_a_new_game_directory() {
     let id = by_name(&added, "SMP")["id"].as_str().unwrap().to_string();
 
     // The installation's game directory is pointed at another drive.
-    app.state().watcher.unwatch(&id);
+    settle(&app, &id);
     std::fs::remove_dir_all(&old).unwrap();
     official_launcher(
         &root,
@@ -463,7 +469,7 @@ fn minecraft_launcher_installations_follow_a_new_game_directory() {
     );
 
     // Two installations by that name: Atlas can't tell which, so it doesn't guess.
-    app.state().watcher.unwatch(&id);
+    settle(&app, &id);
     std::fs::remove_dir_all(&new).unwrap();
     let (x, y) = (f.0.join("smp-x"), f.0.join("smp-y"));
     official_launcher(&root, &[("a1", "SMP", &x), ("c3", "SMP", &y)]);
@@ -471,4 +477,61 @@ fn minecraft_launcher_installations_follow_a_new_game_directory() {
         app.ok("rescan_instance", json!({ "id": id }))["status"],
         "missing"
     );
+}
+
+#[test]
+fn an_instance_whose_launcher_was_dropped_is_linked_again_where_it_is() {
+    // What happened on a real PC: the Modrinth App's folder moved, then Atlas 0.5.0 (which
+    // didn't know that) dropped the app, and 0.6.0 found it again. The instance's folder
+    // never moved after that, yet it lost its launcher, and with it its modpack.
+    let app = TestApp::new();
+    let (c, f) = (TempDir::new(), TempDir::new());
+    let root = c.0.join("ModrinthApp");
+    modrinth_app(&root, &f.0.join("ModrinthApp"));
+    app.ok(
+        "add_launcher",
+        json!({ "kind": "modrinth", "rootPath": root }),
+    );
+    let added = app.ok(
+        "track_instances",
+        json!({ "refs": [{ "launcherKind": "modrinth", "launcherInstanceId": "Aged" }] }),
+    );
+    let id = added[0]["id"].as_str().unwrap().to_string();
+    let db = app.state().db;
+    let launcher_of = || -> Option<String> {
+        tauri::async_runtime::block_on(
+            sqlx::query_scalar("SELECT launcher_id FROM instance WHERE id = ?")
+                .bind(&id)
+                .fetch_one(&db),
+        )
+        .unwrap()
+    };
+    assert!(launcher_of().is_some());
+
+    tauri::async_runtime::block_on(sqlx::query("DELETE FROM launcher").execute(&db)).unwrap();
+    assert_eq!(launcher_of(), None, "the old Atlas dropped it");
+    app.ok(
+        "add_launcher",
+        json!({ "kind": "modrinth", "rootPath": root }),
+    );
+    let again = app.ok("rescan_instance", json!({ "id": id }));
+    assert_eq!(again["status"], "ready");
+    assert_eq!(
+        again["gameDir"],
+        clean(&f.0.join("ModrinthApp/profiles/Aged"))
+    );
+    assert!(launcher_of().is_some(), "linked to the launcher again");
+
+    // Another install of that launcher with an instance by that id, in another folder:
+    // not this one.
+    tauri::async_runtime::block_on(sqlx::query("DELETE FROM launcher").execute(&db)).unwrap();
+    let (c2, f2) = (TempDir::new(), TempDir::new());
+    let other = c2.0.join("ModrinthApp");
+    modrinth_app(&other, &f2.0.join("ModrinthApp"));
+    app.ok(
+        "add_launcher",
+        json!({ "kind": "modrinth", "rootPath": other }),
+    );
+    app.ok("rescan_instance", json!({ "id": id }));
+    assert_eq!(launcher_of(), None, "never a namesake elsewhere");
 }

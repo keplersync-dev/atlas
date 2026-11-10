@@ -456,17 +456,19 @@ async fn refresh_metadata(
         }
         _ => None,
     };
-    // The launcher itself moved (to another drive, say) and was added again from the new
-    // place: the instance is there under the same id. Only then, so an instance deleted
-    // in one install never jumps to a namesake in another.
+    // Its launcher was dropped (it moved, or an older Atlas didn't recognise it) and found
+    // again: the instance is there under the same id. Taken when its folder is gone, or
+    // when the launcher lists this very folder, so an instance never jumps to a namesake
+    // in another install.
     let found = match (found, &before.launcher_instance_id) {
         (None, Some(lid))
-            if before.kind() != LauncherKind::Folder
-                && !Path::new(&before.game_dir).is_dir()
-                && launcher_gone(state, &before).await? =>
+            if before.kind() != LauncherKind::Folder && launcher_gone(state, &before).await? =>
         {
             match launcher_service::find_instance(state, before.kind(), lid).await? {
-                Some((launcher, f)) => {
+                Some((launcher, f))
+                    if !Path::new(&before.game_dir).is_dir()
+                        || clean_path(&f.game_dir).eq_ignore_ascii_case(&before.game_dir) =>
+                {
                     db::instances::move_to_launcher(
                         &state.db,
                         id,
@@ -477,7 +479,7 @@ async fn refresh_metadata(
                     .await?;
                     Some(f)
                 }
-                None => None,
+                _ => None,
             }
         }
         (found, _) => found,

@@ -29,6 +29,14 @@ fn curseforge(list: &Value) -> Vec<String> {
         .collect()
 }
 
+/// Let the first read of a just-tracked instance finish (a rescan waits for it), then stop
+/// watching its folder: Windows won't move a folder Atlas is reading or watching, so these
+/// moves happen as if Atlas were closed.
+fn settle(app: &TestApp, id: &str) {
+    app.ok("rescan_instance", json!({ "id": id }));
+    app.state().watcher.unwatch(id);
+}
+
 #[test]
 fn curseforge_moved_in_its_settings_is_found_in_the_new_folder() {
     let pc = TempDir::new();
@@ -55,7 +63,7 @@ fn curseforge_moved_in_its_settings_is_found_in_the_new_folder() {
     let id = added[0]["id"].as_str().unwrap().to_string();
 
     // CurseForge moves its folder to F: and leaves the old one with an empty Instances/.
-    app.state().watcher.unwatch(&id);
+    settle(&app, &id);
     let new = f.join("curseforge");
     copy_dir(&old, &new);
     std::fs::remove_dir_all(old.join("Instances")).unwrap();
