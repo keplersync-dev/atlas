@@ -7,6 +7,7 @@
   import { social } from "$lib/stores";
   import type { Backup, InstanceDetail, RevisionChanges } from "$lib/types";
   import Button from "../Button.svelte";
+  import Who from "../Who.svelte";
 
   let {
     instance,
@@ -123,9 +124,8 @@
                 (rev.revision === 1 ? "First version" : "Update")}</b
             >
             <span class="ml-2 text-[13px] text-(--text-faint)">
-              {rev.createdBy?.displayName ?? "Deleted user"} · {timeAgo(
-                rev.createdAt,
-              )}{current ? " · you have this" : ""}
+              {#if rev.createdBy}<Who user={rev.createdBy} />{:else}Deleted user{/if}
+              · {timeAgo(rev.createdAt)}{current ? " · you have this" : ""}
             </span>
             <div
               class="mt-1.5 flex flex-wrap gap-1.5 text-[13px] text-(--text-muted)"

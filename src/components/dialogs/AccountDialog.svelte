@@ -3,15 +3,16 @@
   import { api } from "$lib/api";
   import { confirmAction } from "$lib/confirm.svelte";
   import { openDialog } from "$lib/dialogs.svelte";
-  import { fileSize, formatCode } from "$lib/format";
+  import { copier } from "$lib/clipboard.svelte";
+  import { fileSize } from "$lib/format";
   import { isMac } from "$lib/platform";
   import { resource } from "$lib/resource.svelte";
   import { social, updates } from "$lib/stores";
-  import type { AppSettings, AuthProvider } from "$lib/types";
+  import type { AppSettings } from "$lib/types";
   import Button from "../Button.svelte";
   import Dialog from "../Dialog.svelte";
   import Head from "../Head.svelte";
-  import ProviderIcon from "../ProviderIcon.svelte";
+  import PersonName from "../PersonName.svelte";
   import SignInButtons from "../SignInButtons.svelte";
   import Switch from "../Switch.svelte";
 
@@ -24,13 +25,6 @@
   // (new session object) can't wipe half-typed edits.
   const myId = $derived(me?.id);
   let displayName = $derived(myId ? untrack(() => me!.displayName) : "");
-  let username = $derived(myId ? untrack(() => me!.username) : "");
-
-  const usernameError = $derived(
-    /^[a-z0-9_]{3,16}$/.test(username)
-      ? null
-      : "3–16 characters: lowercase letters, numbers or _",
-  );
   const displayNameError = $derived(
     displayName.trim().length === 0
       ? "Required"
@@ -38,18 +32,9 @@
         ? "32 characters at most"
         : null,
   );
-  // Rename rate limit: the server says when the next change is allowed.
-  const usernameLockedUntil = $derived(
-    me?.usernameChangeAvailableAt &&
-      new Date(me.usernameChangeAvailableAt) > new Date()
-      ? new Date(me.usernameChangeAvailableAt)
-      : null,
-  );
   // "Dirty" = differs from what's saved. Save is only enabled when there's something to save.
-  const dirty = $derived(
-    !!me && (displayName.trim() !== me.displayName || username !== me.username),
-  );
-  const canSave = $derived(dirty && !usernameError && !displayNameError);
+  const dirty = $derived(!!me && displayName.trim() !== me.displayName);
+  const canSave = $derived(dirty && !displayNameError);
 
   let saving = $state(false);
   let profileMessage = $state<{ text: string; ok: boolean } | null>(null);
@@ -60,13 +45,7 @@
     saving = true;
     profileMessage = null;
     try {
-      // Only send what changed: a username change is rate-limited on the server.
-      await social.updateProfile({
-        ...(displayName.trim() !== me.displayName
-          ? { displayName: displayName.trim() }
-          : {}),
-        ...(username !== me.username ? { username } : {}),
-      });
+      await social.updateProfile({ displayName: displayName.trim() });
       profileMessage = { text: "Saved", ok: true };
     } catch (err) {
       profileMessage = { text: (err as Error).message, ok: false };
@@ -148,61 +127,13 @@
     try {
       await action();
     } catch (err) {
-      // Linking again while the browser waits starts over and rejects the first try.
       if (mine === attempt) error = { key, text: (err as Error).message };
     } finally {
       if (mine === attempt) busy = null;
     }
   }
 
-  const PROVIDERS: { id: AuthProvider; label: string }[] = [
-    { id: "minecraft", label: "Minecraft" },
-    { id: "discord", label: "Discord" },
-  ];
-
-  /** The two pictures to choose from, as `Head` draws them. */
-  const pictures = $derived(
-    me
-      ? [
-          {
-            id: "minecraft" as const,
-            label: "Minecraft skin",
-            user: {
-              displayName: me.displayName,
-              skinUrl: me.minecraftSkinUrl,
-              avatarUrl: null,
-            },
-            available: !!me.minecraftSkinUrl,
-            missing: me.identities.some((i) => i.provider === "minecraft")
-              ? "You're using a default skin"
-              : "Link Minecraft below",
-          },
-          {
-            id: "discord" as const,
-            label: "Discord picture",
-            user: {
-              displayName: me.displayName,
-              skinUrl: null,
-              avatarUrl: me.discordAvatarUrl,
-            },
-            available: !!me.discordAvatarUrl,
-            missing: me.identities.some((i) => i.provider === "discord")
-              ? "Your Discord account has no picture"
-              : "Link Discord below",
-          },
-        ]
-      : [],
-  );
-
-  /** Waiting for the browser to link an account: another Link starts over with it. */
-  const linking = $derived(PROVIDERS.some((p) => p.id === busy));
-
-  function cancelLink() {
-    attempt++;
-    busy = null;
-    error = null;
-    api.cancelSignIn().catch(() => {});
-  }
+  const clip = copier();
 
   function signOut() {
     act("signout", async () => {
@@ -357,28 +288,21 @@
           {#if displayNameError && displayName !== me.displayName}<span
               class="mt-1 block text-(--danger)">{displayNameError}</span
             >{/if}
+          <span class="mt-1 block text-(--text-faint)"
+            >What friends see. Change it any time.</span
+          >
         </label>
-        <label class="text-[13px] text-(--text-muted)">
-          Username
-          <input
-            bind:value={username}
-            oninput={() => (username = username.toLowerCase())}
-            maxlength="16"
-            disabled={!!usernameLockedUntil}
-            class="mt-1 h-8.5 w-full rounded-md border border-(--line-2) bg-(--bg) px-3 text-[13px] text-(--text-primary) outline-none focus:border-(--accent) disabled:opacity-50"
-          />
-          {#if usernameLockedUntil}
-            <span class="mt-1 block text-(--text-faint)"
-              >You can change it again on {usernameLockedUntil.toLocaleDateString()}.</span
-            >
-          {:else if usernameError && username !== me.username}
-            <span class="mt-1 block text-(--danger)">{usernameError}</span>
-          {:else}
-            <span class="mt-1 block text-(--text-faint)"
-              >Can be changed once every 30 days.</span
-            >
-          {/if}
-        </label>
+        <div class="text-[13px] text-(--text-muted)">
+          Minecraft name
+          <div
+            class="mt-1 flex h-8.5 items-center rounded-md border border-dashed border-(--line-2) px-3 text-[13px] text-(--text-muted) select-text"
+          >
+            @{me.username}
+          </div>
+          <span class="mt-1 block text-(--text-faint)"
+            >Friends add you with this. Rename in Minecraft to change it.</span
+          >
+        </div>
         <Button
           type="submit"
           size="sm"
@@ -397,53 +321,6 @@
           >
         {/if}
       </form>
-
-      <!-- ── Picture: saves the moment you pick one ── -->
-      <div class="px-4 py-3.5">
-        <b class="mb-2 block font-medium">Picture</b>
-        <div
-          class="grid grid-cols-2 gap-2"
-          role="radiogroup"
-          aria-label="Picture"
-        >
-          {#each pictures as pic (pic.id)}
-            {@const chosen = me.avatarSource === pic.id}
-            <button
-              type="button"
-              role="radio"
-              aria-checked={chosen}
-              disabled={!pic.available || busy === "picture"}
-              onclick={() =>
-                act("picture", () =>
-                  social.updateProfile({ avatarSource: pic.id }),
-                )}
-              class="flex items-center gap-3 rounded-md border px-3 py-2.5 text-left transition-colors disabled:cursor-default
-            {chosen && pic.available
-                ? 'border-(--accent) bg-(--accent)/8'
-                : 'border-(--line-2) enabled:hover:bg-(--bg-hover)'}"
-            >
-              {#if pic.available}
-                <Head user={pic.user} size={32} />
-              {:else}
-                <ProviderIcon provider={pic.id} class="size-8 opacity-40" />
-              {/if}
-              <span class="min-w-0">
-                <b class="block font-medium {pic.available ? '' : 'opacity-60'}"
-                  >{pic.label}</b
-                >
-                <small class="block text-[13px] text-(--text-faint)"
-                  >{pic.available
-                    ? chosen
-                      ? "Showing now"
-                      : "Use this one"
-                    : pic.missing}</small
-                >
-              </span>
-            </button>
-          {/each}
-        </div>
-        {@render failed("picture")}
-      </div>
     </div>
 
     <!-- ── Privacy: saves the moment you flip it ── -->
@@ -493,14 +370,11 @@
               {#each blocked.data as u (u.id)}
                 <div class="flex items-center gap-2.5">
                   <Head user={u} size={24} ring="var(--bg)" />
-                  <span class="min-w-0 flex-1 truncate"
-                    >{u.displayName}
-                    <span class="text-(--text-faint)">@{u.username}</span></span
-                  >
+                  <span class="min-w-0 flex-1"><PersonName user={u} /></span>
                   <Button
                     size="sm"
                     disabled={busy !== null}
-                    aria-label="Unblock {u.displayName}"
+                    aria-label="Unblock {u.displayName} (@{u.username})"
                     onclick={() =>
                       act("unblock", async () => {
                         await api.unblockUser(u.id);
@@ -526,83 +400,37 @@
 
     {@render thisPc()}
 
-    <!-- ── Sign-in methods ── -->
-    {@render section("Sign in with")}
-    <div class={CARD}>
-      {#each PROVIDERS as p (p.id)}
-        {@const linked = me.identities.find((i) => i.provider === p.id)}
-        <div class="{ROW} items-center!">
-          <ProviderIcon provider={p.id} />
-          <div class="min-w-0 flex-1">
-            <b class="block font-medium">{p.label}</b>
-            <small class="text-[13px] text-(--text-faint)"
-              >{linked ? linked.username : "Not linked"}</small
-            >
-          </div>
-          {#if linked}
-            <Button
-              size="sm"
-              variant="ghost"
-              disabled={busy !== null || me.identities.length === 1}
-              aria-label="Unlink {p.label}"
-              title={me.identities.length === 1
-                ? "You need at least one way to sign in"
-                : undefined}
-              onclick={async () => {
-                const ok = await confirmAction({
-                  title: `Unlink ${p.label}?`,
-                  message: `You won't be able to sign in with ${p.label} anymore. You can link it again later.`,
-                  confirmLabel: "Unlink",
-                  danger: true,
-                });
-                if (ok) act(p.id, () => social.unlinkIdentity(p.id));
-              }}>Unlink</Button
-            >
-          {:else}
-            {#if busy === p.id}
-              <Button size="sm" variant="ghost" onclick={cancelLink}
-                >Cancel</Button
-              >
-            {/if}
-            <Button
-              size="sm"
-              disabled={busy !== null && !linking}
-              onclick={() => act(p.id, () => social.linkIdentity(p.id))}
-              >{busy === p.id ? "Start again" : "Link"}</Button
-            >
-          {/if}
-        </div>
-        {@render failed(p.id)}
-      {/each}
-    </div>
-
-    <!-- ── Friend code and storage ── -->
+    <!-- ── Friend link and storage ── -->
     {@render section("Account")}
     <div class={CARD}>
       <div class="{ROW} items-center!">
         <div class="min-w-0 flex-1">
-          <b class="block font-medium">Friend code</b>
-          <span class="font-mono font-semibold tracking-[2px] select-text"
-            >{formatCode(me.friendCode)}</span
-          >
+          <b class="block font-medium">Friend link</b>
           <small class="block text-[13px] text-(--text-faint)"
-            >Reset it if your code was posted somewhere public.</small
+            >{clip.failed === "link"
+              ? `Couldn't copy. Your link: ${me.friendLink}`
+              : "Anyone with it can send you a friend request. Reset it if it was posted somewhere public."}</small
           >
           {@render failed("code")}
         </div>
+        <Button
+          size="sm"
+          icon={clip.copied === "link" ? "check" : undefined}
+          onclick={() => clip.copy(me.friendLink, "link")}>Copy link</Button
+        >
         <Button
           size="sm"
           variant="ghost"
           disabled={busy !== null}
           onclick={async () => {
             const ok = await confirmAction({
-              title: "Reset your friend code?",
+              title: "Reset your friend link?",
               message:
-                "Your old code and link stop working right away. Friends you already have stay friends.",
-              confirmLabel: "Reset code",
+                "Your old link stops working right away. Friends you already have stay friends.",
+              confirmLabel: "Reset link",
             });
             if (ok) act("code", () => social.resetFriendCode());
-          }}>Reset code</Button
+          }}>Reset link</Button
         >
       </div>
       <div class="px-4 py-3.5">

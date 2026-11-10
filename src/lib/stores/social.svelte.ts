@@ -1,13 +1,13 @@
 import { api } from "$lib/api";
 import type {
   ActivityItem,
-  AuthProvider,
   Friend,
   FriendRequest,
   Group,
   GroupInvitePreview,
   Id,
   Me,
+  SendFriendRequest,
   Session,
   SharedInstance,
   UpdateProfileInput,
@@ -26,7 +26,7 @@ class SocialStore {
   activity = $state<ActivityItem[]>([]);
   loaded = $state(false);
   /** The browser sign-in in progress, and why the last one failed. */
-  signingIn = $state<AuthProvider | null>(null);
+  signingIn = $state(false);
   signInError = $state<string | null>(null);
   #signInAttempt = 0;
   #version = 0;
@@ -92,26 +92,26 @@ class SocialStore {
 
   /** Opens the browser. Calling it again while waiting starts over. Failures go in
    * `signInError`. */
-  async signIn(provider: AuthProvider) {
+  async signIn() {
     const attempt = ++this.#signInAttempt;
-    this.signingIn = provider;
+    this.signingIn = true;
     this.signInError = null;
     try {
-      await api.signIn(provider);
+      await api.signIn();
       await this.load();
     } catch (err) {
       // Starting over rejects the earlier call; only the latest one counts.
       if (attempt === this.#signInAttempt)
         this.signInError = (err as Error).message;
     } finally {
-      if (attempt === this.#signInAttempt) this.signingIn = null;
+      if (attempt === this.#signInAttempt) this.signingIn = false;
     }
   }
 
   /** Stops waiting for the browser, as if sign-in was never started. */
   cancelSignIn() {
     this.#signInAttempt++;
-    this.signingIn = null;
+    this.signingIn = false;
     this.signInError = null;
     api.cancelSignIn().catch(() => {});
   }
@@ -126,14 +126,6 @@ class SocialStore {
 
   async updateProfile(patch: UpdateProfileInput) {
     this.setMe(await api.updateProfile(patch));
-  }
-
-  async linkIdentity(provider: AuthProvider) {
-    this.setMe(await api.linkIdentity(provider));
-  }
-
-  async unlinkIdentity(provider: AuthProvider) {
-    this.setMe(await api.unlinkIdentity(provider));
   }
 
   async resetFriendCode() {
@@ -166,9 +158,9 @@ class SocialStore {
 
   // ── Friends ──
 
-  async sendFriendRequest(code: string) {
-    const request = await api.sendFriendRequest(code);
-    // Using the code of someone who already asked you makes you friends straight away.
+  async sendFriendRequest(who: SendFriendRequest) {
+    const request = await api.sendFriendRequest(who);
+    // Asking someone who already asked you makes you friends straight away.
     await this.load();
     return request;
   }

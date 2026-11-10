@@ -9,7 +9,6 @@ import type {
   NewReport,
   ReportReason,
   AtlasEvent,
-  AuthProvider,
   Backup,
   CreateGroupInvite,
   DetectedInstance,
@@ -30,6 +29,7 @@ import type {
   PublicUser,
   PublishInput,
   PublishPlan,
+  SendFriendRequest,
   Session,
   ShareInstanceInput,
   ShareMode,
@@ -53,17 +53,11 @@ import type {
 export interface AtlasApi {
   // ── Session & account ────────────────────────────────────────────────
   getSession(): Promise<Session>;
-  /**
-   * minecraft: one-time Microsoft login in the browser, then the Mojang ownership check. Atlas doesn't keep the token.
-   * discord:   opens the browser for Discord OAuth and waits for the redirect.
-   */
-  signIn(provider: AuthProvider): Promise<Session>;
-  /** Stops waiting for the browser; the pending signIn or linkIdentity rejects. */
+  /** One-time Microsoft login in the browser, then the Mojang ownership check. Atlas doesn't keep the token. */
+  signIn(): Promise<Session>;
+  /** Stops waiting for the browser; the pending signIn rejects. */
   cancelSignIn(): Promise<void>;
   signOut(): Promise<void>;
-  linkIdentity(provider: AuthProvider): Promise<Me>;
-  /** Fails with "conflict" if it's the last sign-in method. */
-  unlinkIdentity(provider: AuthProvider): Promise<Me>;
   updateProfile(patch: UpdateProfileInput): Promise<Me>;
   resetFriendCode(): Promise<Me>;
   deleteAccount(): Promise<void>;
@@ -197,9 +191,9 @@ export interface AtlasApi {
   // ── Friends ──────────────────────────────────────────────────────────
   listFriends(): Promise<Friend[]>;
   listFriendRequests(): Promise<FriendRequest[]>;
-  /** Who a friend code belongs to, shown before sending the request. */
-  previewFriendCode(code: string): Promise<PublicUser>;
-  sendFriendRequest(code: string): Promise<FriendRequest>;
+  /** Who has a Minecraft name, or a friend link's code, shown before sending the request. */
+  previewFriend(who: SendFriendRequest): Promise<PublicUser>;
+  sendFriendRequest(who: SendFriendRequest): Promise<FriendRequest>;
   /** Ask someone you share a group with, no code needed. */
   sendFriendRequestTo(userId: Id): Promise<FriendRequest>;
   respondToFriendRequest(userId: Id, accept: boolean): Promise<void>;

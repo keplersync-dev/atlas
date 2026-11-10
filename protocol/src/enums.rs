@@ -113,15 +113,9 @@ wire_enum!(
         Playing
     }
 );
-// Where someone's picture comes from: their Minecraft skin's face or their Discord avatar.
 wire_enum!(
     #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-    AvatarSource { Minecraft, Discord }
-);
-
-wire_enum!(
-    #[cfg_attr(feature = "ts", derive(ts_rs::TS))]
-    AuthProvider { Minecraft, Discord }
+    AuthProvider { Minecraft }
 );
 
 wire_enum!(
@@ -203,7 +197,8 @@ mod tests {
             to_wire(ActivityType::InstanceSharedToGroup),
             "instance_shared_to_group"
         );
-        assert_eq!(from_wire("discord"), Some(AuthProvider::Discord));
+        assert_eq!(from_wire("minecraft"), Some(AuthProvider::Minecraft));
+        assert_eq!(from_wire::<AuthProvider>("discord"), None);
         assert_eq!(from_wire::<AuthProvider>("github"), None);
     }
 }

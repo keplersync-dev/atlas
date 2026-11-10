@@ -86,7 +86,17 @@ pub enum ServerMessage {
     /// The host of a synced world is handing it to `to_id`: they take over, and everyone else
     /// joins them once they're hosting.
     #[serde(rename = "world.handoff", rename_all = "camelCase")]
-    WorldHandoff { world_id: Id, from_id: Id, to_id: Id },
+    WorldHandoff {
+        world_id: Id,
+        from_id: Id,
+        to_id: Id,
+    },
+    /// A member of a synced world whose download is slow asks you to host it, so they can join you.
+    #[serde(rename = "host.requested", rename_all = "camelCase")]
+    HostRequested { world_id: Id, from_id: Id },
+    /// The friend you asked to host a synced world can't right now.
+    #[serde(rename = "host.declined", rename_all = "camelCase")]
+    HostDeclined { world_id: Id, by_id: Id },
     /// To the host of a game: the world's owner removed `user_id` from it. Kick them.
     #[serde(rename = "play.kick", rename_all = "camelCase")]
     PlayKick { session_id: Id, user_id: Id },

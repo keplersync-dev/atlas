@@ -9,6 +9,7 @@
   import BlockArt from "../components/BlockArt.svelte";
   import Button from "../components/Button.svelte";
   import Head from "../components/Head.svelte";
+  import Who from "../components/Who.svelte";
   import Icon from "../components/Icon.svelte";
   import OptionalPicker from "../components/OptionalPicker.svelte";
   import ManualDownloads from "../components/instance/ManualDownloads.svelte";
@@ -166,9 +167,8 @@
         <div>
           <p>{latest.changelog ?? "No description."}</p>
           <small class="text-(--text-faint)"
-            >{latest.createdBy?.displayName ?? "Deleted user"} · {timeAgo(
-              latest.createdAt,
-            )}</small
+            >{#if latest.createdBy}<Who user={latest.createdBy} />{:else}Deleted
+              user{/if} · {timeAgo(latest.createdAt)}</small
           >
         </div>
       </div>

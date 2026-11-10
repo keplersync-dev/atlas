@@ -79,6 +79,7 @@
   import { go } from "$lib/nav.svelte";
   import { social } from "$lib/stores";
   import Head from "../Head.svelte";
+  import Who from "../Who.svelte";
   import Icon from "../Icon.svelte";
 
   // Recent events about shared instances, one per line.
@@ -124,7 +125,7 @@
 
 {#snippet sentence(a: ActivityItem)}
   {@const d = describe(a, social.session?.user?.id)}
-  {#if d.who}<b class="font-semibold">{d.who}</b>{/if}
+  {#if a.actor}<b class="font-semibold"><Who user={a.actor} /></b>{/if}
   {d.verb}
   <b class="font-semibold">{d.what}</b>{d.tail}
 {/snippet}

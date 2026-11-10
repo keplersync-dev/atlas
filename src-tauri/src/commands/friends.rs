@@ -1,7 +1,7 @@
 use reqwest::Method;
 use tauri::{AppHandle, Runtime, State};
 
-use crate::dto::{Friend, FriendRequest, Id, OpenedLink, PublicUser};
+use crate::dto::{Friend, FriendRequest, Id, OpenedLink, PublicUser, SendFriendRequest};
 use crate::error::AppResult;
 use crate::services::friends;
 use crate::state::AppState;
@@ -16,21 +16,22 @@ pub async fn list_friend_requests(state: State<'_, AppState>) -> AppResult<Vec<F
     friends::requests(&state).await
 }
 
+/// Who has this Minecraft name, or this friend link.
 #[tauri::command]
-pub async fn preview_friend_code(
+pub async fn preview_friend(
     state: State<'_, AppState>,
-    code: String,
+    who: SendFriendRequest,
 ) -> AppResult<PublicUser> {
-    friends::preview_code(&state, &code).await
+    friends::preview(&state, &who).await
 }
 
 #[tauri::command]
 pub async fn send_friend_request<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
-    code: String,
+    who: SendFriendRequest,
 ) -> AppResult<FriendRequest> {
-    friends::send_request(&state, &app, &code).await
+    friends::send_request(&state, &app, who).await
 }
 
 #[tauri::command]

@@ -1,6 +1,6 @@
 use tauri::{AppHandle, Runtime, State};
 
-use crate::dto::{AuthProvider, Id, Me, NewReport, ReportReason, Session, UpdateProfileInput};
+use crate::dto::{Id, Me, NewReport, ReportReason, Session, UpdateProfileInput};
 use crate::error::AppResult;
 use crate::services::session;
 use crate::state::AppState;
@@ -16,12 +16,11 @@ pub async fn get_session(state: State<'_, AppState>) -> AppResult<Session> {
 pub async fn sign_in<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,
-    provider: AuthProvider,
 ) -> AppResult<Session> {
-    session::sign_in(&state, &app, provider).await
+    session::sign_in(&state, &app).await
 }
 
-/// Stop waiting for the browser: the pending sign_in or link_identity fails.
+/// Stop waiting for the browser: the pending sign_in fails.
 #[tauri::command]
 pub fn cancel_sign_in(state: State<'_, AppState>) {
     state.cloud.cancel_sign_in();
@@ -30,20 +29,6 @@ pub fn cancel_sign_in(state: State<'_, AppState>) {
 #[tauri::command]
 pub async fn sign_out(state: State<'_, AppState>) -> AppResult<()> {
     state.cloud.sign_out().await
-}
-
-#[tauri::command]
-pub async fn link_identity<R: Runtime>(
-    app: AppHandle<R>,
-    state: State<'_, AppState>,
-    provider: AuthProvider,
-) -> AppResult<Me> {
-    session::link(&state, &app, provider).await
-}
-
-#[tauri::command]
-pub async fn unlink_identity(state: State<'_, AppState>, provider: AuthProvider) -> AppResult<Me> {
-    session::unlink(&state, provider).await
 }
 
 #[tauri::command]

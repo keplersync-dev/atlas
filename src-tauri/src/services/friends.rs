@@ -47,18 +47,40 @@ fn normalize(code: &str) -> AppResult<String> {
     })
 }
 
-pub async fn preview_code(state: &AppState, code: &str) -> AppResult<PublicUser> {
-    let path = format!("/friend-codes/{}", normalize(code)?);
+/// Minecraft names are letters, digits and underscores, so they need no escaping.
+fn name(name: &str) -> AppResult<String> {
+    let name = name.trim().trim_start_matches('@');
+    if name.is_empty()
+        || name.len() > 16
+        || !name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+    {
+        return Err(AppError::invalid_input(format!(
+            "No one called {name} is on KeplerSync. Check the spelling."
+        )));
+    }
+    Ok(name.to_owned())
+}
+
+pub async fn preview(state: &AppState, who: &SendFriendRequest) -> AppResult<PublicUser> {
+    let path = match (&who.name, &who.code) {
+        (Some(n), _) => format!("/friend-names/{}", name(n)?),
+        (None, Some(code)) => format!("/friend-codes/{}", normalize(code)?),
+        (None, None) => return Err(AppError::invalid_input("Type their Minecraft name")),
+    };
     state.cloud.call(Method::GET, &path, None::<&()>).await
 }
 
 pub async fn send_request<R: Runtime>(
     state: &AppState,
     app: &AppHandle<R>,
-    code: &str,
+    who: SendFriendRequest,
 ) -> AppResult<FriendRequest> {
     let body = SendFriendRequest {
-        code: normalize(code)?,
+        name: who.name.as_deref().map(name).transpose()?,
+        code: match who.name {
+            Some(_) => None,
+            None => who.code.as_deref().map(normalize).transpose()?,
+        },
     };
     let request = state
         .cloud

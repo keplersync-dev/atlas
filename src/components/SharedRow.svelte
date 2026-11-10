@@ -157,6 +157,7 @@
   import Button from "./Button.svelte";
   import ContentIcon from "./ContentIcon.svelte";
   import Icon from "./Icon.svelte";
+  import Who from "./Who.svelte";
 
   // One shared instance as a list row: name, plain status, and the one action that matters.
   // Used on the Shared page and in each friend's dropdown on the Friends page.
@@ -298,7 +299,7 @@
       <small class="block truncate text-[13px] text-(--text-faint)">
         {#if showOwner}
           <span class="text-(--text-muted)"
-            >{s.owner ? `From ${s.owner.displayName}` : "No owner"}</span
+            >{#if s.owner}From <Who user={s.owner} />{:else}No owner{/if}</span
           > ·
         {/if}
         {versionLabel(s.loader, s.minecraftVersion)} · {plural(

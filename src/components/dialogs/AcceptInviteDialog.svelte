@@ -27,6 +27,7 @@
   import ContentIcon from "../ContentIcon.svelte";
   import Dialog from "../Dialog.svelte";
   import Head from "../Head.svelte";
+  import Who from "../Who.svelte";
   import Icon from "../Icon.svelte";
   import IconPile from "../IconPile.svelte";
   import LauncherIcon from "../LauncherIcon.svelte";
@@ -521,7 +522,7 @@
               {#if sharer}
                 <Head user={sharer} size={20} />
                 <span
-                  >{sharer.displayName} shared it {timeAgo(
+                  ><Who user={sharer} /> shared it {timeAgo(
                     invite.invitedAt ?? invite.updatedAt,
                   )}</span
                 >
@@ -778,7 +779,10 @@
             {@render summary(
               "files",
               `${uploaded.length === 2 ? "See both files" : `See all ${uploaded.length} files`} from ${owner}'s PC`,
-              uploaded.map((f) => ({ src: f.icon, seed: f.fileName ?? f.name })),
+              uploaded.map((f) => ({
+                src: f.icon,
+                seed: f.fileName ?? f.name,
+              })),
               nameList(uploaded.map((f) => f.name)),
               uploadedBytes ? `${fileSize(uploadedBytes)} in all` : "",
               uploaded.length === 2 ? "See both" : `See all ${uploaded.length}`,

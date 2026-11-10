@@ -17,6 +17,7 @@
   import AttentionBadges from "../components/AttentionBadges.svelte";
   import FilterChips from "../components/FilterChips.svelte";
   import Head from "../components/Head.svelte";
+  import PersonName from "../components/PersonName.svelte";
   import Icon from "../components/Icon.svelte";
   import Menu from "../components/Menu.svelte";
   import SearchBox from "../components/SearchBox.svelte";
@@ -170,8 +171,7 @@
                     ring={open ? "var(--bg)" : "var(--bg-raise)"}
                   />
                   <span class="min-w-0 flex-1">
-                    <b class="font-medium">{f.user.displayName}</b>
-                    <span class="text-(--text-faint)">@{f.user.username}</span>
+                    <PersonName user={f.user} />
                     <small
                       class="block truncate text-[13px] {f.presence.state ===
                       'playing'
@@ -200,7 +200,7 @@
                   class="opacity-0 group-hover:opacity-100 focus-within:opacity-100"
                 >
                   <Menu
-                    label="More for {f.user.displayName}"
+                    label="More for {f.user.displayName} (@{f.user.username})"
                     items={personItems(f.user)}
                   />
                 </div>
@@ -217,8 +217,8 @@
         {:else}
           <p class="px-2 py-10 text-center text-[13px] text-(--text-muted)">
             {#if !social.friends.length}
-              No friends yet. Send your friend code to someone, or paste theirs
-              above.
+              No friends yet. Type a friend's Minecraft name above, or send
+              them your friend link.
             {:else if query.trim()}
               Nobody matches “{query.trim()}”.
             {:else if filter === "playing"}

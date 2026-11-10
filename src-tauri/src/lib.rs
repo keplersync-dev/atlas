@@ -36,8 +36,6 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::session::sign_in,
         commands::session::cancel_sign_in,
         commands::session::sign_out,
-        commands::session::link_identity,
-        commands::session::unlink_identity,
         commands::session::update_profile,
         commands::session::reset_friend_code,
         commands::session::delete_account,
@@ -103,7 +101,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         // Friends
         commands::friends::list_friends,
         commands::friends::list_friend_requests,
-        commands::friends::preview_friend_code,
+        commands::friends::preview_friend,
         commands::friends::send_friend_request,
         commands::friends::send_friend_request_to,
         commands::friends::respond_to_friend_request,

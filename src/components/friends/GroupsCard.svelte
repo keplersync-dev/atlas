@@ -9,6 +9,7 @@
   import type { Group, GroupMember } from "$lib/types";
   import Button from "../Button.svelte";
   import Head from "../Head.svelte";
+  import PersonName from "../PersonName.svelte";
   import Icon from "../Icon.svelte";
   import Menu, { type MenuItem } from "../Menu.svelte";
   import PeoplePicker from "../PeoplePicker.svelte";
@@ -121,7 +122,7 @@
 
   async function remove(g: Group, m: GroupMember) {
     const ok = await confirmAction({
-      title: `Remove ${m.user.displayName} from ${g.name}?`,
+      title: `Remove ${m.user.displayName} (@${m.user.username}) from ${g.name}?`,
       message:
         "Packs they got through the group stop updating for them. Their files stay on their PC.",
       confirmLabel: "Remove",
@@ -137,7 +138,7 @@
 
   async function handOver(g: Group, m: GroupMember) {
     const ok = await confirmAction({
-      title: `Make ${m.user.displayName} the owner of ${g.name}?`,
+      title: `Make ${m.user.displayName} (@${m.user.username}) the owner of ${g.name}?`,
       message:
         "They can then delete the group or remove anyone. You stay in it as a member, and can leave.",
       confirmLabel: "Make owner",
@@ -224,11 +225,11 @@
     ];
   }
 
-  /** Under a member's name: you, a friend's status, or their username. */
+  /** Under a member's name: you, a friend's status, or that they aren't a friend. */
   function about(m: GroupMember) {
     if (m.user.id === me) return "You";
     const p = social.friends.find((f) => f.user.id === m.user.id)?.presence;
-    return p ? presenceText(p) : `@${m.user.username}`;
+    return p ? presenceText(p) : "Not your friend";
   }
   const presenceOf = (m: GroupMember) =>
     social.friends.find((f) => f.user.id === m.user.id)?.presence.state ?? null;
@@ -370,7 +371,7 @@
               />
               <div class="min-w-0 flex-1">
                 <span class="flex min-w-0 items-center gap-2">
-                  <b class="truncate font-medium">{m.user.displayName}</b>
+                  <PersonName user={m.user} />
                   {#if m.role === "owner"}
                     <span
                       class="flex shrink-0 items-center gap-1 rounded-full bg-(--bg-raise-2) px-2 text-[13px] text-(--text-muted)"
@@ -388,7 +389,10 @@
               <div
                 class="opacity-0 group-hover:opacity-100 focus-within:opacity-100"
               >
-                <Menu {items} label="More for {m.user.displayName}" />
+                <Menu
+                  {items}
+                  label="More for {m.user.displayName} (@{m.user.username})"
+                />
               </div>
             </div>
           {/each}
@@ -421,7 +425,7 @@
               friends={social.friends}
               bind:friendIds={picked}
               friendTaken={(id) => taken(g, id)}
-              empty="No friends yet. Add one with their friend code above, or copy an invite link from ⋯."
+              empty="No friends yet. Add one by their Minecraft name above, or copy an invite link from ⋯."
             />
             {#if social.friends.length && !free.length}
               <p class="px-2 pt-2 text-[13px] text-(--text-muted)">

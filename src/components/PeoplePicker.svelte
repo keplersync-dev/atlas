@@ -3,6 +3,7 @@
   import { plural } from "$lib/format";
   import type { Friend, Group, Id } from "$lib/types";
   import Head from "./Head.svelte";
+  import PersonName from "./PersonName.svelte";
   import Icon from "./Icon.svelte";
   import SearchBox from "./SearchBox.svelte";
 
@@ -123,7 +124,9 @@
        dialog; past 14rem a long list scrolls here instead of stretching it. -->
   <div
     class="mt-2 overflow-y-auto rounded-lg bg-(--bg-raise) p-1"
-    style="height: min(14rem, {Math.max(friends.length, groups.length, 1) * 2.25 + 0.5}rem)"
+    style="height: min(14rem, {Math.max(friends.length, groups.length, 1) *
+      2.25 +
+      0.5}rem)"
     role="group"
     aria-label={showing === "people" ? "People" : "Groups"}
   >
@@ -151,13 +154,11 @@
             />
           {/if}
           <Head user={f.user} size={24} ring="var(--bg-raise)" />
-          <b class="min-w-0 truncate font-medium" title={f.user.displayName}
-            >{f.user.displayName}</b
-          >
-          <small
-            class="ml-auto shrink-0 truncate pl-2 text-[13px] text-(--text-faint)"
-            >{why ?? `@${f.user.username}`}</small
-          >
+          <span class="min-w-0 flex-1"><PersonName user={f.user} /></span>
+          {#if why}<small
+              class="shrink-0 truncate pl-2 text-[13px] text-(--text-faint)"
+              >{why}</small
+            >{/if}
         </label>
       {:else}
         <p class="px-2 py-6 text-center text-[13px] text-(--text-muted)">
@@ -241,10 +242,12 @@
           class="flex max-w-56 items-center gap-1.5 rounded-full bg-(--accent)/14 py-0.5 pr-1 pl-1 text-[13px] text-(--accent)"
         >
           <Head user={f.user} size={20} />
-          <span class="truncate">{f.user.displayName}</span>
+          <span class="truncate" title="@{f.user.username}"
+            >{f.user.displayName}</span
+          >
           <button
             type="button"
-            aria-label="Remove {f.user.displayName}"
+            aria-label="Remove {f.user.displayName} (@{f.user.username})"
             onclick={() =>
               (friendIds = friendIds.filter((id) => id !== f.user.id))}
             class="group/x -m-0.75 grid size-6 shrink-0 place-items-center"

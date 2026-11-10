@@ -255,6 +255,8 @@ impl Cloud {
             | ServerMessage::InviteReceived { .. }
             | ServerMessage::InvitesChanged {}
             | ServerMessage::WorldHandoff { .. }
+            | ServerMessage::HostRequested { .. }
+            | ServerMessage::HostDeclined { .. }
             | ServerMessage::PlayKick { .. }
             | ServerMessage::Unknown => return,
         };

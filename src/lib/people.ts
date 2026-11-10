@@ -38,7 +38,11 @@ export function personItems(user: PublicUser): MenuItem[] {
       onselect: () =>
         openDialog({
           kind: "report",
-          about: { kind: "user", id: user.id, name: user.displayName },
+          about: {
+            kind: "user",
+            id: user.id,
+            name: `${user.displayName} (@${user.username})`,
+          },
         }),
     },
     "divider",
@@ -77,14 +81,14 @@ async function unfriend(user: PublicUser, block: boolean) {
   const ok = await confirmAction(
     block
       ? {
-          title: `Block ${name}?`,
+          title: `Block ${name} (@${user.username})?`,
           message: `${friend ? `${name} stops being your friend and` : `${name}`} can't send you friend requests. They aren't told, and groups you're both in stay as they are. Unblock them any time in Settings.`,
           confirmLabel: "Block",
           danger: true,
         }
       : {
-          title: `Remove ${name}?`,
-          message: "You can add each other again later with a friend code.",
+          title: `Remove ${name} (@${user.username})?`,
+          message: "You can add each other again later by Minecraft name.",
           confirmLabel: "Remove friend",
           danger: true,
         },

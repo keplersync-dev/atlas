@@ -30,11 +30,9 @@ async function call<T>(
 
 export const tauriApi: AtlasApi = {
   getSession: () => call("get_session"),
-  signIn: (provider) => call("sign_in", { provider }),
+  signIn: () => call("sign_in"),
   cancelSignIn: () => call("cancel_sign_in"),
   signOut: () => call("sign_out"),
-  linkIdentity: (provider) => call("link_identity", { provider }),
-  unlinkIdentity: (provider) => call("unlink_identity", { provider }),
   updateProfile: (patch) => call("update_profile", { patch }),
   resetFriendCode: () => call("reset_friend_code"),
   deleteAccount: () => call("delete_account"),
@@ -114,8 +112,8 @@ export const tauriApi: AtlasApi = {
 
   listFriends: () => call("list_friends"),
   listFriendRequests: () => call("list_friend_requests"),
-  previewFriendCode: (code) => call("preview_friend_code", { code }),
-  sendFriendRequest: (code) => call("send_friend_request", { code }),
+  previewFriend: (who) => call("preview_friend", { who }),
+  sendFriendRequest: (who) => call("send_friend_request", { who }),
   sendFriendRequestTo: (userId) => call("send_friend_request_to", { userId }),
   respondToFriendRequest: (userId, accept) =>
     call("respond_to_friend_request", { userId, accept }),

@@ -14,6 +14,7 @@
   import { instances } from "$lib/stores";
   import ConfigFiles from "./ConfigFiles.svelte";
   import Head from "../Head.svelte";
+  import PersonName from "../PersonName.svelte";
   import Icon from "../Icon.svelte";
   import SearchBox from "../SearchBox.svelte";
   import Switch from "../Switch.svelte";
@@ -188,19 +189,24 @@
     >
       <Head user={m.user} size={32} />
       <div class="min-w-0">
-        <b class="font-medium">{m.user.displayName}</b>
-        {#if m.user.id === myId}<span class="text-(--text-faint)">(you)</span
-          >{/if}
-        <small class="block text-[13px] text-(--text-faint)">
-          @{m.user.username}{m.viaGroup ? ` · via ${m.viaGroup.name}` : ""}
-        </small>
+        <PersonName user={m.user} />
+        {#if m.user.id === myId || m.viaGroup}
+          <small class="block truncate text-[13px] text-(--text-faint)">
+            {[
+              m.user.id === myId ? "You" : null,
+              m.viaGroup ? `via ${m.viaGroup.name}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </small>
+        {/if}
       </div>
       <span class="text-[13px] {status.cls}">{status.text}</span>
 
       {#if isOwner && m.role !== "owner"}
         <div
           role="radiogroup"
-          aria-label="Role for {m.user.displayName}"
+          aria-label="Role for {m.user.displayName} (@{m.user.username})"
           class="inline-flex gap-0.5 justify-self-start rounded-md bg-(--bg) p-0.5"
         >
           {#each ROLES as r (r.id)}
@@ -220,10 +226,10 @@
           {/each}
         </div>
         <button
-          aria-label="Remove {m.user.displayName}"
+          aria-label="Remove {m.user.displayName} (@{m.user.username})"
           onclick={async () => {
             const ok = await confirmAction({
-              title: `Remove ${m.user.displayName}?`,
+              title: `Remove ${m.user.displayName} (@${m.user.username})?`,
               message:
                 "They stop getting updates. Their copy stays on their PC as a normal instance.",
               confirmLabel: "Remove",

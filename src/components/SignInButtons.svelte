@@ -1,14 +1,10 @@
 <script lang="ts">
   import { social } from "$lib/stores";
-  import type { AuthProvider } from "$lib/types";
   import Button from "./Button.svelte";
   import ProviderIcon from "./ProviderIcon.svelte";
 
   /** Left-aligned, for use inside a dialog's text; centred on empty pages. */
   let { start = false }: { start?: boolean } = $props();
-
-  const label = (provider: AuthProvider, name: string) =>
-    social.signingIn === provider ? "Start again" : `Sign in with ${name}`;
 </script>
 
 {#if !social.hasServer}
@@ -17,23 +13,9 @@
   </p>
 {:else}
   <div class="mt-4 flex gap-2 {start ? '' : 'justify-center'}">
-    <Button
-      variant="primary"
-      class="gap-2"
-      onclick={() => social.signIn("minecraft")}
-    >
-      {#snippet icon()}<ProviderIcon
-          provider="minecraft"
-          class="size-4"
-        />{/snippet}
-      {label("minecraft", "Minecraft")}
-    </Button>
-    <Button class="gap-2" onclick={() => social.signIn("discord")}>
-      {#snippet icon()}<ProviderIcon
-          provider="discord"
-          class="size-4"
-        />{/snippet}
-      {label("discord", "Discord")}
+    <Button variant="primary" class="gap-2" onclick={() => social.signIn()}>
+      {#snippet icon()}<ProviderIcon class="size-4" />{/snippet}
+      {social.signingIn ? "Start again" : "Sign in with Minecraft"}
     </Button>
   </div>
   {#if social.signingIn}

@@ -13,13 +13,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
 use atlas_protocol::api::{
-    AuthResult, ErrorBody, ErrorCode as WireCode, ExchangeRequest, Me, MinecraftChallenge,
-    MinecraftVerify, Tokens,
+    AuthResult, ErrorBody, ErrorCode as WireCode, Me, MinecraftChallenge, MinecraftVerify, Tokens,
 };
-use atlas_protocol::pkce;
 use atlas_protocol::ws::PresenceUpdate;
-use base64::Engine;
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use reqwest::{Method, StatusCode};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -188,38 +184,6 @@ impl Cloud {
 
     // ── Signing in ─────────────────────────────────────────────────────
 
-    /// Sign in with Discord in the browser. `open` opens a URL there.
-    pub async fn sign_in_discord(
-        &self,
-        open: impl FnOnce(&str) -> AppResult<()>,
-    ) -> AppResult<Session> {
-        let (code, verifier) = self.browser_flow(open).await?;
-        let body = ExchangeRequest { code, verifier };
-        let result: AuthResult = self
-            .send(Method::POST, "/auth/exchange", None, Some(&body))
-            .await?;
-        self.start_session(&result.tokens).await;
-        self.set_me(&result.user).await?;
-        self.session().await
-    }
-
-    /// Add a Discord account to the signed-in account.
-    pub async fn link_discord(&self, open: impl FnOnce(&str) -> AppResult<()>) -> AppResult<Me> {
-        if !self.is_signed_in() {
-            return Err(AppError::not_signed_in());
-        }
-        let (code, verifier) = self.browser_flow(open).await?;
-        let me: Me = self
-            .call(
-                Method::POST,
-                "/me/identities",
-                Some(&ExchangeRequest { code, verifier }),
-            )
-            .await?;
-        self.set_me(&me).await?;
-        Ok(me)
-    }
-
     /// Sign in with Minecraft: Microsoft in the browser, then the server checks with Mojang.
     pub async fn sign_in_minecraft(
         &self,
@@ -232,19 +196,6 @@ impl Cloud {
         self.start_session(&result.tokens).await;
         self.set_me(&result.user).await?;
         self.session().await
-    }
-
-    /// Add a Minecraft account to the signed-in account.
-    pub async fn link_minecraft(&self, open: impl FnOnce(&str) -> AppResult<()>) -> AppResult<Me> {
-        if !self.is_signed_in() {
-            return Err(AppError::not_signed_in());
-        }
-        let joined = self.minecraft_flow(open).await?;
-        let me: Me = self
-            .call(Method::POST, "/me/identities/minecraft", Some(&joined))
-            .await?;
-        self.set_me(&me).await?;
-        Ok(me)
     }
 
     /// Sign in to Minecraft on this PC and join a challenge from the server with it.
@@ -270,37 +221,7 @@ impl Cloud {
         })
     }
 
-    /// Open the server's start page in the browser and wait for the one-time code to come
-    /// back to a loopback listener. Returns `(code, PKCE verifier)`.
-    async fn browser_flow(
-        &self,
-        open: impl FnOnce(&str) -> AppResult<()>,
-    ) -> AppResult<(String, String)> {
-        self.check_reachable().await?;
-        let verifier = URL_SAFE_NO_PAD.encode(rand::random::<[u8; 32]>());
-        // Comes back with the code: without it, any page could end the wait by calling the listener.
-        let state = URL_SAFE_NO_PAD.encode(rand::random::<[u8; 16]>());
-        let listener = loopback::bind().await?;
-        let mut url = self.url("/auth/discord/start")?;
-        url.query_pairs_mut()
-            .append_pair("port", &listener.port.to_string())
-            .append_pair("challenge", &pkce::challenge(&verifier))
-            .append_pair("state", &state);
-
-        let cancelled = self.new_attempt();
-        open(url.as_str())?;
-        let expect = loopback::Expect {
-            path: "/callback",
-            state: Some(&state),
-        };
-        let code = tokio::select! {
-            code = listener.wait_for_code(expect) => code,
-            _ = cancelled => Err(AppError::invalid_input("Sign-in was restarted")),
-        };
-        Ok((code?, verifier))
-    }
-
-    /// Stop waiting for the browser sign-in or link in progress, if there is one.
+    /// Stop waiting for the browser sign-in in progress, if there is one.
     pub fn cancel_sign_in(&self) {
         if let Some(cancel) = self.attempt.lock().unwrap().take() {
             let _ = cancel.send(());

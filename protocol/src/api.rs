@@ -6,9 +6,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::enums::{
-    ActivityType, AuthProvider, AvatarSource, ContentKind, GroupMemberRole, GroupRole, InviteRole,
-    Loader, MemberRole, MemberStatus, PresenceState, ReportReason, ReportTarget, RequestDirection,
-    Side,
+    ActivityType, AuthProvider, ContentKind, GroupMemberRole, GroupRole, InviteRole, Loader,
+    MemberRole, MemberStatus, PresenceState, ReportReason, ReportTarget, RequestDirection, Side,
 };
 use crate::manifest::Manifest;
 use crate::{Id, IsoDate};
@@ -21,12 +20,12 @@ use crate::{Id, IsoDate};
 #[serde(rename_all = "camelCase")]
 pub struct PublicUser {
     pub id: Id,
+    /// Their Minecraft name in lowercase. It can't be changed here; it follows Minecraft.
     pub username: String,
+    /// Their own choice, starting as their Minecraft name.
     pub display_name: String,
-    /// The picture to show, whichever they chose: their Minecraft skin (draw its face) or
-    /// a picture (the Discord avatar). Both None = initials.
+    /// Their Minecraft skin, to draw its face. None = a default skin: initials.
     pub skin_url: Option<String>,
-    pub avatar_url: Option<String>,
     pub minecraft_uuid: Option<String>,
     pub minecraft_username: Option<String>,
 }
@@ -36,7 +35,7 @@ pub struct PublicUser {
 #[serde(rename_all = "camelCase")]
 pub struct LinkedIdentity {
     pub provider: AuthProvider,
-    /// Minecraft name or Discord username at the last sign-in.
+    /// The Minecraft name at the last sign-in.
     pub username: String,
     pub linked_at: IsoDate,
 }
@@ -88,15 +87,7 @@ pub struct Me {
     pub friend_link: String,
     pub identities: Vec<LinkedIdentity>,
     pub appear_offline: bool,
-    /// When the username can next be changed (None = now).
-    pub username_change_available_at: Option<IsoDate>,
     pub storage: Storage,
-    /// Which picture they chose, and both to choose from (None = not linked, or no
-    /// custom skin / avatar). Defaults so a `Me` the app saved before this existed loads.
-    #[serde(default = "discord")]
-    pub avatar_source: AvatarSource,
-    pub minecraft_skin_url: Option<String>,
-    pub discord_avatar_url: Option<String>,
 }
 
 /// `PATCH /me`. Missing fields stay as they are.
@@ -106,17 +97,9 @@ pub struct Me {
 #[cfg_attr(feature = "ts", ts(optional_fields))]
 pub struct UpdateProfileInput {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub username: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_name: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub appear_offline: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub avatar_source: Option<AvatarSource>,
-}
-
-fn discord() -> AvatarSource {
-    AvatarSource::Discord
 }
 
 // ── Friends ────────────────────────────────────────────────────────────
@@ -156,12 +139,18 @@ pub struct FriendRequest {
     pub created_at: IsoDate,
 }
 
-/// `POST /friends/requests`.
+/// `POST /friends/requests`: who to ask, by name or by their friend link's code.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[cfg_attr(feature = "ts", ts(optional_fields))]
 pub struct SendFriendRequest {
-    /// Normalized friend code ("7KQ29XMB").
-    pub code: String,
+    /// Their Minecraft name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// The code from their friend link ("7KQ29XMB"), when there's no name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
 }
 
 // ── Shared instances ───────────────────────────────────────────────────
@@ -1031,30 +1020,6 @@ pub struct Page<T> {
 
 // ── Auth ───────────────────────────────────────────────────────────────
 
-/// Query of `GET /auth/discord/start`, opened in the browser.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiscordStart {
-    /// The app's loopback port: the browser comes back to `http://127.0.0.1:{port}/callback`.
-    pub port: u16,
-    /// PKCE S256 challenge of the verifier the app keeps.
-    pub challenge: String,
-    /// The app's own random value, sent back with the code (`?code=…&state=…`), so the app
-    /// can tell the browser came from the sign-in it started. Older apps send none.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub state: Option<String>,
-}
-
-/// The one-time code from the loopback redirect, with the PKCE verifier it was started with.
-/// `POST /auth/exchange` trades it for tokens; `POST /me/identities` links that identity to
-/// the signed-in account instead.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ExchangeRequest {
-    pub code: String,
-    pub verifier: String,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Tokens {
@@ -1173,31 +1138,26 @@ mod tests {
                 username: "alex".into(),
                 display_name: "Alex".into(),
                 skin_url: None,
-                avatar_url: None,
                 minecraft_uuid: None,
                 minecraft_username: None,
             },
             friend_code: "7KQ29XMB".into(),
             friend_link: "https://atlas.example/f/7KQ29XMB".into(),
             identities: vec![LinkedIdentity {
-                provider: AuthProvider::Discord,
-                username: "alex".into(),
+                provider: AuthProvider::Minecraft,
+                username: "Alex".into(),
                 linked_at: "2026-10-22T00:00:00.000Z".into(),
             }],
             appear_offline: false,
-            username_change_available_at: None,
             storage: Storage {
                 used_bytes: 0,
                 quota_bytes: 524_288_000,
                 max_file_bytes: 104_857_600,
             },
-            avatar_source: AvatarSource::Discord,
-            minecraft_skin_url: None,
-            discord_avatar_url: None,
         };
         let v = serde_json::to_value(&me).unwrap();
         assert_eq!(v["displayName"], "Alex");
-        assert_eq!(v["identities"][0]["provider"], "discord");
+        assert_eq!(v["identities"][0]["provider"], "minecraft");
         assert_eq!(v["storage"]["quotaBytes"], 524_288_000);
         assert_eq!(serde_json::from_value::<Me>(v).unwrap(), me);
     }

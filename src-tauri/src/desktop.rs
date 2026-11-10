@@ -118,7 +118,9 @@ pub fn add_tray<R: Runtime>(app: &AppHandle<R>, tooltip: &str) -> tauri::Result<
     // The Mac's menu bar wants a black shape it can tint for light and dark menu bars, not the app icon.
     if cfg!(target_os = "macos") {
         tray = tray
-            .icon(tauri::image::Image::from_bytes(include_bytes!("../icons/tray-mac.png"))?)
+            .icon(tauri::image::Image::from_bytes(include_bytes!(
+                "../icons/tray-mac.png"
+            ))?)
             .icon_as_template(true);
     } else if let Some(icon) = app.default_window_icon() {
         tray = tray.icon(icon.clone());
@@ -495,7 +497,6 @@ mod tests {
                 username: "dakep".into(),
                 display_name: "dakep".into(),
                 skin_url: None,
-                avatar_url: None,
                 minecraft_uuid: None,
                 minecraft_username: None,
             }),

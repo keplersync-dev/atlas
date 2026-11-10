@@ -7,7 +7,6 @@
   import { openDialog } from "$lib/dialogs.svelte";
   import { instanceItems } from "$lib/instanceMenu";
   import { instances, social } from "$lib/stores";
-  import type { AuthProvider } from "$lib/types";
   import ContentIcon from "./ContentIcon.svelte";
   import Head from "./Head.svelte";
   import Icon from "./Icon.svelte";
@@ -35,11 +34,6 @@
     legalError = null;
     api.openLegalPage(page).catch((e) => (legalError = (e as Error).message));
   }
-
-  const SIGN_IN: { id: AuthProvider; label: string }[] = [
-    { id: "minecraft", label: "Minecraft" },
-    { id: "discord", label: "Discord" },
-  ];
 </script>
 
 <!-- This PC's settings (notifications, sound, start with Windows) need no account. -->
@@ -176,12 +170,12 @@
         <b class="block truncate text-[13px] font-medium"
           >{social.session.user.displayName}</b
         >
-        <small class="block text-[13px] text-(--text-faint)"
+        <small class="block truncate text-[13px] text-(--text-faint)"
           >{!social.session.online
             ? "Can't reach the server"
             : social.session.user.appearOffline
               ? "Appearing offline"
-              : "Online"}</small
+              : `@${social.session.user.username}`}</small
         >
       </span>
       <Icon name="settings" class="size-4 text-(--text-faint)" />
@@ -195,27 +189,25 @@
     <div class="border-t border-(--line) px-3.5 pt-3 pb-3">
       <p class="text-[13px] font-semibold">Sign in to share with friends</p>
       <div class="mt-2 grid gap-1.5">
-        {#each SIGN_IN as p (p.id)}
-          <button
-            onclick={() => social.signIn(p.id)}
-            aria-label="Sign in with {p.label}"
-            class="flex h-9 min-w-0 items-center justify-center gap-2 rounded-md border px-2 font-medium disabled:opacity-50
-              {social.signingIn === p.id
-              ? 'border-(--accent) bg-(--accent)/10'
-              : 'border-(--line-2) bg-(--bg-raise-2) hover:bg-(--bg-hover)'}"
-          >
-            {#if social.signingIn === p.id}
-              <Icon
-                name="refresh"
-                class="size-3.5 shrink-0 animate-spin text-(--accent)"
-              />
-              <span class="truncate">Waiting…</span>
-            {:else}
-              <ProviderIcon provider={p.id} class="size-4 shrink-0" />
-              <span class="truncate">{p.label}</span>
-            {/if}
-          </button>
-        {/each}
+        <button
+          onclick={() => social.signIn()}
+          aria-label="Sign in with Minecraft"
+          class="flex h-9 min-w-0 items-center justify-center gap-2 rounded-md border px-2 font-medium disabled:opacity-50
+            {social.signingIn
+            ? 'border-(--accent) bg-(--accent)/10'
+            : 'border-(--line-2) bg-(--bg-raise-2) hover:bg-(--bg-hover)'}"
+        >
+          {#if social.signingIn}
+            <Icon
+              name="refresh"
+              class="size-3.5 shrink-0 animate-spin text-(--accent)"
+            />
+            <span class="truncate">Waiting…</span>
+          {:else}
+            <ProviderIcon class="size-4 shrink-0" />
+            <span class="truncate">Sign in with Minecraft</span>
+          {/if}
+        </button>
       </div>
       {#if social.signingIn}
         <p class="mt-2 text-[13px] text-(--text-muted)">
@@ -223,7 +215,7 @@
         </p>
         <p class="flex gap-3 text-[13px] text-(--text-muted)">
           <button
-            onclick={() => social.signingIn && social.signIn(social.signingIn)}
+            onclick={() => social.signIn()}
             class="underline hover:text-(--text-primary)">Start again</button
           >
           <button

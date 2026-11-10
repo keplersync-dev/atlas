@@ -5,6 +5,8 @@
   import type { Id } from "$lib/types";
   import Button from "../Button.svelte";
   import Head from "../Head.svelte";
+  import Who from "../Who.svelte";
+  import PersonName from "../PersonName.svelte";
 
   let busy = $state<Id | null>(null);
   let error = $state<string | null>(null);
@@ -34,8 +36,9 @@
               ring="var(--bg-raise)"
             />{/if}
           <div class="min-w-40 flex-1">
-            <b class="block font-medium"
-              >{g.invitedBy?.displayName ?? "A friend"} invited you to {g.groupName}</b
+            <span class="block font-medium"
+              >{#if g.invitedBy}<Who user={g.invitedBy} />{:else}A friend{/if} invited
+              you to <b class="font-semibold">{g.groupName}</b></span
             >
             <small class="text-[13px] text-(--text-faint)"
               >Group · {plural(g.memberCount, "member")} · you get what's shared with
@@ -67,7 +70,7 @@
         <div class="flex flex-wrap items-center gap-x-2.5 gap-y-2 py-2">
           <Head user={r.user} size={30} ring="var(--bg-raise)" />
           <div class="min-w-40 flex-1">
-            <b class="block font-medium">{r.user.displayName}</b>
+            <PersonName user={r.user} />
             <small class="text-[13px] text-(--text-faint)"
               >Wants to be friends · {timeAgo(r.createdAt)}</small
             >
@@ -95,7 +98,7 @@
         <div class="flex flex-wrap items-center gap-x-2.5 gap-y-2 py-2">
           <Head user={r.user} size={30} ring="var(--bg-raise)" />
           <div class="min-w-40 flex-1">
-            <b class="block font-medium">{r.user.displayName}</b>
+            <PersonName user={r.user} />
             <small class="text-[13px] text-(--text-faint)"
               >Request sent · {timeAgo(r.createdAt)}</small
             >

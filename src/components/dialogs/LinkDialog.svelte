@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api } from "$lib/api";
-  import { formatCode, plural } from "$lib/format";
+  import { plural } from "$lib/format";
   import { go } from "$lib/nav.svelte";
   import { resource } from "$lib/resource.svelte";
   import { social } from "$lib/stores";
@@ -15,7 +15,7 @@
 
   const friend = resource(() =>
     link.kind === "friend" && social.signedIn
-      ? api.previewFriendCode(link.code)
+      ? api.previewFriend({ code: link.code })
       : Promise.resolve(null),
   );
   const group = resource(() =>
@@ -45,7 +45,7 @@
     error = null;
     try {
       if (link.kind === "friend") {
-        await social.sendFriendRequest(link.code);
+        await social.sendFriendRequest({ code: link.code });
       } else {
         await social.joinGroup(link.code);
       }
@@ -71,7 +71,7 @@
 <Dialog
   title={link.kind === "friend" ? "Add a friend" : "Join a group"}
   description={link.kind === "friend"
-    ? `Friend code ${formatCode(link.code)}`
+    ? "From their friend link"
     : "From an invite link"}
   {onclose}
   onsubmit={act}
@@ -88,8 +88,8 @@
     <div class="flex items-center gap-3 rounded-lg bg-(--bg-raise) px-3 py-3">
       <Head user={friend.data} size={36} ring="var(--bg-raise)" />
       <div class="min-w-0 flex-1">
-        <b class="block font-semibold">{friend.data.displayName}</b>
-        <small class="text-[13px] text-(--text-faint)"
+        <b class="block truncate font-semibold">{friend.data.displayName}</b>
+        <small class="block truncate text-[13px] text-(--text-faint)"
           >@{friend.data.username}</small
         >
       </div>

@@ -4,9 +4,7 @@ use reqwest::Method;
 use tauri::{AppHandle, Manager, Runtime};
 use tauri_plugin_opener::OpenerExt;
 
-use crate::dto::{
-    AuthProvider, Me, NewReport, ReportReason, ReportTarget, Session, UpdateProfileInput,
-};
+use crate::dto::{Me, NewReport, ReportReason, ReportTarget, Session, UpdateProfileInput};
 use crate::error::{AppError, AppResult};
 use crate::state::AppState;
 
@@ -14,36 +12,11 @@ pub async fn get(state: &AppState) -> AppResult<Session> {
     state.cloud.session().await
 }
 
-pub async fn sign_in<R: Runtime>(
-    state: &AppState,
-    app: &AppHandle<R>,
-    provider: AuthProvider,
-) -> AppResult<Session> {
-    let session = match provider {
-        AuthProvider::Discord => state.cloud.sign_in_discord(|url| open(app, url)).await?,
-        AuthProvider::Minecraft => state.cloud.sign_in_minecraft(|url| open(app, url)).await?,
-    };
+pub async fn sign_in<R: Runtime>(state: &AppState, app: &AppHandle<R>) -> AppResult<Session> {
+    let session = state.cloud.sign_in_minecraft(|url| open(app, url)).await?;
     super::presence::refresh(state).await;
     state.cloud.start_realtime();
     Ok(session)
-}
-
-pub async fn link<R: Runtime>(
-    state: &AppState,
-    app: &AppHandle<R>,
-    provider: AuthProvider,
-) -> AppResult<Me> {
-    match provider {
-        AuthProvider::Discord => state.cloud.link_discord(|url| open(app, url)).await,
-        AuthProvider::Minecraft => state.cloud.link_minecraft(|url| open(app, url)).await,
-    }
-}
-
-pub async fn unlink(state: &AppState, provider: AuthProvider) -> AppResult<Me> {
-    let path = format!("/me/identities/{}", crate::dto::to_wire(provider));
-    let me: Me = state.cloud.call(Method::DELETE, &path, None::<&()>).await?;
-    state.cloud.set_me(&me).await?;
-    Ok(me)
 }
 
 pub async fn update_profile(state: &AppState, patch: &UpdateProfileInput) -> AppResult<Me> {

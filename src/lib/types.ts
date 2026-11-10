@@ -43,9 +43,7 @@ export type GroupRole = "owner" | "admin" | "member";
 
 export type PresenceState = "offline" | "online" | "playing";
 
-export type AuthProvider = "minecraft" | "discord";
-
-export type AvatarSource = "minecraft" | "discord";
+export type AuthProvider = "minecraft";
 
 export type RequestDirection = "incoming" | "outgoing";
 
@@ -151,16 +149,23 @@ export type NewReport = { targetType: ReportTarget, targetId: string, reason: Re
 /**
  * Any Atlas user as seen by others.
  */
-export type PublicUser = { id: string, username: string, displayName: string, 
+export type PublicUser = { id: string, 
 /**
- * The picture to show, whichever they chose: their Minecraft skin (draw its face) or
- * a picture (the Discord avatar). Both None = initials.
+ * Their Minecraft name in lowercase. It can't be changed here; it follows Minecraft.
  */
-skinUrl: string | null, avatarUrl: string | null, minecraftUuid: string | null, minecraftUsername: string | null, };
+username: string, 
+/**
+ * Their own choice, starting as their Minecraft name.
+ */
+displayName: string, 
+/**
+ * Their Minecraft skin, to draw its face. None = a default skin: initials.
+ */
+skinUrl: string | null, minecraftUuid: string | null, minecraftUsername: string | null, };
 
 export type LinkedIdentity = { provider: AuthProvider, 
 /**
- * Minecraft name or Discord username at the last sign-in.
+ * The Minecraft name at the last sign-in.
  */
 username: string, linkedAt: string, };
 
@@ -177,21 +182,19 @@ friendCode: string,
 /**
  * e.g. "https://atlas.example/f/7KQ29XMB"
  */
-friendLink: string, identities: Array<LinkedIdentity>, appearOffline: boolean, 
+friendLink: string, identities: Array<LinkedIdentity>, appearOffline: boolean, storage: Storage, id: string, 
 /**
- * When the username can next be changed (None = now).
+ * Their Minecraft name in lowercase. It can't be changed here; it follows Minecraft.
  */
-usernameChangeAvailableAt: string | null, storage: Storage, 
+username: string, 
 /**
- * Which picture they chose, and both to choose from (None = not linked, or no
- * custom skin / avatar). Defaults so a `Me` the app saved before this existed loads.
+ * Their own choice, starting as their Minecraft name.
  */
-avatarSource: AvatarSource, minecraftSkinUrl: string | null, discordAvatarUrl: string | null, id: string, username: string, displayName: string, 
+displayName: string, 
 /**
- * The picture to show, whichever they chose: their Minecraft skin (draw its face) or
- * a picture (the Discord avatar). Both None = initials.
+ * Their Minecraft skin, to draw its face. None = a default skin: initials.
  */
-skinUrl: string | null, avatarUrl: string | null, minecraftUuid: string | null, minecraftUsername: string | null, };
+skinUrl: string | null, minecraftUuid: string | null, minecraftUsername: string | null, };
 
 export type Session = { 
 /**
@@ -251,7 +254,20 @@ export type RemovedUploads = { count: number, sizeBytes: number, };
 /**
  * `PATCH /me`. Missing fields stay as they are.
  */
-export type UpdateProfileInput = { username?: string, displayName?: string, appearOffline?: boolean, avatarSource?: AvatarSource, };
+export type UpdateProfileInput = { displayName?: string, appearOffline?: boolean, };
+
+/**
+ * `POST /friends/requests`: who to ask, by name or by their friend link's code.
+ */
+export type SendFriendRequest = { 
+/**
+ * Their Minecraft name.
+ */
+name?: string, 
+/**
+ * The code from their friend link ("7KQ29XMB"), when there's no name.
+ */
+code?: string, };
 
 export type GroupMember = { user: PublicUser, role: GroupRole, joinedAt: string, };
 

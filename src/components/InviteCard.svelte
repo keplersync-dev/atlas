@@ -7,6 +7,7 @@
   import Button from "./Button.svelte";
   import ContentIcon from "./ContentIcon.svelte";
   import Head from "./Head.svelte";
+  import Who from "./Who.svelte";
   import Icon from "./Icon.svelte";
 
   // An instance a friend shared that you haven't added yet.
@@ -38,7 +39,7 @@
     >
       {#if from}<Head user={from} size={20} ring="var(--bg-raise)" />{/if}
       <span class="truncate">
-        {from?.displayName ?? "Someone"}{invite.myViaGroup
+        {#if from}<Who user={from} />{:else}Someone{/if}{invite.myViaGroup
           ? ` · to ${invite.myViaGroup.name}`
           : ""} · {timeAgo(invite.invitedAt)}
       </span>

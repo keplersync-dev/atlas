@@ -7,6 +7,7 @@
   import type { Friend, Id } from "$lib/types";
   import Button from "./Button.svelte";
   import Head from "./Head.svelte";
+  import PersonName from "./PersonName.svelte";
   import Menu from "./Menu.svelte";
 
   // The friends column on Home. Reads straight from the store, so presence
@@ -49,7 +50,7 @@
       ring="var(--bg-side)"
     />
     <div class="min-w-0 flex-1">
-      <b class="block truncate font-medium">{f.user.displayName}</b>
+      <PersonName user={f.user} />
       <small
         class="block truncate text-[13px] {f.presence.state === 'playing'
           ? 'text-(--online)'
@@ -61,7 +62,7 @@
     <!-- Shown on hover, or while focused for keyboards, like on the Friends page. -->
     <div class="opacity-0 group-hover:opacity-100 focus-within:opacity-100">
       <Menu
-        label="More for {f.user.displayName}"
+        label="More for {f.user.displayName} (@{f.user.username})"
         items={personItems(f.user)}
         triggerClass="grid size-7 place-items-center rounded-md text-(--text-muted) hover:bg-(--bg-raise-2) hover:text-(--text-primary)"
       />
@@ -93,9 +94,9 @@
         <div class="flex items-center gap-2.5 py-1.5">
           <Head user={r.user} size={28} ring="var(--bg-raise)" />
           <div class="min-w-0 flex-1">
-            <b class="block truncate font-medium">{r.user.displayName}</b>
+            <PersonName user={r.user} />
             <small class="block truncate text-[13px] text-(--text-faint)"
-              >@{r.user.username}</small
+              >Wants to be friends</small
             >
           </div>
         </div>
@@ -121,7 +122,7 @@
 
   {#if social.friends.length === 0}
     <p class="text-[13px] text-(--text-muted)">
-      No friends yet. Swap friend codes on the Friends page.
+      No friends yet. Add them by Minecraft name on the Friends page.
     </p>
   {/if}
   {#if online.length}

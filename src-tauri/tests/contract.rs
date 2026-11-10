@@ -67,7 +67,7 @@ fn sample(command: &str, key: &str) -> Value {
         ("sync_instance", "options") => {
             json!({ "configChoices": { "config/a.json": "mine" }, "installOptional": ["AANobbMI"] })
         }
-        (_, "provider") => json!("discord"),
+        (_, "who") => json!({ "name": "Notch" }),
         (_, "kind") => json!("prism"),
         (_, "mode") => json!("optional"),
         (_, "enabled" | "installed" | "accept" | "autoUpdate") => json!(true),

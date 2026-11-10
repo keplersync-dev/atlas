@@ -98,10 +98,12 @@ export function fileSize(bytes: number): string {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
-/** Friend/group codes come in any shape: "7kq2-9xmb", "7KQ29XMB" or a full link. */
-export function normalizeCode(input: string): string {
-  const last = input.trim().split("/").pop() ?? "";
-  return last.toUpperCase().replace(/[^0-9A-Z]/g, "");
+/** The code in a pasted friend link (".../f/7KQ29XMB" or "atlas://friend/7KQ29XMB"), or null
+ *  when it isn't one: then it's a Minecraft name. */
+export function friendLinkCode(input: string): string | null {
+  const m = /(?:\/f\/|atlas:\/\/friend\/)([0-9a-z-]+)\/?$/i.exec(input.trim());
+  const code = m?.[1].toUpperCase().replace(/-/g, "");
+  return code?.length === 8 ? code : null;
 }
 
 /** "7KQ29XMB" → "7KQ2-9XMB" (easier to read out loud). */

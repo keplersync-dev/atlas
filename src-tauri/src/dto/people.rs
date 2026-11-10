@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 pub use atlas_protocol::api::{
     Friend, FriendRequest, LinkedIdentity, Me, MyUpload, Presence, PublicUser, RemovedUploads,
-    Storage,
+    SendFriendRequest, Storage,
 };
 
 #[cfg_attr(test, derive(ts_rs::TS))]

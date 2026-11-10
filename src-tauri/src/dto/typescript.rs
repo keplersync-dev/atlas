@@ -33,12 +33,12 @@ fn types_ts() -> String {
         // Enums
         Loader, LauncherKind, InstanceStatus, ContentKind, ContentSource, ShareMode, Side,
         MemberRole, InviteRole, MemberStatus, GroupRole, PresenceState, AuthProvider,
-        AvatarSource, RequestDirection, SyncState, SyncStage, WorkStage, BackupReason,
+        RequestDirection, SyncState, SyncStage, WorkStage, BackupReason,
         LeftOutReason, ConfigChoice, ActivityType, ReportTarget, ReportReason, LinkKind,
         // App and people
         AppSettings, AppSettingsPatch, AvailableUpdate, OpenedLink, NewReport, PublicUser,
         LinkedIdentity, Storage, Me, Session, Presence, Friend, FriendRequest, MyUpload,
-        RemovedUploads, UpdateProfileInput,
+        RemovedUploads, UpdateProfileInput, SendFriendRequest,
         // Groups
         GroupMember, GroupInvite, Group, GroupDetail, GroupInvitePreview, CreateGroup,
         CreateGroupInvite,

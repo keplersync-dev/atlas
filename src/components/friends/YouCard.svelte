@@ -1,38 +1,52 @@
 <script lang="ts">
-  // The top of the Friends page: you (and how friends see you), your friend code, and a
-  // box for theirs. Everything about adding people is here.
+  import { untrack } from "svelte";
+  // The top of the Friends page: you (and how friends see you), your friend link, and a
+  // box for their Minecraft name or link. Everything about adding people is here.
   import { api } from "$lib/api";
   import { copier } from "$lib/clipboard.svelte";
   import { confirmAction } from "$lib/confirm.svelte";
   import { showError } from "$lib/toasts.svelte";
-  import { formatCode, normalizeCode } from "$lib/format";
+  import { friendLinkCode } from "$lib/format";
   import { social } from "$lib/stores";
-  import type { PublicUser } from "$lib/types";
+  import type { PublicUser, SendFriendRequest } from "$lib/types";
   import Button from "../Button.svelte";
   import Head from "../Head.svelte";
   import Icon from "../Icon.svelte";
+  import PersonName from "../PersonName.svelte";
 
   const me = $derived(social.session?.user);
-  // Keyed on the code, not `me`: the session is a new object after every reload.
+  // Keyed on the values, not `me`: the session is a new object after every reload.
   const myCode = $derived(me?.friendCode);
+  const myName = $derived(me?.username);
   const clip = copier();
 
   let input = $state("");
-  const code = $derived(normalizeCode(input));
+  // A pasted friend link, or a Minecraft name (with or without its @).
+  const who = $derived.by((): SendFriendRequest | null => {
+    const code = friendLinkCode(input);
+    if (code) return { code };
+    const name = input.trim().replace(/^@/, "");
+    return name ? { name } : null;
+  });
+  const whoKey = $derived(who ? (who.code ?? `@${who.name}`) : "");
 
   type Lookup =
     | { status: "idle" | "loading" | "missing" | "self" }
     | { status: "found"; user: PublicUser };
   let lookup = $state<Lookup>({ status: "idle" });
 
-  // Look the code up as soon as it's complete, but only after typing pauses.
+  // Look them up once typing pauses.
   $effect(() => {
-    const c = code; // dependency: re-run whenever the code changes
-    if (c.length !== 8) {
+    void whoKey; // dependency: re-run whenever what's typed changes
+    const asked = untrack(() => who);
+    if (!asked) {
       lookup = { status: "idle" };
       return;
     }
-    if (c === myCode) {
+    if (
+      asked.code === untrack(() => myCode) ||
+      asked.name?.toLowerCase() === untrack(() => myName)
+    ) {
       lookup = { status: "self" };
       return;
     }
@@ -40,12 +54,12 @@
     let cancelled = false;
     const timer = setTimeout(async () => {
       try {
-        const user = await api.previewFriendCode(c);
+        const user = await api.previewFriend(asked);
         if (!cancelled) lookup = { status: "found", user };
       } catch {
         if (!cancelled) lookup = { status: "missing" };
       }
-    }, 300);
+    }, 400);
     // Cleanup: runs before the next run (the code changed) and when the card goes away.
     return () => {
       cancelled = true;
@@ -88,7 +102,7 @@
     sending = true;
     error = null;
     try {
-      await social.sendFriendRequest(code);
+      if (who) await social.sendFriendRequest(who);
       sentTo = name;
       input = "";
     } catch (e) {
@@ -115,8 +129,8 @@
       <!-- You, and how friends see you -->
       <div class="flex items-center gap-3">
         <Head user={me} size={40} ring="var(--bg-raise)" />
-        <div>
-          <b class="block font-semibold">{me.displayName}</b>
+        <div class="min-w-0">
+          <PersonName user={me} class="font-semibold" />
           <div class="relative" bind:this={statusRoot}>
             <button
               aria-haspopup="menu"
@@ -165,51 +179,36 @@
 
       <span class="h-9 w-px bg-(--line)"></span>
 
-      <!-- Your code -->
-      <div>
-        <small class="block text-[13px] text-(--text-faint)"
-          >Your friend code</small
-        >
-        <span class="font-mono text-lg font-semibold tracking-[2px] select-text"
-          >{formatCode(me.friendCode)}</span
-        >
-      </div>
+      <!-- Your link -->
       <div class="flex gap-1.5">
-        <Button
-          size="sm"
-          icon={clip.copied === "code" ? "check" : undefined}
-          onclick={() => clip.copy(formatCode(me.friendCode), "code")}
-        >
-          Copy code
-        </Button>
         <Button
           size="sm"
           icon={clip.copied === "link" ? "check" : undefined}
           onclick={() => clip.copy(me.friendLink, "link")}
         >
-          Copy link
+          Copy friend link
         </Button>
         <Button
           size="sm"
           variant="ghost"
-          title="Make a new code; the old code and link stop working"
+          title="Make a new link; the old one stops working"
           onclick={async () => {
             const ok = await confirmAction({
-              title: "Reset your friend code?",
+              title: "Reset your friend link?",
               message:
-                "Your old code and link stop working right away. Friends you already have stay friends.",
-              confirmLabel: "Reset code",
+                "Your old link stops working right away. Friends you already have stay friends.",
+              confirmLabel: "Reset link",
             });
             if (ok)
               social
                 .resetFriendCode()
                 .catch((e) => showError((e as Error).message));
-          }}>Reset code</Button
+          }}>Reset link</Button
         >
       </div>
     </div>
 
-    <!-- Their code: its own row, so it reads as the second thing you can do here. -->
+    <!-- Theirs: its own row, so it reads as the second thing you can do here. -->
     <div class="mt-3.5 flex items-center gap-3 border-t border-(--line) pt-3.5">
       <label
         for="friend-code"
@@ -220,19 +219,20 @@
         id="friend-code"
         bind:value={input}
         oninput={() => (sentTo = null)}
-        placeholder="Paste their friend code"
+        placeholder="Their Minecraft name, or a friend link"
         autocomplete="off"
-        class="h-8.5 max-w-80 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 font-mono tracking-wider uppercase outline-none
-          placeholder:font-(family-name:--font) placeholder:tracking-normal placeholder:normal-case focus:border-(--accent)"
+        spellcheck="false"
+        aria-invalid={lookup.status === "missing"}
+        aria-describedby="friend-lookup"
+        class="h-8.5 max-w-80 min-w-0 flex-1 rounded-md border bg-(--bg) px-3 outline-none
+          {lookup.status === 'missing'
+          ? 'border-(--danger)'
+          : 'border-(--line-2) focus:border-(--accent)'}"
       />
     </div>
 
     <!-- Results and messages, under the row -->
-    {#if clip.failed === "code"}
-      <p class="mt-2.5 text-[13px] text-(--warn)">
-        Couldn't copy. Select the code and copy it yourself.
-      </p>
-    {:else if clip.failed === "link"}
+    {#if clip.failed === "link"}
       <p class="mt-2.5 text-[13px] text-(--warn)">
         Couldn't copy. Your link: {me.friendLink}
       </p>
@@ -240,44 +240,48 @@
     {#if statusError}<p class="mt-2.5 text-[13px] text-(--danger)" role="alert">
         {statusError}
       </p>{/if}
-    {#if lookup.status === "loading"}
-      <p class="mt-2.5 text-[13px] text-(--text-faint)">
-        Looking up {formatCode(code)}…
-      </p>
-    {:else if lookup.status === "missing"}
-      <p class="mt-2.5 text-[13px] text-(--danger)">
-        No one has that code. Check it with your friend; codes can be reset.
-      </p>
-    {:else if lookup.status === "self"}
-      <p class="mt-2.5 text-[13px] text-(--text-muted)">
-        That's your own code.
-      </p>
-    {:else if lookup.status === "found"}
-      <div
-        class="mt-3 flex items-center gap-3 rounded-lg bg-(--bg) px-3 py-2.5"
-      >
-        <Head user={lookup.user} size={32} />
-        <div class="min-w-0 flex-1">
-          <b class="block font-medium">{lookup.user.displayName}</b>
-          <small class="text-[13px] text-(--text-faint)"
-            >@{lookup.user.username}</small
-          >
+    <div id="friend-lookup" aria-live="polite">
+      {#if lookup.status === "loading"}
+        <p class="mt-2.5 text-[13px] text-(--text-faint)">Looking…</p>
+      {:else if lookup.status === "missing"}
+        <p class="mt-2.5 text-[13px] text-(--danger)">
+          {who?.code
+            ? "That link doesn't work any more. Ask them for a new one."
+            : `No one called ${who?.name} is on KeplerSync. Check the spelling.`}
+        </p>
+      {:else if lookup.status === "self"}
+        <p class="mt-2.5 text-[13px] text-(--text-muted)">That's you.</p>
+      {:else if lookup.status === "found"}
+        <div
+          class="mt-3 flex items-center gap-3 rounded-lg bg-(--bg) px-3 py-2.5"
+        >
+          <Head user={lookup.user} size={32} />
+          <div class="min-w-0 flex-1">
+            <PersonName user={lookup.user} />
+          </div>
+          {#if relation === "friend"}
+            <span class="text-[13px] text-(--online)">Already friends</span>
+          {:else if relation === "pending"}
+            <span class="text-[13px] text-(--text-faint)">Request sent</span>
+          {:else}
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={sending}
+              onclick={send}
+            >
+              {relation === "incoming"
+                ? "Accept their request"
+                : "Send request"}
+            </Button>
+          {/if}
         </div>
-        {#if relation === "friend"}
-          <span class="text-[13px] text-(--online)">Already friends</span>
-        {:else if relation === "pending"}
-          <span class="text-[13px] text-(--text-faint)">Request sent</span>
-        {:else}
-          <Button size="sm" variant="primary" disabled={sending} onclick={send}>
-            {relation === "incoming" ? "Accept their request" : "Send request"}
-          </Button>
-        {/if}
-      </div>
-    {:else if sentTo}
-      <p class="mt-2.5 text-[13px] text-(--online)">
-        Request sent to {sentTo}.
-      </p>
-    {/if}
+      {:else if sentTo}
+        <p class="mt-2.5 text-[13px] text-(--online)">
+          Request sent to {sentTo}.
+        </p>
+      {/if}
+    </div>
     {#if error}<p class="mt-2.5 text-[13px] text-(--danger)" role="alert">
         {error}
       </p>{/if}
