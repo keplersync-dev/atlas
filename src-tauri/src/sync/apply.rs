@@ -309,7 +309,8 @@ async fn fetch_all<R: Runtime>(
         .places()
         .map(|(e, local)| (e, fetch::route(&state.paths, source, game_dir, e, local)))
         .collect();
-    // The modpack's own files come out of its download.
+    // The modpack's own files come out of its download, and so do its mods.
+    let pack_mod = |e: &Entry, r: &Route| e.in_pack && *r == Route::Blob;
     let from_pack: Vec<Override> = plan
         .actions
         .iter()
@@ -321,6 +322,18 @@ async fn fetch_all<R: Runtime>(
             }
             _ => None,
         })
+        .chain(
+            routes
+                .iter()
+                .filter(|(e, r)| pack_mod(e, r))
+                .map(|(e, _)| Override {
+                    path: e.path.clone(),
+                    sha256: e.sha256.clone(),
+                    size_bytes: e.size_bytes,
+                    in_pack: true,
+                    keep: None,
+                }),
+        )
         .collect();
     let pack_bytes = match base {
         Some(b) if !from_pack.is_empty() && pack::needs_download(&state.paths, b) => b.size_bytes,
@@ -328,14 +341,16 @@ async fn fetch_all<R: Runtime>(
     };
     let total = routes
         .iter()
-        .filter(|(_, r)| *r != Route::Cached)
+        .filter(|(e, r)| *r != Route::Cached && !pack_mod(e, r))
         .fold(pack_bytes, |sum, (e, _)| sum.saturating_add(e.size_bytes));
     progress.stage(SyncStage::Download);
     // Uploaded files and config files come from the server: their links in batches.
     let links = source.server_id().map(|shared| {
         let blobs = routes
             .iter()
-            .filter(|(e, r)| *r == Route::Blob && !fetch::content_file(&state.paths, e).is_file())
+            .filter(|(e, r)| {
+                *r == Route::Blob && !e.in_pack && !fetch::content_file(&state.paths, e).is_file()
+            })
             .map(|(e, _)| e.sha256.clone());
         let configs = plan.actions.iter().filter_map(|a| match a {
             Action::WriteConfig { config, .. }
@@ -360,7 +375,7 @@ async fn fetch_all<R: Runtime>(
         .collect();
     let downloads = routes
         .iter()
-        .filter(|(_, r)| !matches!(r, Route::Manual(_)))
+        .filter(|(e, r)| !matches!(r, Route::Manual(_)) && !pack_mod(e, r))
         .map(Ok::<_, AppError>);
     futures_util::stream::iter(downloads)
         .try_for_each_concurrent(PARALLEL_DOWNLOADS, |(entry, route)| {

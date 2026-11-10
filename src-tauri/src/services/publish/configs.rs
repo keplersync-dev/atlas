@@ -47,6 +47,8 @@ pub(super) struct ConfigPlan {
     pub(super) left_out: Vec<LeftOutFile>,
     /// Every file in the tree.
     pub(super) files: Vec<ShareFile>,
+    /// The modpack's own mods and packs, path to sha256: uploads that match come from it.
+    pub(super) pack_content: HashMap<String, String>,
 }
 
 fn left_out_reason(r: Refusal) -> LeftOutReason {
@@ -110,6 +112,12 @@ pub(super) async fn plan_configs<R: Runtime>(
         shared: Vec::new(),
         left_out: Vec::new(),
         files,
+        pack_content: index
+            .iter()
+            .flatten()
+            .filter(|(path, _)| manifest::can_be_pack_content(path))
+            .map(|(path, f)| (path.clone(), f.sha256.clone()))
+            .collect(),
     };
     let mut uploaded = 0u64;
     let mut changed = HashSet::new();

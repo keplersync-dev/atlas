@@ -5,7 +5,7 @@ use reqwest::Method;
 use tauri::{AppHandle, Runtime};
 
 use super::configs::plan_configs;
-use super::{file_rules, is_upload, live, mode_of, not_checked};
+use super::{file_rules, from_pack, is_upload, live, mode_of, not_checked};
 use crate::db::{self, content::ContentRow, instances::InstanceRow};
 use crate::dto::{
     ContentSource, ManualDownload, MemberRole, PackInfo, PublishItem, PublishPlan, ShareMode,
@@ -164,7 +164,7 @@ pub async fn prepare<R: Runtime>(
                 is_new: r.published_share_mode.is_none(),
                 share_mode: mode_of(r),
                 published_share_mode: r.published_share_mode.as_deref().and_then(from_wire),
-                needs_upload: is_upload(r),
+                needs_upload: is_upload(r) && !from_pack(r, &configs.pack_content),
                 already_uploaded: stored.contains(&r.sha256),
                 unchecked: not_checked(r),
                 contents_changed: replaced.contains(r.id.as_str()),
@@ -196,7 +196,10 @@ pub async fn prepare<R: Runtime>(
             name: b.name.clone(),
             version_label: b.version_label.clone(),
             source: b.source,
-            files: configs.shared.iter().filter(|(o, _)| o.in_pack).count() as u32,
+            files: (configs.shared.iter().filter(|(o, _)| o.in_pack).count()
+                + live(&rows)
+                    .filter(|r| from_pack(r, &configs.pack_content))
+                    .count()) as u32,
         }),
         left_out: configs.left_out,
         files: configs.files,

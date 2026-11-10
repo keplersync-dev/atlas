@@ -54,6 +54,12 @@ fn is_upload(r: &ContentRow) -> bool {
     )
 }
 
+/// An upload exactly as the modpack has it (`ConfigPlan::pack_content`): members take it
+/// from the pack's download, so it isn't uploaded.
+fn from_pack(r: &ContentRow, pack: &HashMap<String, String>) -> bool {
+    is_upload(r) && pack.get(&r.path).is_some_and(|sha| *sha == r.sha256)
+}
+
 /// Modrinth and CurseForge couldn't be asked about it (offline, or they failed), so
 /// whether it has to be uploaded isn't known yet.
 fn not_checked(r: &ContentRow) -> bool {
@@ -119,7 +125,7 @@ fn build(
     rows: &[ContentRow],
     modes: &HashMap<String, ShareMode>,
     description: Option<String>,
-    (overrides, base): (Vec<Override>, Option<PackBase>),
+    (overrides, base, pack): (Vec<Override>, Option<PackBase>, HashMap<String, String>),
     icon: Option<String>,
     file_icons: &HashMap<String, String>,
 ) -> AppResult<Manifest> {
@@ -159,10 +165,14 @@ fn build(
             side: from_wire(&r.side).unwrap_or(Side::Both),
             required: mode == ShareMode::Required,
             icon: file_icons.get(&r.id).cloned(),
+            in_pack: from_pack(r, &pack),
         });
     }
+    let mods_from_pack = content.iter().any(|e| e.in_pack);
+    let files_from_pack = mods_from_pack || overrides.iter().any(|o| o.in_pack);
     let m = Manifest {
-        schema_version: SCHEMA_VERSION,
+        // Apps that know only 2 can still take everything else.
+        schema_version: if mods_from_pack { SCHEMA_VERSION } else { 2 },
         name: row.name.clone(),
         description,
         icon,
@@ -174,7 +184,7 @@ fn build(
         recommended_memory_mb: None,
         content,
         // Only named when some files come from it.
-        base: base.filter(|_| overrides.iter().any(|o| o.in_pack)),
+        base: base.filter(|_| files_from_pack),
         overrides,
     };
     manifest::validate(&m).map_err(|e| {
@@ -262,7 +272,7 @@ async fn share_now<R: Runtime>(
         &rows,
         &modes,
         description.clone(),
-        (Vec::new(), None),
+        (Vec::new(), None, HashMap::new()),
         None,
         &HashMap::new(),
     )?;
@@ -360,7 +370,7 @@ async fn publish_now<R: Runtime>(
         &rows,
         &modes,
         description.clone(),
-        (Vec::new(), None),
+        (Vec::new(), None, HashMap::new()),
         None,
         &HashMap::new(),
     )?;

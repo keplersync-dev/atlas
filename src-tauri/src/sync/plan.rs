@@ -297,6 +297,7 @@ mod tests {
             side: Side::Both,
             required,
             icon: None,
+            in_pack: false,
         }
     }
 

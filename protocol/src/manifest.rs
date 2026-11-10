@@ -11,7 +11,9 @@ use crate::api::{RevisionChanges, UpdatedItem};
 use crate::enums::{ContentKind, ContentSource, Loader, Side};
 
 /// 2: `Override::keep`, files outside the config folders, more file types.
-pub const SCHEMA_VERSION: u32 = 2;
+/// 3: `Entry::in_pack`, mods and packs taken from the modpack. Only manifests that have
+/// one say 3, so the rest stay readable by apps that know 2.
+pub const SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -50,7 +52,7 @@ impl Manifest {
         let mut out: Vec<String> = self
             .content
             .iter()
-            .filter(|e| e.source == ContentSource::Upload)
+            .filter(|e| e.source == ContentSource::Upload && !e.in_pack)
             .map(|e| e.sha256.clone())
             .chain(
                 self.overrides
@@ -111,6 +113,10 @@ pub struct Entry {
     /// or CurseForge's image host.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
+    /// An upload exactly as the modpack (`Manifest::base`) has it: members take it from the
+    /// pack's download, so it isn't uploaded. Schema 3.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub in_pack: bool,
 }
 
 fn both() -> Side {
@@ -363,6 +369,9 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
         if e.source == ContentSource::Local {
             return bad(format!("{} is set to Only me.", e.path));
         }
+        if e.in_pack && (e.source != ContentSource::Upload || m.base.is_none()) {
+            return bad(format!("{} comes from a modpack it doesn't name.", e.path));
+        }
         if let Some(url) = &e.download_url
             && !allowed_download(url)
         {
@@ -492,6 +501,11 @@ pub fn can_come_from_pack(path: &str) -> bool {
             .chain(&NEVER_SHARED)
             .any(|d| lower.starts_with(d))
         && !RISKY_EXTS.contains(&extension(path).as_str())
+}
+
+/// Whether a modpack's own file is a mod or pack it may stand in for: one in a content folder.
+pub fn can_be_pack_content(path: &str) -> bool {
+    check_path(path, Some(&CONTENT_DIRS)).is_ok()
 }
 
 /// The folder each kind of content is in (scan/files.rs in the app finds them there).
@@ -868,11 +882,42 @@ mod tests {
     }
 
     #[test]
+    fn mods_from_the_pack() {
+        let mut m = parse(&example()).unwrap();
+        let upload = m.content[3].clone();
+        let mut jar = Entry {
+            kind: ContentKind::Mod,
+            path: "mods/agedaddition-1.1.3.jar".into(),
+            sha256: "ab".repeat(32),
+            in_pack: true,
+            ..upload
+        };
+        m.content.push(jar.clone());
+        assert!(validate(&m).is_err(), "only with a pack named");
+        m.base = Some(pack());
+        assert!(validate(&m).is_ok());
+        assert!(!m.blobs().contains(&jar.sha256), "and it isn't uploaded");
+        assert!(jar.needs_approval(), "a jar still waits for approval");
+
+        jar.source = ContentSource::Modrinth;
+        *m.content.last_mut().unwrap() = jar;
+        assert!(
+            validate(&m).is_err(),
+            "only uploads stand in for the pack's copy"
+        );
+
+        assert!(can_be_pack_content("mods/agedaddition-1.1.3.jar"));
+        assert!(!can_be_pack_content("config/a.toml"));
+        assert!(!can_be_pack_content("mods/../evil.jar"));
+    }
+
+    #[test]
     fn old_manifests_hash_the_same() {
         let m = parse(&example()).unwrap();
         let json = serde_json::to_value(&m).unwrap();
         assert!(json.get("base").is_none());
         assert!(json["overrides"][0].get("inPack").is_none());
+        assert!(json["content"][0].get("inPack").is_none());
     }
 
     #[test]
@@ -904,7 +949,14 @@ mod tests {
             m.content[0].version_id = Some(odd.into());
             assert!(validate(&m).is_err(), "version id {odd}");
         }
-        for fine in ["1.21.1", "24w14a", "1.21.2-pre1", "0.16.5+build.1", "47.4.10", "1.20.1 forge"] {
+        for fine in [
+            "1.21.1",
+            "24w14a",
+            "1.21.2-pre1",
+            "0.16.5+build.1",
+            "47.4.10",
+            "1.20.1 forge",
+        ] {
             let mut m = parse(&example()).unwrap();
             m.minecraft.loader_version = Some(fine.into());
             assert!(validate(&m).is_ok(), "{fine}");
@@ -920,8 +972,10 @@ mod tests {
 
         let mut m = parse(&example()).unwrap();
         m.schema_version = 2;
+        assert!(validate(&m).is_ok(), "an older version");
+        m.schema_version = SCHEMA_VERSION;
         assert!(validate(&m).is_ok(), "this version");
-        m.schema_version = 3;
+        m.schema_version = SCHEMA_VERSION + 1;
         assert!(validate(&m).is_err(), "a newer one");
 
         assert!(parse(b"{}").is_err());

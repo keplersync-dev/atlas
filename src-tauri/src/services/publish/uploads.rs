@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use tauri::Runtime;
 
 use super::configs::{ConfigPlan, plan_configs};
-use super::{is_upload, live, not_checked};
+use super::{from_pack, is_upload, live, not_checked};
 use crate::cloud::files::UploadFile;
 use crate::db::{content::ContentRow, instances::InstanceRow};
 use crate::dto::{ShareMode, Storage, WorkStage};
@@ -19,7 +19,7 @@ use crate::sync::manifest::{MAX_ICON_BYTES, Override, PackBase};
 
 /// Upload what the version needs that the server doesn't have yet: files on no mod site
 /// that are shared, and the config files that aren't the modpack's own. Returns the
-/// configs as overrides, and the modpack they're based on.
+/// configs as overrides, the modpack they're based on, and its own mods (`from_pack`).
 pub(super) async fn send_files<R: Runtime>(
     state: &AppState,
     row: &InstanceRow,
@@ -27,10 +27,22 @@ pub(super) async fn send_files<R: Runtime>(
     modes: &HashMap<String, ShareMode>,
     confirmed_rights: bool,
     work: &Reporter<R>,
-) -> AppResult<(Vec<Override>, Option<PackBase>)> {
-    let uploads: Vec<&ContentRow> = live(rows)
+) -> AppResult<(Vec<Override>, Option<PackBase>, HashMap<String, String>)> {
+    let mut uploads: Vec<&ContentRow> = live(rows)
         .filter(|r| modes.get(&r.id) != Some(&ShareMode::Private) && is_upload(r))
         .collect();
+    let storage: Storage = state
+        .cloud
+        .call(Method::GET, "/me/storage", None::<&()>)
+        .await?;
+    let ConfigPlan {
+        base,
+        shared: configs,
+        pack_content,
+        ..
+    } = plan_configs(state, row, work).await?;
+    // The modpack's own mods come out of its download: nothing to upload.
+    uploads.retain(|r| !from_pack(r, &pack_content));
     // Not known to be on no mod site: uploading it could share a mod friends could
     // have downloaded, under a permission the owner never needed to give.
     if let Some(r) = uploads.iter().find(|r| not_checked(r)) {
@@ -39,15 +51,6 @@ pub(super) async fn send_files<R: Runtime>(
             r.name
         )));
     }
-    let storage: Storage = state
-        .cloud
-        .call(Method::GET, "/me/storage", None::<&()>)
-        .await?;
-    let ConfigPlan {
-        base,
-        shared: configs,
-        ..
-    } = plan_configs(state, row, work).await?;
 
     let game = PathBuf::from(&row.game_dir);
     // (file, sha256, size, name, rights confirmed): the checkbox covers mods and packs;
@@ -153,7 +156,11 @@ pub(super) async fn send_files<R: Runtime>(
     if !wanted.is_empty() {
         tracing::info!(files = wanted.len(), bytes = new_bytes, "uploaded files");
     }
-    Ok((configs.into_iter().map(|(o, _)| o).collect(), base))
+    Ok((
+        configs.into_iter().map(|(o, _)| o).collect(),
+        base,
+        pack_content,
+    ))
 }
 
 /// Upload the instance's picture so friends see it too; returns the manifest's `icon`.

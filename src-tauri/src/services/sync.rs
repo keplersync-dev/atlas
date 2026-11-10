@@ -108,7 +108,9 @@ pub async fn preview(state: &AppState, id: &str) -> AppResult<SyncPreview> {
         let needed = target
             .overrides
             .iter()
-            .any(|o| o.in_pack && !fetch::blob_file(&state.paths, &o.sha256).is_file());
+            .map(|o| (o.in_pack, &o.sha256))
+            .chain(target.content.iter().map(|e| (e.in_pack, &e.sha256)))
+            .any(|(in_pack, sha)| in_pack && !fetch::blob_file(&state.paths, sha).is_file());
         if needed && pack::needs_download(&state.paths, base) {
             download_bytes = download_bytes.saturating_add(base.size_bytes);
         }

@@ -202,6 +202,7 @@ mod tests {
                     side: Side::Both,
                     required: *required,
                     icon: None,
+                    in_pack: false,
                 })
                 .collect(),
             overrides: vec![],

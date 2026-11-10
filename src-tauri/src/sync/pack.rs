@@ -109,7 +109,7 @@ fn index_file(paths: &AppPaths, base: &PackBase) -> PathBuf {
     paths
         .cache
         .join("packs")
-        .join(format!("{}.4.json", base.sha1))
+        .join(format!("{}.5.json", base.sha1))
 }
 
 /// Whether the pack still has to be downloaded (for the size an update shows).
@@ -225,7 +225,10 @@ fn read_index(pack: &Path, source: ContentSource) -> AppResult<PackIndex> {
             let Some(rel) = entry.strip_prefix(&prefix) else {
                 continue;
             };
-            if !super::manifest::can_come_from_pack(rel) {
+            // Its mods and packs too: the ones on no mod site can come from here.
+            if !super::manifest::can_come_from_pack(rel)
+                && !super::manifest::can_be_pack_content(rel)
+            {
                 continue;
             }
             let Some(bytes) = read_capped(&mut file, MAX_ENTRY_BYTES)? else {
@@ -326,6 +329,52 @@ mod tests {
         zip.finish().unwrap();
     }
 
+    #[tokio::test]
+    async fn a_mod_the_pack_has_comes_out_of_its_download() {
+        let dir =
+            std::env::temp_dir().join(format!("atlas-packmod-{}", crate::util::ids::new_id()));
+        let paths = AppPaths::new(&dir);
+        paths.create_all().unwrap();
+        let state = AppState::new(crate::db::open_in_memory().await.unwrap(), paths);
+        let base = PackBase {
+            source: ContentSource::Modrinth,
+            project_id: "i4XHCd7Q".into(),
+            version_id: "kaxASXpi".into(),
+            name: "Aged".into(),
+            version_label: Some("4.0.1".into()),
+            download_url:
+                "https://cdn.modrinth.com/data/i4XHCd7Q/versions/kaxASXpi/Aged_4.0.1.mrpack".into(),
+            sha1: "a".repeat(40),
+            size_bytes: 1,
+        };
+        // Already downloaded, so nothing goes to the network.
+        let pack = pack_file(&state.paths, &base);
+        std::fs::create_dir_all(pack.parent().unwrap()).unwrap();
+        write_zip(
+            &pack,
+            &[
+                ("modrinth.index.json", b"{}"),
+                ("overrides/mods/agedaddition-1.1.3.jar", b"the jar"),
+            ],
+        );
+        let jar = |bytes: &[u8]| Override {
+            path: "mods/agedaddition-1.1.3.jar".into(),
+            sha256: hex::encode(Sha256::digest(bytes)),
+            size_bytes: bytes.len() as u64,
+            in_pack: true,
+            keep: None,
+        };
+        let wrong = extract(&state, &base, vec![jar(b"another jar")], &mut |_| {}).await;
+        assert!(wrong.is_err(), "only the exact copy the version names");
+        extract(&state, &base, vec![jar(b"the jar")], &mut |_| {})
+            .await
+            .unwrap();
+        // Where an uploaded mod would be, so the install takes it from there.
+        let cached = fetch::blob_file(&state.paths, &jar(b"the jar").sha256);
+        assert_eq!(std::fs::read(cached).unwrap(), b"the jar");
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     #[test]
     fn a_pack_file_is_never_read_past_its_limit() {
         let endless = std::io::repeat(b'x');
@@ -364,8 +413,12 @@ mod tests {
         keys.sort();
         assert_eq!(
             keys,
-            ["config/a.toml", "kubejs/assets/atm/logo.png"],
-            "mods are content, not the pack's own files"
+            [
+                "config/a.toml",
+                "kubejs/assets/atm/logo.png",
+                "mods/custom.jar"
+            ],
+            "its mods too: they can stand in for uploads"
         );
         assert_eq!(
             index["config/a.toml"].sha256,
