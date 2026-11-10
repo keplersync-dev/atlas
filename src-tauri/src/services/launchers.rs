@@ -27,13 +27,16 @@ pub async fn ensure_detected(state: &AppState) -> AppResult<()> {
 }
 
 /// Look in every launcher's default folders and save new installs. Auto-detected rows
-/// whose folder no longer holds that launcher are removed; rows the user added stay.
+/// whose folder no longer holds that launcher are removed, and so are empty ones detection
+/// no longer finds (the folder a launcher moved away from); rows the user added stay.
 /// Returns whether anything changed.
 async fn detect_and_save(state: &AppState) -> AppResult<bool> {
     let mut changed = false;
+    let mut detected = Vec::new();
     for kind in launchers::KINDS {
         for root in launchers::detect(kind) {
             let root = clean_path(&root);
+            detected.push(root.to_lowercase());
             if db::launchers::find_by_root(&state.db, &root)
                 .await?
                 .is_none()
@@ -46,7 +49,11 @@ async fn detect_and_save(state: &AppState) -> AppResult<bool> {
     }
     for row in db::launchers::list(&state.db).await? {
         let gone = match row.kind() {
-            Some(kind) => !launchers::is_root(kind, Path::new(&row.root_path)),
+            Some(kind) => {
+                !launchers::is_root(kind, Path::new(&row.root_path))
+                    || (!detected.contains(&row.root_path.to_lowercase())
+                        && instances_in(&row).await.is_empty())
+            }
             None => true,
         };
         if gone && !row.added_by_user {

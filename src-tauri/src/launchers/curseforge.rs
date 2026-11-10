@@ -17,13 +17,20 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::util::{
-    any_running, env_dir, first_existing, free_folder, home, image_ext, loader_from, mac_app,
-    parse_time, read_json, write_atomic,
+    any_running, app_data, env_dir, first_existing, free_folder, home, image_ext, loader_from,
+    mac_app, parse_time, read_json, write_atomic,
 };
 use super::{FoundInstance, NewInstance, ReadError, ReadResult};
 use crate::dto::Loader;
 
+/// The folder the app's settings name, else its defaults. A move leaves the old folder's
+/// empty `Instances/` behind, so the defaults would show it as a second CurseForge.
 pub fn default_roots() -> Vec<PathBuf> {
+    if let Some(root) =
+        app_data().and_then(|d| root_from_settings(&d.join("CurseForge").join("storage.json")))
+    {
+        return vec![root];
+    }
     let Some(home) = home() else {
         return vec![];
     };
@@ -31,6 +38,18 @@ pub fn default_roots() -> Vec<PathBuf> {
         home.join("curseforge").join("minecraft"),
         home.join("Documents").join("curseforge").join("minecraft"),
     ]
+}
+
+/// The Minecraft folder picked in the app's settings, which can move it to another drive.
+/// The app keeps that setting as JSON text inside its storage.json.
+fn root_from_settings(storage: &Path) -> Option<PathBuf> {
+    let storage: Value = read_json(storage).ok()?;
+    let settings: Value = match storage.get("minecraft-settings")? {
+        Value::String(text) => serde_json::from_str(text).ok()?,
+        other => other.clone(),
+    };
+    let root = settings.get("minecraftRoot")?.as_str()?.trim();
+    (!root.is_empty()).then(|| PathBuf::from(root))
 }
 
 /// Instances/ alone isn't enough: Windows paths ignore case, so Prism's `instances/`
@@ -354,6 +373,40 @@ pub fn create(root: &Path, new: &NewInstance, loader_data: Option<Value>) -> Rea
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn reads_the_minecraft_folder_moved_in_the_apps_settings() {
+        let dir =
+            std::env::temp_dir().join(format!("atlas-cf-settings-{}", crate::util::ids::new_id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let storage = dir.join("storage.json");
+        // As the app writes it: the settings are a JSON string inside the file.
+        let settings =
+            json!({ "minecraftRoot": r"F:\Games\curseforge", "preferredRelease": 1 }).to_string();
+        std::fs::write(
+            &storage,
+            json!({ "minecraft-settings": settings, "session-tokens": "x" }).to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            root_from_settings(&storage),
+            Some(PathBuf::from(r"F:\Games\curseforge"))
+        );
+
+        std::fs::write(
+            &storage,
+            json!({ "minecraft-settings": "{\"minecraftRoot\":\"\"}" }).to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            root_from_settings(&storage),
+            None,
+            "an empty setting is the default folder"
+        );
+        std::fs::write(&storage, "{}").unwrap();
+        assert_eq!(root_from_settings(&storage), None);
+        std::fs::remove_dir_all(&dir).ok();
+    }
 
     fn fixture() -> PathBuf {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/curseforge")

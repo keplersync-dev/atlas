@@ -399,3 +399,76 @@ fn modrinth_instances_follow_the_apps_folder_to_another_drive() {
         );
     }
 }
+
+/// A Minecraft Launcher folder whose installations each have their own game directory.
+fn official_launcher(root: &std::path::Path, installs: &[(&str, &str, &std::path::Path)]) {
+    std::fs::create_dir_all(root).unwrap();
+    let mut profiles = serde_json::Map::new();
+    for (id, name, dir) in installs {
+        std::fs::create_dir_all(dir.join("mods")).unwrap();
+        profiles.insert(
+            id.to_string(),
+            json!({ "name": name, "type": "custom", "gameDir": dir, "lastVersionId": "fabric-loader-0.16.9-1.21.1" }),
+        );
+    }
+    std::fs::write(
+        root.join("launcher_profiles.json"),
+        json!({ "profiles": profiles }).to_string(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn minecraft_launcher_installations_follow_a_new_game_directory() {
+    let app = TestApp::new();
+    let (c, f) = (TempDir::new(), TempDir::new());
+    let root = c.0.join(".minecraft");
+    let (old, new) = (c.0.join("smp"), f.0.join("smp"));
+    official_launcher(
+        &root,
+        &[
+            ("a1", "SMP", &old),
+            ("b2", "Creative", &c.0.join("creative")),
+        ],
+    );
+    app.ok(
+        "add_launcher",
+        json!({ "kind": "official", "rootPath": root }),
+    );
+    let detected = app.ok("list_detected_instances", json!({}));
+    let lid = by_name(&detected, "SMP")["launcherInstanceId"].clone();
+    let added = app.ok(
+        "track_instances",
+        json!({ "refs": [{ "launcherKind": "official", "launcherInstanceId": lid }] }),
+    );
+    let id = by_name(&added, "SMP")["id"].as_str().unwrap().to_string();
+
+    // The installation's game directory is pointed at another drive.
+    app.state().watcher.unwatch(&id);
+    std::fs::remove_dir_all(&old).unwrap();
+    official_launcher(
+        &root,
+        &[
+            ("a1", "SMP", &new),
+            ("b2", "Creative", &c.0.join("creative")),
+        ],
+    );
+    let moved = app.ok("rescan_instance", json!({ "id": id }));
+    assert_eq!(moved["status"], "ready");
+    assert_eq!(moved["gameDir"], clean(&new));
+    assert_eq!(
+        app.ok("rescan_instance", json!({ "id": id }))["gameDir"],
+        clean(&new),
+        "and it stays there"
+    );
+
+    // Two installations by that name: Atlas can't tell which, so it doesn't guess.
+    app.state().watcher.unwatch(&id);
+    std::fs::remove_dir_all(&new).unwrap();
+    let (x, y) = (f.0.join("smp-x"), f.0.join("smp-y"));
+    official_launcher(&root, &[("a1", "SMP", &x), ("c3", "SMP", &y)]);
+    assert_eq!(
+        app.ok("rescan_instance", json!({ "id": id }))["status"],
+        "missing"
+    );
+}

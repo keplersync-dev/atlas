@@ -390,6 +390,42 @@ async fn launcher_gone(state: &AppState, row: &InstanceRow) -> AppResult<bool> {
     })
 }
 
+/// The launcher's only instance named like `row` that exists and no other tracked instance
+/// has, now under `row`'s id. None when there's no such instance or more than one.
+async fn renamed(
+    state: &AppState,
+    row: &InstanceRow,
+    launcher_id: &str,
+) -> AppResult<Option<FoundInstance>> {
+    let Some(launcher) = db::launchers::get(&state.db, launcher_id).await? else {
+        return Ok(None);
+    };
+    let mut same = Vec::new();
+    for f in launcher_service::instances_in(&launcher).await {
+        if f.name == row.name
+            && f.game_dir.is_dir()
+            && db::instances::find_by_game_dir(&state.db, &clean_path(&f.game_dir))
+                .await?
+                .is_none()
+        {
+            same.push(f);
+        }
+    }
+    if same.len() != 1 {
+        return Ok(None);
+    }
+    let f = same.remove(0);
+    db::instances::move_to_launcher(
+        &state.db,
+        &row.id,
+        launcher_id,
+        row.kind(),
+        &f.launcher_instance_id,
+    )
+    .await?;
+    Ok(Some(f))
+}
+
 /// Re-read the launcher's metadata (from `listed` when it has the launcher) and whether
 /// the folder still exists. Returns the updated row and whether anything changed.
 async fn refresh_metadata(
@@ -443,6 +479,16 @@ async fn refresh_metadata(
                 }
                 None => None,
             }
+        }
+        (found, _) => found,
+    };
+    // Its id changed with its folder (a Minecraft Launcher installation pointed at another
+    // game directory): the launcher's one untracked instance of that name, if it has one.
+    let found = match (found, &before.launcher_id) {
+        (None, Some(launcher_id))
+            if before.kind() != LauncherKind::Folder && !Path::new(&before.game_dir).is_dir() =>
+        {
+            renamed(state, &before, launcher_id).await?
         }
         (found, _) => found,
     };
