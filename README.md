@@ -17,8 +17,9 @@ Atlas isn't a launcher. Your launcher still installs and runs the game; Atlas ke
 - **Safe updates.** Atlas waits for the game to close, backs up what it replaces, and never touches your worlds or your own extras.
 - **Undo.** Roll an instance back to any of its last three backups.
 - **Mods from Modrinth and CurseForge**, downloaded from the source. Files on neither can be uploaded, with your permission.
-- **Friends and groups.** Add friends with a friend code or link, and see who's online.
-- **Works signed out.** Sign in with Minecraft or Discord only for sharing.
+- **Friends and groups.** Add friends by their Minecraft name or with a friend link, and see who's online.
+- **Works signed out.** Sign in with Minecraft only for sharing.
+- **Plays well with [Tandem](https://github.com/keplersync-dev/tandem).** Same account and friends, so your group can play the world together too.
 
 ## Download
 
