@@ -248,6 +248,16 @@ pub async fn move_to_launcher(
     Ok(())
 }
 
+/// The instance's folder moved with its launcher.
+pub async fn set_game_dir(db: &SqlitePool, id: &str, game_dir: &str) -> sqlx::Result<()> {
+    sqlx::query("UPDATE instance SET game_dir = ? WHERE id = ?")
+        .bind(game_dir)
+        .bind(id)
+        .execute(db)
+        .await?;
+    Ok(())
+}
+
 /// Keep up with role changes: each linked copy takes its role from the server's list of
 /// shared instances (the owner can change a member's role at any time).
 pub async fn sync_roles(

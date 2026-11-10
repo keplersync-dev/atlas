@@ -379,6 +379,17 @@ pub async fn give_launcher_picture(state: &AppState, row: &InstanceRow) -> bool 
 /// Each launcher's instances by launcher id, read once for a batch of rescans.
 type Listed = HashMap<String, Vec<FoundInstance>>;
 
+/// The instance's launcher is no longer known, or its folder no longer holds that launcher.
+async fn launcher_gone(state: &AppState, row: &InstanceRow) -> AppResult<bool> {
+    let Some(launcher_id) = &row.launcher_id else {
+        return Ok(true);
+    };
+    Ok(match db::launchers::get(&state.db, launcher_id).await? {
+        Some(l) => !launchers::is_root(row.kind(), Path::new(&l.root_path)),
+        None => true,
+    })
+}
+
 /// Re-read the launcher's metadata (from `listed` when it has the launcher) and whether
 /// the folder still exists. Returns the updated row and whether anything changed.
 async fn refresh_metadata(
@@ -409,6 +420,49 @@ async fn refresh_metadata(
         }
         _ => None,
     };
+    // The launcher itself moved (to another drive, say) and was added again from the new
+    // place: the instance is there under the same id. Only then, so an instance deleted
+    // in one install never jumps to a namesake in another.
+    let found = match (found, &before.launcher_instance_id) {
+        (None, Some(lid))
+            if before.kind() != LauncherKind::Folder
+                && !Path::new(&before.game_dir).is_dir()
+                && launcher_gone(state, &before).await? =>
+        {
+            match launcher_service::find_instance(state, before.kind(), lid).await? {
+                Some((launcher, f)) => {
+                    db::instances::move_to_launcher(
+                        &state.db,
+                        id,
+                        &launcher.id,
+                        before.kind(),
+                        lid,
+                    )
+                    .await?;
+                    Some(f)
+                }
+                None => None,
+            }
+        }
+        (found, _) => found,
+    };
+    // The launcher says it's in another folder now (Modrinth App's folder moved in its
+    // settings, a launcher moved to another drive): follow it.
+    let mut before = before;
+    let mut moved = false;
+    if let Some(f) = &found {
+        let dir = clean_path(&f.game_dir);
+        if !dir.eq_ignore_ascii_case(&before.game_dir)
+            && !Path::new(&before.game_dir).is_dir()
+            && f.game_dir.is_dir()
+        {
+            tracing::info!(from = %before.game_dir, to = %dir, "instance folder moved");
+            db::instances::set_game_dir(&state.db, id, &dir).await?;
+            state.watcher.unwatch(id);
+            before.game_dir = dir;
+            moved = true;
+        }
+    }
     let status = if Path::new(&before.game_dir).is_dir() {
         InstanceStatus::Ready
     } else {
@@ -418,8 +472,9 @@ async fn refresh_metadata(
         Some(f) => Some(metadata(state, f).await),
         None => None,
     };
-    let changed =
-        status != before.status() || meta.as_ref().is_some_and(|m| *m != Metadata::of(&before));
+    let changed = moved
+        || status != before.status()
+        || meta.as_ref().is_some_and(|m| *m != Metadata::of(&before));
     db::instances::update_scan(&state.db, id, meta.as_ref(), status).await?;
     Ok((db::instances::require(&state.db, id).await?, changed))
 }

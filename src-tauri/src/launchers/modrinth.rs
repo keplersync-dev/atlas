@@ -2,7 +2,8 @@
 //!
 //! <root>/app.db (SQLite, the app's own; opened read-only. The one exception is
 //! `set_icon`: a picture for an instance Atlas had it make, written only while it's closed.)
-//! <root>/profiles/<path>/ is the game dir.
+//! <root>/profiles/<path>/ is the game dir, or <custom_dir>/profiles/<path>/ once the app's folder has been
+//! moved in its settings (`settings.custom_dir`; app.db itself never moves).
 //!
 //! Current schema (checked against Modrinth App, migration 20260918120000):
 //!   instances(id, path, name, icon_path, last_played [unix s],
@@ -37,8 +38,23 @@ pub fn default_roots() -> Vec<PathBuf> {
     ]
 }
 
+/// No `profiles` check: after a move in the app's settings, profiles are elsewhere.
 pub fn is_root(path: &Path) -> bool {
-    path.join("app.db").is_file() && path.join("profiles").is_dir()
+    path.join("app.db").is_file()
+}
+
+const CUSTOM_DIR: &str = "SELECT custom_dir FROM settings";
+
+/// The folder the app keeps its instances in.
+pub async fn profiles(root: &Path) -> PathBuf {
+    // Older apps have no settings table: those never moved.
+    let moved: Vec<(Option<String>,)> =
+        rows(root, CUSTOM_DIR, CUSTOM_DIR).await.unwrap_or_default();
+    moved
+        .into_iter()
+        .find_map(|(dir,)| dir.filter(|d| !d.trim().is_empty()))
+        .map_or_else(|| root.to_path_buf(), PathBuf::from)
+        .join("profiles")
 }
 
 pub fn program() -> Option<PathBuf> {
@@ -82,10 +98,11 @@ const LEGACY: &str = "
 
 pub async fn list(root: &Path) -> ReadResult<Vec<FoundInstance>> {
     let rows: Vec<Row> = rows(root, CURRENT, LEGACY).await?;
+    let profiles = profiles(root).await;
     Ok(rows
         .into_iter()
         .map(|r| FoundInstance {
-            game_dir: root.join("profiles").join(&r.path),
+            game_dir: profiles.join(&r.path),
             launcher_instance_id: r.path,
             name: r.name,
             icon: r.icon_path.map(|p| format!("file:{p}")),
@@ -443,7 +460,7 @@ async fn made(root: &Path, before: &HashSet<String>, name: &str, pack: &Path) ->
     };
     Ok(match job.status.as_str() {
         "succeeded" => match job.path {
-            Some(path) if root.join("profiles").join(&path).is_dir() => Made::Done(path),
+            Some(path) if profiles(root).await.join(&path).is_dir() => Made::Done(path),
             _ => Made::Waiting,
         },
         "failed" => Made::Failed,
@@ -459,6 +476,7 @@ async fn made(root: &Path, before: &HashSet<String>, name: &str, pack: &Path) ->
 async fn find_new(root: &Path, before: &HashSet<String>, name: &str) -> ReadResult<Option<String>> {
     let stem = file_stem(name);
     let rows: Vec<Stage> = rows(root, STAGES, LEGACY_STAGES).await?;
+    let profiles = profiles(root).await;
     Ok(rows
         .into_iter()
         .find(|s| !before.contains(&s.path) && (s.name == name || s.name == stem))
@@ -466,7 +484,7 @@ async fn find_new(root: &Path, before: &HashSet<String>, name: &str) -> ReadResu
             matches!(
                 s.install_stage.as_str(),
                 "pack_installed" | "minecraft_installing" | "installing" | "installed"
-            ) && root.join("profiles").join(&s.path).is_dir()
+            ) && profiles.join(&s.path).is_dir()
         })
         .map(|s| s.path))
 }
@@ -603,6 +621,38 @@ mod tests {
         assert_eq!(new.minecraft_version, None);
         assert_eq!(new.loader, None);
         assert_eq!(new.last_played_at, None);
+    }
+
+    #[tokio::test]
+    async fn follows_the_apps_folder_moved_in_its_settings() {
+        let root = fixture().await;
+        let moved = root.join("D-drive/ModrinthApp");
+        std::fs::create_dir_all(&moved).unwrap();
+        std::fs::rename(root.join("profiles"), moved.join("profiles")).unwrap();
+        let options = SqliteConnectOptions::new().filename(root.join("app.db"));
+        let mut c = SqliteConnection::connect_with(&options).await.unwrap();
+        sqlx::query("CREATE TABLE settings (id INTEGER NOT NULL, custom_dir TEXT NULL, prev_custom_dir TEXT NULL)")
+            .execute(&mut c)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO settings VALUES (0, ?, NULL)")
+            .bind(moved.to_string_lossy())
+            .execute(&mut c)
+            .await
+            .unwrap();
+        c.close().await.unwrap();
+
+        assert!(is_root(&root), "app.db stays put, so it's still the app");
+        let list = list(&root).await.unwrap();
+        std::fs::remove_dir_all(&root).ok();
+        let bmc = list
+            .iter()
+            .find(|i| i.name.starts_with("Better MC"))
+            .unwrap();
+        assert_eq!(
+            bmc.game_dir,
+            moved.join("profiles/Better MC [FABRIC] - BMC2")
+        );
     }
 
     fn neoforge() -> NewInstance {

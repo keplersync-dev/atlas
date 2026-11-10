@@ -235,3 +235,167 @@ fn track_a_folder_by_hand() {
         "conflict"
     );
 }
+
+fn copy_dir(from: &std::path::Path, to: &std::path::Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for e in std::fs::read_dir(from).unwrap() {
+        let e = e.unwrap();
+        if e.file_type().unwrap().is_dir() {
+            copy_dir(&e.path(), &to.join(e.file_name()));
+        } else {
+            std::fs::copy(e.path(), to.join(e.file_name())).unwrap();
+        }
+    }
+}
+
+#[test]
+fn instances_follow_their_launcher_to_another_drive() {
+    let app = TestApp::new();
+    let (a, b, c) = (TempDir::new(), TempDir::new(), TempDir::new());
+    let prism = a.0.join("PrismLauncher");
+    copy_dir(&fixture("prism"), &prism);
+    app.ok(
+        "add_launcher",
+        json!({ "kind": "prism", "rootPath": prism }),
+    );
+    let added = app.ok(
+        "track_instances",
+        json!({ "refs": [{ "launcherKind": "prism", "launcherInstanceId": "Survival SMP" }] }),
+    );
+    let id = by_name(&added, "Survival SMP")["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+
+    // Windows won't move a folder Atlas is watching: these moves happen with Atlas closed.
+    let state = app.state();
+    // The launcher's instances folder moved in its settings.
+    state.watcher.unwatch(&id);
+    std::fs::rename(prism.join("instances"), b.0.join("instances")).unwrap();
+    std::fs::write(
+        prism.join("prismlauncher.cfg"),
+        format!("InstanceDir={}\n", b.0.join("instances").display()),
+    )
+    .unwrap();
+    let moved = app.ok("rescan_instance", json!({ "id": id }));
+    assert_eq!(moved["status"], "ready");
+    assert_eq!(
+        moved["gameDir"],
+        clean(&b.0.join("instances/Survival SMP/minecraft"))
+    );
+
+    // The whole launcher moved, and was added again from its new place.
+    let again = c.0.join("PrismLauncher");
+    state.watcher.unwatch(&id);
+    std::fs::rename(&prism, &again).unwrap();
+    std::fs::rename(b.0.join("instances"), again.join("instances")).unwrap();
+    std::fs::write(again.join("prismlauncher.cfg"), "InstanceDir=instances\n").unwrap();
+    assert_eq!(
+        app.ok("rescan_instance", json!({ "id": id }))["status"],
+        "missing"
+    );
+    app.ok(
+        "add_launcher",
+        json!({ "kind": "prism", "rootPath": again }),
+    );
+    let found = app.ok("rescan_instance", json!({ "id": id }));
+    assert_eq!(found["status"], "ready");
+    assert_eq!(
+        found["gameDir"],
+        clean(&again.join("instances/Survival SMP/minecraft"))
+    );
+    assert_eq!(
+        found["totalPlaytimeSeconds"], 36000,
+        "still the same instance"
+    );
+}
+
+/// A Modrinth App folder (only what Atlas reads) with one instance, its database in `root`
+/// and its instances in `data`, the way the app keeps them once its folder has moved.
+fn modrinth_app(root: &std::path::Path, data: &std::path::Path) {
+    use sqlx::{ConnectOptions, Executor};
+    std::fs::create_dir_all(data.join("profiles/Aged/mods")).unwrap();
+    std::fs::write(data.join("profiles/Aged/mods/sodium.jar"), b"jar").unwrap();
+    std::fs::create_dir_all(root).unwrap();
+    tauri::async_runtime::block_on(async {
+        let mut c = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(root.join("app.db"))
+            .create_if_missing(true)
+            .connect()
+            .await
+            .unwrap();
+        let custom = if data == root {
+            "NULL".to_string()
+        } else {
+            format!("'{}'", data.display())
+        };
+        let sql: &'static str = Box::leak(
+            format!(
+                "CREATE TABLE instances (id TEXT, path TEXT, applied_content_set_id TEXT, install_stage TEXT,
+                    name TEXT, icon_path TEXT, last_played INTEGER, submitted_time_played INTEGER, recent_time_played INTEGER);
+                 CREATE TABLE instance_content_sets (id TEXT, game_version TEXT, loader TEXT, loader_version TEXT);
+                 CREATE TABLE settings (id INTEGER, custom_dir TEXT, prev_custom_dir TEXT);
+                 INSERT INTO instances VALUES ('local:aged', 'Aged', 'set', 'installed', 'Aged', NULL, 1780559691, 100, 20);
+                 INSERT INTO instance_content_sets VALUES ('set', '1.21.1', 'fabric', '0.16.9');
+                 INSERT INTO settings VALUES (0, {custom}, {custom});"
+            )
+            .into_boxed_str(),
+        );
+        c.execute(sql).await.unwrap();
+    });
+}
+
+#[test]
+fn modrinth_instances_follow_the_apps_folder_to_another_drive() {
+    for old_atlas_opened_in_between in [false, true] {
+        let app = TestApp::new();
+        let (c, f) = (TempDir::new(), TempDir::new());
+        let root = c.0.join("ModrinthApp");
+        modrinth_app(&root, &root);
+        app.ok(
+            "add_launcher",
+            json!({ "kind": "modrinth", "rootPath": root }),
+        );
+        let added = app.ok(
+            "track_instances",
+            json!({ "refs": [{ "launcherKind": "modrinth", "launcherInstanceId": "Aged" }] }),
+        );
+        let id = by_name(&added, "Aged")["id"].as_str().unwrap().to_string();
+        assert_eq!(added[0]["gameDir"], clean(&root.join("profiles/Aged")));
+
+        // The app moves its folder to F: and keeps only its database behind.
+        app.state().watcher.unwatch(&id);
+        std::fs::remove_dir_all(&root).unwrap();
+        modrinth_app(&root, &f.0.join("ModrinthApp"));
+        if old_atlas_opened_in_between {
+            // Atlas 0.5.0 saw no profiles folder there and dropped the launcher.
+            let db = app.state().db;
+            tauri::async_runtime::block_on(sqlx::query("DELETE FROM launcher").execute(&db))
+                .unwrap();
+            app.ok(
+                "add_launcher",
+                json!({ "kind": "modrinth", "rootPath": root }),
+            );
+        }
+
+        let moved = app.ok("rescan_instance", json!({ "id": id }));
+        assert_eq!(
+            moved["status"], "ready",
+            "opened in between: {old_atlas_opened_in_between}"
+        );
+        assert_eq!(
+            moved["gameDir"],
+            clean(&f.0.join("ModrinthApp/profiles/Aged"))
+        );
+        assert_eq!(moved["launcher"]["kind"], "modrinth");
+        assert_eq!(
+            moved["totalPlaytimeSeconds"], 120,
+            "still the same instance"
+        );
+        let detail = app.ok("get_instance", json!({ "id": id }));
+        assert!(
+            detail.to_string().contains("sodium"),
+            "its mods are read from F: {detail}"
+        );
+    }
+}
