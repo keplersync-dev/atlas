@@ -103,6 +103,7 @@ pub(super) async fn plan_configs<R: Runtime>(
             from_pack: in_pack(&l.path),
             changed: false,
             refusal: manifest::upload_refusal(&l.path, l.size).map(left_out_reason),
+            personal: share_files::personal(&l.path),
         })
         .collect();
     let game = PathBuf::from(&row.game_dir);

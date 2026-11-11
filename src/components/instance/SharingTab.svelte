@@ -12,7 +12,6 @@
     SharedMember,
   } from "$lib/types";
   import { instances } from "$lib/stores";
-  import ConfigFiles from "./ConfigFiles.svelte";
   import Head from "../Head.svelte";
   import PersonName from "../PersonName.svelte";
   import Icon from "../Icon.svelte";
@@ -125,7 +124,7 @@
     <div class="min-w-0 flex-1">
       <b class="block font-medium"
         >{isOwner
-          ? "Install editors' updates automatically"
+          ? "Install updates automatically"
           : "Keep it up to date automatically"}</b
       >
       <small class="block text-[13px] text-(--text-muted)">
@@ -137,7 +136,7 @@
     <Switch
       checked={sync.autoUpdate}
       label={isOwner
-        ? "Install editors' updates automatically"
+        ? "Install updates automatically"
         : "Keep it up to date automatically"}
       disabled={savingAutoUpdate}
       onchange={setAutoUpdate}
@@ -257,8 +256,4 @@
       No members match “{query}”.
     </p>
   {/each}
-{/if}
-
-{#if sync.role !== "viewer"}
-  <ConfigFiles {instanceId} />
 {/if}

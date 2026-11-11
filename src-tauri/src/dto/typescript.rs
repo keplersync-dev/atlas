@@ -50,7 +50,7 @@ fn types_ts() -> String {
         GroupRef, SharedMember, GroupLinkGroup, SharedGroupLink, OptionalItem, UploadedFile, SharedInstance,
         UpdatedItem, RevisionChanges, RevisionSummary, SharedInstanceDetail, ConfigConflict,
         VersionChange, LauncherChange, SyncPreview, SyncOptions, PublishItem, RemovedItem, PackInfo,
-        LeftOutFile, ShareFile, FileRules, PublishPlan, ShareInstanceInput, PublishInput,
+        LeftOutFile, ShareFile, PersonalKeep, Personal, FileRules, PublishPlan, ShareInstanceInput, PublishInput,
         InviteInput,
         // Activity and events
         ActivityItem, Notice, NoticeTarget, AtlasEvent,

@@ -612,7 +612,29 @@ changed: boolean,
  * Why it can't be uploaded even when ticked. A file from the pack still goes out
  * as the pack has it.
  */
-refusal: LeftOutReason | null, };
+refusal: LeftOutReason | null, 
+/**
+ * One player's own settings or data, kept to them by default.
+ */
+personal: Personal | null, };
+
+/**
+ * What Atlas does by default with a file that holds one player's own settings or data:
+ * `Once` sends the owner's copy when a friend joins, then they keep theirs; `OnlyMe`
+ * keeps it on the owner's PC.
+ */
+export type PersonalKeep = "once" | "only_me";
+
+export type Personal = { keep: PersonalKeep, 
+/**
+ * What it holds, for the line under its name: "video settings".
+ */
+what: string, 
+/**
+ * The entry it matched ("journeymap/data/"): an `OnlyMe` default counts as an
+ * unticked rule this long, so ticking a folder above it leaves it out.
+ */
+rule: string, };
 
 /**
  * Which tree files are shared: paths ticked or unticked, a folder ending in '/' and ""
@@ -623,7 +645,12 @@ export type FileRules = { include: Array<string>, exclude: Array<string>,
 /**
  * Files members get once and then keep as their own (options.txt always is).
  */
-firstInstall: Array<string>, };
+firstInstall: Array<string>, 
+/**
+ * Files sent once by default (`PersonalKeep::Once`) that the owner sends on every
+ * update instead.
+ */
+everyUpdate: Array<string>, };
 
 export type PublishPlan = { 
 /**

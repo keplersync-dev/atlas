@@ -102,7 +102,7 @@ async fn save_file_rules(state: &AppState, id: &str, rules: &FileRules) -> AppRe
     )
     .bind(serde_json::to_string(&rules.include)?)
     .bind(serde_json::to_string(&rules.exclude)?)
-    .bind(serde_json::to_string(&rules.first_install)?)
+    .bind(serde_json::to_string(&share_files::saved_first_install(rules))?)
     .bind(id)
     .execute(&state.db)
     .await?;

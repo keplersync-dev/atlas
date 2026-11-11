@@ -3,7 +3,8 @@ use serde::{Deserialize, Serialize};
 pub use atlas_protocol::api::{
     AddMembers, CreateRevision, CreateSharedInstance, GroupLinkGroup, GroupRef, OptionalItem,
     Revision, RevisionChanges, RevisionSummary, SetMemberRole, ShareToGroup, SharedGroupLink,
-    SharedInstance, SharedInstanceDetail, SharedMember, Synced, Transfer, UpdatedItem, UploadedFile,
+    SharedInstance, SharedInstanceDetail, SharedMember, Synced, Transfer, UpdatedItem,
+    UploadedFile,
 };
 
 use super::{
@@ -74,6 +75,31 @@ pub struct ShareFile {
     /// Why it can't be uploaded even when ticked. A file from the pack still goes out
     /// as the pack has it.
     pub refusal: Option<LeftOutReason>,
+    /// One player's own settings or data, kept to them by default.
+    pub personal: Option<Personal>,
+}
+
+/// What Atlas does by default with a file that holds one player's own settings or data:
+/// `Once` sends the owner's copy when a friend joins, then they keep theirs; `OnlyMe`
+/// keeps it on the owner's PC.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PersonalKeep {
+    Once,
+    OnlyMe,
+}
+
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Personal {
+    pub keep: PersonalKeep,
+    /// What it holds, for the line under its name: "video settings".
+    pub what: String,
+    /// The entry it matched ("journeymap/data/"): an `OnlyMe` default counts as an
+    /// unticked rule this long, so ticking a folder above it leaves it out.
+    pub rule: String,
 }
 
 /// Which tree files are shared: paths ticked or unticked, a folder ending in '/' and ""
@@ -87,6 +113,10 @@ pub struct FileRules {
     pub exclude: Vec<String>,
     /// Files members get once and then keep as their own (options.txt always is).
     pub first_install: Vec<String>,
+    /// Files sent once by default (`PersonalKeep::Once`) that the owner sends on every
+    /// update instead.
+    #[serde(default)]
+    pub every_update: Vec<String>,
 }
 
 /// A config file that won't be shared as it is here, and why. Listed in the dialog

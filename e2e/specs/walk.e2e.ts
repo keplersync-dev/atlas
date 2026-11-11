@@ -124,13 +124,22 @@ async function stepsFor(): Promise<Step[]> {
       name: `${slug}-content`,
       open: () => go({ page: "instance", id: i.id }),
     });
-    for (const tab of ["Sharing", "History"])
+    const files = i.role === "owner" || i.role === "editor";
+    for (const tab of [...(files ? ["Files"] : []), "Sharing", "History"])
       steps.push({
         name: `${slug}-${tab.toLowerCase()}`,
         open: async () => {
           await go({ page: "instance", id: i.id });
           await browser.pause(300);
           await clickText("[role=tab]", tab).catch(() => undefined);
+          if (tab === "Files")
+            await browser.waitUntil(
+              async () =>
+                !(await browser.$("main").getText()).includes(
+                  "Reading the folder",
+                ),
+              { timeout: 30_000 },
+            );
         },
       });
     steps.push({

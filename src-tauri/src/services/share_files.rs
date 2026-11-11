@@ -13,7 +13,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use sha2::{Digest, Sha256};
 
 use crate::db::file_hashes::FileHash;
-use crate::dto::FileRules;
+use crate::dto::{FileRules, Personal, PersonalKeep};
 use crate::sync::manifest::{CONTENT_DIRS, Keep, NEVER_SHARED};
 
 /// Ticked by default, like the Modrinth App's whole `config/`, plus the folders packs
@@ -47,6 +47,174 @@ const HIDDEN: [&str; 12] = [
 /// The player's own settings: a member gets the owner's copy once, then keeps theirs
 /// (as the Modrinth App keeps players' options across modpack updates).
 const FIRST_INSTALL: [&str; 1] = ["options.txt"];
+
+use PersonalKeep::{Once, OnlyMe};
+
+/// Files that hold one player's own settings or data, lower case, a folder ending in '/'.
+/// `Once`: video, shader, key and HUD settings, which friends tune for their own PC.
+/// `OnlyMe`: what's tied to this PC or this player (device names, keys, bookmarks, map
+/// data, caches). Found on 24 real instances and checked against the mods' own files;
+/// the sources are in the vault (research/research-personal-files.md).
+const PERSONAL: [(&str, PersonalKeep, &str); 68] = [
+    ("options.txt", Once, "keys, video and sound"),
+    ("optionsof.txt", Once, "video settings"),
+    ("optionsshaders.txt", Once, "shader choice"),
+    ("config/sodium-options.json", Once, "video settings"),
+    ("config/sodium-extra-options.json", Once, "video settings"),
+    ("config/embeddium-options.json", Once, "video settings"),
+    ("config/rubidium-options.json", Once, "video settings"),
+    ("config/iris.properties", Once, "shader choice"),
+    ("config/oculus.properties", Once, "shader choice"),
+    (
+        "config/distanthorizons.toml",
+        Once,
+        "Distant Horizons settings",
+    ),
+    ("config/dynamic_fps.json", Once, "frame rate settings"),
+    ("config/xaerominimap.txt", Once, "minimap settings"),
+    ("config/xaeroworldmap.txt", Once, "world map settings"),
+    ("config/xaeroplus.txt", Once, "map settings"),
+    ("journeymap/config/", Once, "map settings"),
+    ("config/fzzy_config/keybinds.toml", Once, "key bindings"),
+    ("config/ichunutil_keybinds.cfg", Once, "key bindings"),
+    ("config/minihud.json", Once, "hotkeys and HUD settings"),
+    ("config/tweakeroo.json", Once, "hotkeys and tweaks"),
+    (
+        "config/litematica.json",
+        Once,
+        "Litematica hotkeys and settings",
+    ),
+    (
+        "config/controllable-client.toml",
+        Once,
+        "controller settings",
+    ),
+    (
+        "config/presencefootsteps/userconfig.json",
+        Once,
+        "footstep sound settings",
+    ),
+    ("config/brandon3055/hud_settings.json", Once, "HUD layout"),
+    ("config/combat_roll/hud_config.json", Once, "HUD layout"),
+    (
+        "config/pneumaticcraft/pneumaticarmorhudlayout.cfg",
+        Once,
+        "HUD layout",
+    ),
+    (
+        "config/sodium-fingerprint.json",
+        OnlyMe,
+        "Sodium's install record",
+    ),
+    (
+        "config/embeddium-fingerprint.json",
+        OnlyMe,
+        "Embeddium's install record",
+    ),
+    (
+        "config/journeymap_modinfo.cfg",
+        OnlyMe,
+        "JourneyMap's usage report ID",
+    ),
+    ("config/tandem.json", OnlyMe, "Tandem settings"),
+    (
+        "config/tandem-crash-seen.txt",
+        OnlyMe,
+        "Tandem's crash record",
+    ),
+    (
+        "config/nochatreports/ncr-encryption.json",
+        OnlyMe,
+        "chat encryption key",
+    ),
+    (
+        "config/nochatreports/ncr-serverpreferences.json",
+        OnlyMe,
+        "chat choices for each server",
+    ),
+    (
+        "config/voicechat/voicechat-client.properties",
+        OnlyMe,
+        "microphone and speaker settings",
+    ),
+    (
+        "config/voicechat/voicechat-volumes.properties",
+        OnlyMe,
+        "voice chat volumes",
+    ),
+    ("config/voicechat/username-cache.json", OnlyMe, "name cache"),
+    ("config/jei/bookmarks.ini", OnlyMe, "JEI bookmarks"),
+    ("config/jei/world/", OnlyMe, "JEI bookmarks and history"),
+    (
+        "config/roughlyenoughitems/favorites.json5",
+        OnlyMe,
+        "REI favorites",
+    ),
+    (
+        "config/lavender_client_storage.json",
+        OnlyMe,
+        "guide book bookmarks",
+    ),
+    (
+        "config/ars_nouveau/doc_data.json",
+        OnlyMe,
+        "guide book bookmarks",
+    ),
+    (
+        "config/fancymenu/user_variables.db",
+        OnlyMe,
+        "FancyMenu's saved values",
+    ),
+    ("config/jade/usernamecache.json", OnlyMe, "name cache"),
+    ("config/bclib/cache.json", OnlyMe, "cache"),
+    ("config/brandon3055/resourcecache/", OnlyMe, "cache"),
+    ("config/spark/tmp/", OnlyMe, "temporary files"),
+    ("config/spark/tmp-client/", OnlyMe, "temporary files"),
+    (
+        "config/presencefootsteps/updater.json",
+        OnlyMe,
+        "update check",
+    ),
+    ("emi.json", OnlyMe, "EMI favorites and history"),
+    ("patchouli_data.json", OnlyMe, "guide book bookmarks"),
+    ("knownkeys.txt", OnlyMe, "Default Options' key record"),
+    ("trashslotsavestate.json", OnlyMe, "trash slot positions"),
+    ("hotbar.nbt", OnlyMe, "saved hotbars"),
+    ("command_history.txt", OnlyMe, "chat command history"),
+    ("realms_persistence.json", OnlyMe, "Realms state"),
+    ("servers.dat_old", OnlyMe, "old server list"),
+    ("servers.essential.dat", OnlyMe, "Essential's server list"),
+    ("irisupdateinfo.json", OnlyMe, "update check"),
+    ("journeymap/data/", OnlyMe, "map data and waypoints"),
+    ("xaero/", OnlyMe, "map data and waypoints"),
+    ("xaerowaypoints/", OnlyMe, "waypoints"),
+    ("xaeroworldmap/", OnlyMe, "map data"),
+    (
+        "distant_horizons_server_data/",
+        OnlyMe,
+        "Distant Horizons map data",
+    ),
+    (".bobby/", OnlyMe, "chunk cache"),
+    ("local/", OnlyMe, "this PC's own mod data"),
+    ("fancymenu_data/", OnlyMe, "FancyMenu's own data"),
+    ("downloads/", OnlyMe, "downloads"),
+    ("schematics/", OnlyMe, "schematics"),
+    ("replay_recordings/", OnlyMe, "replays"),
+];
+
+/// Whether `path` holds one player's own settings or data, and what Atlas does with it.
+pub fn personal(path: &str) -> Option<Personal> {
+    let lower = path.to_ascii_lowercase();
+    PERSONAL
+        .iter()
+        .filter(|(rule, ..)| lower == *rule || rule.ends_with('/') && lower.starts_with(rule))
+        .max_by_key(|(rule, ..)| rule.len())
+        .map(|(rule, keep, what)| Personal {
+            keep: *keep,
+            what: (*what).to_owned(),
+            rule: (*rule).to_owned(),
+        })
+}
 
 fn listed(path: &str) -> bool {
     let lower = path.to_ascii_lowercase();
@@ -161,28 +329,52 @@ fn walk(dir: &Path, rel: &str, out: &mut Vec<Listed>) {
 }
 
 /// Whether `path` is shared. `from_pack`: the modpack ships it (ticked by default).
+/// A personal `OnlyMe` file the pack doesn't ship counts as unticked by a rule as long as
+/// its entry, which a rule naming it (or something inside it) still beats.
 pub fn shared(rules: &FileRules, path: &str, from_pack: bool) -> bool {
     let covers = |rule: &String| {
         *rule == path || rule.is_empty() || rule.ends_with('/') && path.starts_with(rule.as_str())
     };
     let best = |list: &[String]| list.iter().filter(|r| covers(r)).map(String::len).max();
+    let mine = personal(path)
+        .filter(|p| p.keep == OnlyMe && !from_pack)
+        .map(|p| p.rule.len());
     match (best(&rules.include), best(&rules.exclude)) {
-        (Some(i), Some(e)) => i > e,
-        (Some(_), None) => true,
+        (Some(i), e) => e.is_none_or(|e| i > e) && mine.is_none_or(|m| i >= m),
         (None, Some(_)) => false,
-        (None, None) => from_pack || DEFAULT_DIRS.iter().any(|d| path.starts_with(d)),
+        (None, None) => {
+            mine.is_none() && (from_pack || DEFAULT_DIRS.iter().any(|d| path.starts_with(d)))
+        }
     }
 }
 
 /// How members' copies of a shared file are kept.
 pub fn keep(rules: &FileRules, path: &str) -> Option<Keep> {
+    let once_by_default = || {
+        personal(path).is_some_and(|p| p.keep == Once)
+            && !rules.every_update.iter().any(|p| p == path)
+    };
     if path == "servers.dat" {
         Some(Keep::MergeServers)
-    } else if FIRST_INSTALL.contains(&path) || rules.first_install.iter().any(|p| p == path) {
+    } else if FIRST_INSTALL.contains(&path)
+        || rules.first_install.iter().any(|p| p == path)
+        || once_by_default()
+    {
         Some(Keep::FirstInstall)
     } else {
         None
     }
+}
+
+/// `every_update` is saved in the first-install column as "!path", so it needs no column
+/// of its own and builds from before it ignore it (no file is named "!...").
+pub fn saved_first_install(rules: &FileRules) -> Vec<String> {
+    rules
+        .first_install
+        .iter()
+        .cloned()
+        .chain(rules.every_update.iter().map(|p| format!("!{p}")))
+        .collect()
 }
 
 /// Saved rules from before the tree: `sync_include` held globs ("config/**").
@@ -195,10 +387,16 @@ pub fn from_saved(
         Some(dir) => dir.to_owned(),
         None => r,
     };
+    let (every_update, first_install): (Vec<String>, Vec<String>) =
+        first_install.into_iter().partition(|p| p.starts_with('!'));
     FileRules {
         include: include.into_iter().map(prefix).collect(),
         exclude: exclude.into_iter().map(prefix).collect(),
         first_install,
+        every_update: every_update
+            .into_iter()
+            .map(|p| p[1..].to_owned())
+            .collect(),
     }
 }
 
@@ -271,7 +469,7 @@ mod tests {
         FileRules {
             include: include.iter().map(|s| s.to_string()).collect(),
             exclude: exclude.iter().map(|s| s.to_string()).collect(),
-            first_install: vec![],
+            ..FileRules::default()
         }
     }
 
@@ -338,6 +536,63 @@ mod tests {
             ..none
         };
         assert_eq!(keep(&mine, "optionsof.txt"), Some(Keep::FirstInstall));
+    }
+
+    #[test]
+    fn personal_files_get_their_own_defaults() {
+        let none = rules(&[], &[]);
+        assert_eq!(
+            keep(&none, "config/sodium-options.json"),
+            Some(Keep::FirstInstall)
+        );
+        assert!(!shared(&none, "config/jei/bookmarks.ini", false), "only me");
+        assert!(
+            shared(&none, "config/jei/bookmarks.ini", true),
+            "a pack's own copy still goes out"
+        );
+        assert!(!shared(
+            &none,
+            "config/jei/world/local/a/bookmarks.json",
+            false
+        ));
+        // Ticking the folder above leaves personal files out; naming one shares it.
+        let folder = rules(&["config/jei/"], &[]);
+        assert!(!shared(&folder, "config/jei/bookmarks.ini", false));
+        assert!(shared(&folder, "config/jei/jei-client.ini", false));
+        let named = rules(&["config/jei/bookmarks.ini", "config/jei/world/"], &[]);
+        assert!(shared(&named, "config/jei/bookmarks.ini", false));
+        assert!(shared(
+            &named,
+            "config/jei/world/local/a/bookmarks.json",
+            false
+        ));
+        // Case doesn't matter, and the longest entry wins.
+        assert_eq!(
+            personal("journeymap/config/5.7/journeymap.core.config").map(|p| p.keep),
+            Some(Once)
+        );
+        assert_eq!(
+            personal("JourneyMap/data/sp/World/x.png").map(|p| p.keep),
+            Some(OnlyMe)
+        );
+        assert_eq!(personal("config/create-client.toml"), None);
+    }
+
+    #[test]
+    fn every_update_is_saved_beside_first_install() {
+        let mine = FileRules {
+            first_install: vec!["optionsof.txt".into()],
+            every_update: vec!["config/iris.properties".into()],
+            ..FileRules::default()
+        };
+        assert_eq!(
+            keep(&mine, "config/iris.properties"),
+            None,
+            "sent on every update"
+        );
+        let saved = saved_first_install(&mine);
+        assert_eq!(saved, ["optionsof.txt", "!config/iris.properties"]);
+        assert_eq!(from_saved(vec![], vec![], saved), mine);
     }
 
     #[test]

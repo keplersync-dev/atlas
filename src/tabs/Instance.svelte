@@ -16,6 +16,7 @@
   import Menu from "../components/Menu.svelte";
   import Tabs from "../components/Tabs.svelte";
   import ContentTab from "../components/instance/ContentTab.svelte";
+  import FilesTab from "../components/instance/FilesTab.svelte";
   import HistoryTab from "../components/instance/HistoryTab.svelte";
   import SharingTab from "../components/instance/SharingTab.svelte";
   import SyncBar from "../components/instance/SyncBar.svelte";
@@ -28,7 +29,11 @@
   const summary = $derived(instances.byId(id));
   const detail = resource(() => api.getInstance(id));
 
-  let tab = $state<"content" | "sharing" | "history">("content");
+  let tab = $state<"content" | "files" | "sharing" | "history">("content");
+  // Owners and editors choose which config and other files friends get.
+  const canSetFiles = $derived(
+    !!summary?.sync && summary.sync.role !== "viewer",
+  );
   let busy = $state(false);
   let error = $state<string | null>(null);
 
@@ -312,6 +317,7 @@
       bind:value={tab}
       tabs={[
         { id: "content", label: "Content" },
+        ...(canSetFiles ? [{ id: "files" as const, label: "Files" }] : []),
         { id: "sharing", label: "Sharing" },
         { id: "history", label: "History" },
       ]}
@@ -325,12 +331,19 @@
     </p>
   {:else if !detail.data}
     <p class="py-8 text-(--text-muted)">Loading…</p>
-  {:else if tab === "content"}
+  {:else if tab === "content" || (tab === "files" && !canSetFiles)}
     <ContentTab
       instance={detail.data}
       {lockedReason}
       onchanged={() => instances.load()}
     />
+  {:else if tab === "files" && canSetFiles}
+    <div class="max-w-4xl">
+      <!-- Read again after each update, so what was sent loses its dot. -->
+      {#key summary.sync?.latestRevision}
+        <FilesTab instanceId={summary.id} />
+      {/key}
+    </div>
   {:else if tab === "sharing"}
     {#if summary.sync}
       <!-- Settings and a short list: a readable width, not the whole window. -->

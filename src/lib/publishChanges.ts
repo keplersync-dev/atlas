@@ -15,10 +15,11 @@ export const modeOf = (item: PublishItem, modes: Record<Id, ShareMode>) =>
 /** Whether two sets of file ticks share the same `files`, kept the same way. */
 export function sameRules(a: FileRules, b: FileRules, files: ShareFile[]) {
   return files.every((f) => {
-    const shared = isShared(a, f.path, f.fromPack);
+    const shared = isShared(a, f.path, f.fromPack, f.personal);
     return (
-      shared === isShared(b, f.path, f.fromPack) &&
-      (!shared || keptAs(a, f.path) === keptAs(b, f.path))
+      shared === isShared(b, f.path, f.fromPack, f.personal) &&
+      (!shared ||
+        keptAs(a, f.path, f.personal) === keptAs(b, f.path, f.personal))
     );
   });
 }

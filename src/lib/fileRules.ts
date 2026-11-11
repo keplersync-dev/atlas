@@ -2,7 +2,7 @@
 // The rules mirror src-tauri/src/services/share_files.rs, which decides for real when
 // sharing; keep the two the same.
 
-import type { FileRules, ShareFile } from "$lib/types";
+import type { FileRules, Personal, ShareFile } from "$lib/types";
 
 /** Ticked when no rule says otherwise. DEFAULT_DIRS in share_files.rs. */
 const DEFAULT_DIRS = [
@@ -31,13 +31,23 @@ function longest(rules: string[], path: string) {
   return best;
 }
 
-/** Whether a file is ticked. `fromPack`: the modpack ships it. */
-export function isShared(rules: FileRules, path: string, fromPack: boolean) {
+/** Whether a file is ticked. `fromPack`: the modpack ships it. A personal "only me"
+ *  file the pack doesn't ship counts as unticked by a rule as long as its entry. */
+export function isShared(
+  rules: FileRules,
+  path: string,
+  fromPack: boolean,
+  personal: Personal | null = null,
+) {
   const inc = longest(rules.include, path);
   const exc = longest(rules.exclude, path);
+  const mine =
+    personal?.keep === "only_me" && !fromPack ? personal.rule.length : -1;
   if (inc < 0 && exc < 0)
-    return fromPack || DEFAULT_DIRS.some((d) => path.startsWith(d));
-  return inc > exc;
+    return (
+      mine < 0 && (fromPack || DEFAULT_DIRS.some((d) => path.startsWith(d)))
+    );
+  return inc > exc && inc >= mine;
 }
 
 /** Tick or untick a file or folder: the rules inside it go, and one rule says it. */
@@ -55,24 +65,57 @@ export function setShared(
 }
 
 /** How members' copies are kept. `keep` in share_files.rs. */
-export function keptAs(rules: FileRules, path: string) {
+export function keptAs(
+  rules: FileRules,
+  path: string,
+  personal: Personal | null = null,
+) {
   if (path === "servers.dat") return "merged" as const;
-  if (FIRST_INSTALL.includes(path) || rules.firstInstall.includes(path))
+  if (
+    FIRST_INSTALL.includes(path) ||
+    rules.firstInstall.includes(path) ||
+    (personal?.keep === "once" && !rules.everyUpdate.includes(path))
+  )
     return "first_install" as const;
   return null;
 }
 
-/** Whether the owner can switch this file to first install only (options.txt always is). */
-export const canChooseFirstInstall = (path: string) =>
-  path !== "servers.dat" && !FIRST_INSTALL.includes(path);
+/** What friends get of a file: the three-way switch in the Files tab. */
+export type Keep = "always" | "once" | "me";
 
-export function setFirstInstall(
-  rules: FileRules,
-  path: string,
-  on: boolean,
-): FileRules {
-  const rest = rules.firstInstall.filter((p) => p !== path);
-  return { ...rules, firstInstall: on ? [...rest, path] : rest };
+export function keepOf(rules: FileRules, f: ShareFile): Keep {
+  if (!isShared(rules, f.path, f.fromPack, f.personal)) return "me";
+  return keptAs(rules, f.path, f.personal) === "first_install"
+    ? "once"
+    : "always";
+}
+
+/** The switch's choices: options.txt is always sent once, servers.dat is always added. */
+export const choices = (path: string): Keep[] =>
+  path === "servers.dat"
+    ? ["always", "me"]
+    : FIRST_INSTALL.includes(path)
+      ? ["once", "me"]
+      : ["always", "once", "me"];
+
+export function setKeep(rules: FileRules, f: ShareFile, to: Keep): FileRules {
+  const on = to !== "me";
+  let next =
+    isShared(rules, f.path, f.fromPack, f.personal) === on
+      ? rules
+      : setShared(rules, f.path, on);
+  const without = (list: string[]) => list.filter((p) => p !== f.path);
+  const onceByDefault = f.personal?.keep === "once";
+  next = {
+    ...next,
+    firstInstall: without(next.firstInstall),
+    everyUpdate: without(next.everyUpdate),
+  };
+  if (to === "once" && !onceByDefault)
+    next.firstInstall = [...next.firstInstall, f.path];
+  if (to === "always" && onceByDefault)
+    next.everyUpdate = [...next.everyUpdate, f.path];
+  return next;
 }
 
 /** A file that can't be uploaded and doesn't come from the pack never goes out. */
@@ -83,6 +126,7 @@ export const DEFAULT_RULES: FileRules = {
   include: [],
   exclude: [],
   firstInstall: [],
+  everyUpdate: [],
 };
 
 export interface Folder {
@@ -159,7 +203,7 @@ export function countShared(root: Folder, rules: FileRules) {
     for (const f of folder.files) {
       if (blocked(f)) continue;
       c.total++;
-      if (isShared(rules, f.path, f.fromPack)) {
+      if (isShared(rules, f.path, f.fromPack, f.personal)) {
         c.shared++;
         c.sharedBytes += f.sizeBytes;
       }

@@ -592,7 +592,7 @@
                 >
                 <span class="min-w-0 flex-1">
                   <b class="block font-medium"
-                    >{plural(files.length, "config")} changed</b
+                    >{plural(files.length, "file")} changed</b
                   >
                   <small
                     class="block truncate text-[13px] text-(--text-faint)"
