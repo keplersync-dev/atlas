@@ -321,6 +321,7 @@ mod tests {
             content,
             overrides,
             base: None,
+            files: None,
         }
     }
 

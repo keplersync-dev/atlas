@@ -102,22 +102,8 @@ pub struct Personal {
     pub rule: String,
 }
 
-/// Which tree files are shared: paths ticked or unticked, a folder ending in '/' and ""
-/// for everything. The longest matching rule wins; with none, config and script folders
-/// and the pack's own files are shared. Saved with each share for the next one.
-#[cfg_attr(test, derive(ts_rs::TS))]
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct FileRules {
-    pub include: Vec<String>,
-    pub exclude: Vec<String>,
-    /// Files members get once and then keep as their own (options.txt always is).
-    pub first_install: Vec<String>,
-    /// Files sent once by default (`PersonalKeep::Once`) that the owner sends on every
-    /// update instead.
-    #[serde(default)]
-    pub every_update: Vec<String>,
-}
+/// Which tree files are shared. Saved on the instance, and sent with each version.
+pub use atlas_protocol::manifest::FileRules;
 
 /// A config file that won't be shared as it is here, and why. Listed in the dialog
 /// before anything uploads.

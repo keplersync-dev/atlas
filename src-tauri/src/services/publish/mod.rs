@@ -81,32 +81,11 @@ fn modes(rows: &[ContentRow], chosen: &HashMap<String, ShareMode>) -> HashMap<St
 
 /// The tree's ticks, as saved with the last share or publish.
 async fn file_rules(state: &AppState, id: &str) -> AppResult<FileRules> {
-    let saved: Option<(String, String, String)> = sqlx::query_as(
-        "SELECT sync_include, sync_exclude, sync_first_install FROM instance WHERE id = ?",
-    )
-    .bind(id)
-    .fetch_optional(&state.db)
-    .await?;
-    let (include, exclude, first) = saved.unwrap_or_default();
-    let list = |json: &str| serde_json::from_str::<Vec<String>>(json).unwrap_or_default();
-    Ok(share_files::from_saved(
-        list(&include),
-        list(&exclude),
-        list(&first),
-    ))
+    share_files::saved_rules(&state.db, id).await
 }
 
 async fn save_file_rules(state: &AppState, id: &str, rules: &FileRules) -> AppResult<()> {
-    sqlx::query(
-        "UPDATE instance SET sync_include = ?, sync_exclude = ?, sync_first_install = ? WHERE id = ?",
-    )
-    .bind(serde_json::to_string(&rules.include)?)
-    .bind(serde_json::to_string(&rules.exclude)?)
-    .bind(serde_json::to_string(&share_files::saved_first_install(rules))?)
-    .bind(id)
-    .execute(&state.db)
-    .await?;
-    Ok(())
+    share_files::save_rules(&state.db, id, rules).await
 }
 
 /// The tree's ticks, saved from the instance's Sharing tab: they go out with the next update.
@@ -187,6 +166,7 @@ fn build(
         // Only named when some files come from it.
         base: base.filter(|_| files_from_pack),
         overrides,
+        files: None,
     };
     manifest::validate(&m).map_err(|e| {
         tracing::warn!(error = %e, "built a manifest that doesn't validate");
@@ -289,15 +269,18 @@ async fn share_now<R: Runtime>(
     .await?;
     let icon = send_icon(state, &row).await;
     let file_icons = send_file_icons(state, &rows, &modes).await;
-    let m = build(
-        &row,
-        &rows,
-        &modes,
-        description.clone(),
-        configs,
-        icon,
-        &file_icons,
-    )?;
+    let m = Manifest {
+        files: Some(file_rules(state, id).await?),
+        ..build(
+            &row,
+            &rows,
+            &modes,
+            description.clone(),
+            configs,
+            icon,
+            &file_icons,
+        )?
+    };
     work.report(WorkStage::Saving, 0, 0);
     let body = CreateSharedInstance {
         name: row.name.clone(),
@@ -392,7 +375,11 @@ async fn publish_now<R: Runtime>(
         row.synced_manifest().and_then(|m| m.icon)
     };
     let file_icons = send_file_icons(state, &rows, &modes).await;
-    let m = build(&row, &rows, &modes, description, configs, icon, &file_icons)?;
+    // The file choices go along, so editors and the owner's other PCs send the same files.
+    let m = Manifest {
+        files: Some(file_rules(state, id).await?),
+        ..build(&row, &rows, &modes, description, configs, icon, &file_icons)?
+    };
     if row.synced_manifest_hash.as_deref() == Some(manifest::hash(&m).as_str()) {
         return Err(AppError::invalid_input("Nothing new to send"));
     }

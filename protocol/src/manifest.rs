@@ -34,6 +34,29 @@ pub struct Manifest {
     /// come out of the pack's own download instead of being uploaded.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base: Option<PackBase>,
+    /// Which other files go out, so an editor's update and the owner's other PCs send
+    /// the same ones. Older versions don't have it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub files: Option<FileRules>,
+}
+
+/// Which of the instance's other files friends get, as the Files tab saves them: paths,
+/// folders ending in "/", "" for the whole folder. The longest rule covering a file wins;
+/// without one, files from the modpack and the config folders go out.
+#[cfg_attr(feature = "ts", derive(ts_rs::TS))]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileRules {
+    #[serde(default)]
+    pub include: Vec<String>,
+    #[serde(default)]
+    pub exclude: Vec<String>,
+    /// Files members get once and then keep as their own (options.txt always is).
+    #[serde(default)]
+    pub first_install: Vec<String>,
+    /// Files sent once by default (personal settings) that go out on every update instead.
+    #[serde(default)]
+    pub every_update: Vec<String>,
 }
 
 impl Manifest {
@@ -446,6 +469,18 @@ pub fn validate(m: &Manifest) -> Result<(), Invalid> {
         return bad(
             "The uploaded files add up to more than 150 MB. Untick some to share the rest.".into(),
         );
+    }
+    if let Some(f) = &m.files {
+        let lists = [&f.include, &f.exclude, &f.first_install, &f.every_update];
+        if lists.iter().map(|l| l.len()).sum::<usize>() > MAX_OVERRIDES {
+            return bad("It has too many file choices.".into());
+        }
+        for rule in lists.into_iter().flatten() {
+            let path = rule.strip_suffix('/').unwrap_or(rule);
+            if !path.is_empty() {
+                check_path(path, None)?;
+            }
+        }
     }
     Ok(())
 }
@@ -969,6 +1004,18 @@ mod tests {
         let mut m = parse(&example()).unwrap();
         m.overrides[0].path = "kubejs/assets/atm/textures/logo.png".into();
         assert!(validate(&m).is_ok(), "pictures next to scripts");
+
+        let mut m = parse(&example()).unwrap();
+        m.files = Some(FileRules {
+            include: vec!["".into(), "config/".into(), "options.txt".into()],
+            exclude: vec!["config/journeymap/".into()],
+            ..Default::default()
+        });
+        assert!(validate(&m).is_ok(), "file choices");
+        for odd in ["../secrets/", "C:/Users/", "/etc/", "config//x"] {
+            m.files.as_mut().unwrap().every_update = vec![odd.into()];
+            assert!(validate(&m).is_err(), "file choice {odd}");
+        }
 
         let mut m = parse(&example()).unwrap();
         m.schema_version = 2;

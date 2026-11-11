@@ -11,9 +11,11 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use sha2::{Digest, Sha256};
+use sqlx::SqlitePool;
 
 use crate::db::file_hashes::FileHash;
 use crate::dto::{FileRules, Personal, PersonalKeep};
+use crate::error::AppResult;
 use crate::sync::manifest::{CONTENT_DIRS, Keep, NEVER_SHARED};
 
 /// Ticked by default, like the Modrinth App's whole `config/`, plus the folders packs
@@ -398,6 +400,36 @@ pub fn from_saved(
             .map(|p| p[1..].to_owned())
             .collect(),
     }
+}
+
+/// The Files tab's choices as saved on the instance.
+pub async fn saved_rules(db: &SqlitePool, id: &str) -> AppResult<FileRules> {
+    let saved: Option<(String, String, String)> = sqlx::query_as(
+        "SELECT sync_include, sync_exclude, sync_first_install FROM instance WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(db)
+    .await?;
+    let (include, exclude, first) = saved.unwrap_or_default();
+    let list = |json: &str| serde_json::from_str::<Vec<String>>(json).unwrap_or_default();
+    Ok(from_saved(list(&include), list(&exclude), list(&first)))
+}
+
+pub async fn save_rules(
+    db: impl sqlx::SqliteExecutor<'_>,
+    id: &str,
+    rules: &FileRules,
+) -> AppResult<()> {
+    sqlx::query(
+        "UPDATE instance SET sync_include = ?, sync_exclude = ?, sync_first_install = ? WHERE id = ?",
+    )
+    .bind(serde_json::to_string(&rules.include)?)
+    .bind(serde_json::to_string(&rules.exclude)?)
+    .bind(serde_json::to_string(&saved_first_install(rules))?)
+    .bind(id)
+    .execute(db)
+    .await?;
+    Ok(())
 }
 
 #[cfg(test)]

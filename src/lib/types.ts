@@ -637,9 +637,9 @@ what: string,
 rule: string, };
 
 /**
- * Which tree files are shared: paths ticked or unticked, a folder ending in '/' and ""
- * for everything. The longest matching rule wins; with none, config and script folders
- * and the pack's own files are shared. Saved with each share for the next one.
+ * Which of the instance's other files friends get, as the Files tab saves them: paths,
+ * folders ending in "/", "" for the whole folder. The longest rule covering a file wins;
+ * without one, files from the modpack and the config folders go out.
  */
 export type FileRules = { include: Array<string>, exclude: Array<string>, 
 /**
@@ -647,8 +647,7 @@ export type FileRules = { include: Array<string>, exclude: Array<string>,
  */
 firstInstall: Array<string>, 
 /**
- * Files sent once by default (`PersonalKeep::Once`) that the owner sends on every
- * update instead.
+ * Files sent once by default (personal settings) that go out on every update instead.
  */
 everyUpdate: Array<string>, };
 
