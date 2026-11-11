@@ -80,7 +80,7 @@ export function plural(
   word: string,
   pluralWord = word + "s",
 ): string {
-  return `${n} ${n === 1 ? word : pluralWord}`;
+  return `${n.toLocaleString("en-US")} ${n === 1 ? word : pluralWord}`;
 }
 
 /** "A", "A and B", "A, B and 3 more": a long list said in one line. */

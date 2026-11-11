@@ -94,7 +94,7 @@
   // ── Where you are, and what's listed ──
   let at = $state("");
   let query = $state("");
-  let filter = $state<"all" | "changed" | "me">("all");
+  let filter = $state<"all" | "changed" | "sent" | "me">("all");
 
   const folder = $derived(folderAt(tree, at));
   const crumbs = $derived(at.split("/").filter(Boolean));
@@ -126,9 +126,11 @@
       .filter((f) =>
         filter === "changed"
           ? f.changed
-          : filter === "me"
-            ? keepOf(current, f) === "me"
-            : true,
+          : filter === "sent"
+            ? notSent.has(f.path)
+            : filter === "me"
+              ? keepOf(current, f) === "me"
+              : true,
       )
       .slice(0, 300);
   });
@@ -322,84 +324,102 @@
   </div>
 {/if}
 
+{#snippet setAllMenu()}
+  <Menu
+    label="Set every file shown"
+    items={menu}
+    triggerClass="inline-flex h-7.5 items-center gap-1 rounded-md px-2.5 text-[13px] font-medium text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary) aria-expanded:bg-(--bg-hover)"
+  >
+    {#snippet trigger()}
+      Set all shown <Icon name="chev" class="size-3 rotate-90" />
+    {/snippet}
+  </Menu>
+{/snippet}
+
+{#snippet filters()}
+  <div class="flex flex-wrap gap-0.5" role="group" aria-label="Show">
+    {#each [{ id: "all" as const, label: "All", n: null }, ...(changedCount ? [{ id: "changed" as const, label: "Differs from pack", n: changedCount }] : []), ...(page && notSent.size ? [{ id: "sent" as const, label: "Not sent yet", n: notSent.size }] : []), { id: "me" as const, label: "Only me", n: onlyMeCount }] as c (c.id)}
+      <button
+        type="button"
+        aria-pressed={filter === c.id}
+        onclick={() => (filter = c.id)}
+        class="inline-flex h-7 items-center gap-1 rounded-full px-3 text-[13px] whitespace-nowrap {filter ===
+        c.id
+          ? 'bg-(--bg-raise-2) text-(--text-primary)'
+          : 'text-(--text-muted) hover:text-(--text-primary)'}"
+        >{#if c.id === "changed"}<Icon
+            name="cube"
+            class="size-3.5"
+          />{/if}{c.label}{#if c.n !== null}<span
+            class="text-(--text-faint) tabular-nums">{c.n}</span
+          >{/if}</button
+      >
+    {/each}
+  </div>
+{/snippet}
+
+{#snippet differs(n: number | null)}
+  <span
+    class="ml-1.5 inline-flex h-5 items-center gap-1 rounded-full border border-(--line) px-1.5 align-middle text-[12px] whitespace-nowrap text-(--text-muted)"
+    title="Not the same as the modpack's copy, so friends get yours. The game and mods rewrite their settings as you play."
+    ><Icon name="cube" class="size-3" />{n === null
+      ? "Differs from pack"
+      : `${n} ${n === 1 ? "differs" : "differ"} from pack`}</span
+  >
+{/snippet}
+
 {#if visible.length}
+  {#if page && changedCount}
+    <!-- "Differs" isn't something you did: say so once, in a line. -->
+    <p
+      class="mt-4 flex items-start gap-2.5 rounded-lg border border-(--line)/60 bg-(--line-2)/10 px-3 py-2.5 text-[13px] text-(--text-muted)"
+    >
+      <Icon name="cube" class="mt-0.5 size-4 shrink-0" />
+      <span
+        ><b class="font-semibold text-(--text-primary)"
+          >{changedCount === 1
+            ? "1 file differs from the modpack's copy."
+            : `${changedCount} files differ from the modpack's copies.`}</b
+        > That's normal: the game and mods rewrite their settings as you play.</span
+      >
+    </p>
+  {/if}
   <section
     bind:this={section}
     class={page
       ? "mt-4"
-      : "mt-4 rounded-lg border border-(--line) bg-(--bg-raise) pt-3"}
+      : "flex h-full min-h-0 flex-col rounded-[10px] border border-(--line)/60"}
   >
-    {#if !page}
-      <h3 class="px-4 pb-2 text-[14px] font-semibold">
-        Configs and other files
-      </h3>
-    {/if}
-    <div class={page ? "sticky top-0 z-10 bg-(--bg) pt-1" : ""}>
-      <div
-        class="flex flex-wrap items-center gap-x-2 gap-y-2 {page ? '' : 'px-4'}"
-      >
+    <div class={page ? "sticky top-0 z-10 bg-(--bg) pt-1" : "px-3 pt-2.5"}>
+      {#if page}
+        <div class="flex flex-wrap items-center gap-2">
+          <SearchBox
+            bind:value={query}
+            placeholder="Search {plural(visible.length, 'file')}"
+            class="max-w-72 min-w-32 flex-1"
+          />
+          {@render filters()}
+          <div class="ml-auto shrink-0">{@render setAllMenu()}</div>
+        </div>
+      {:else}
+        <div class="flex items-center gap-2">
+          <h3 class="text-[15px] font-semibold">Files</h3>
+          <span class="text-[13px] text-(--text-faint) tabular-nums"
+            >{visible.length.toLocaleString()}</span
+          >
+          <div class="ml-auto shrink-0">{@render setAllMenu()}</div>
+        </div>
         <SearchBox
           bind:value={query}
           placeholder="Search {plural(visible.length, 'file')}"
-          class="max-w-72 min-w-32 flex-1"
+          class="mt-1.5"
         />
-        {#if page}
-          <div class="flex gap-0.5" role="group" aria-label="Show">
-            {#each [{ id: "all" as const, label: "All", n: null }, ...(changedCount ? [{ id: "changed" as const, label: "Changed", n: changedCount }] : []), { id: "me" as const, label: "Only me", n: onlyMeCount }] as c (c.id)}
-              <button
-                type="button"
-                aria-pressed={filter === c.id}
-                onclick={() => (filter = c.id)}
-                class="h-7 rounded-full px-3 text-[13px] {filter === c.id
-                  ? 'bg-(--bg-raise-2) text-(--text-primary)'
-                  : 'text-(--text-muted) hover:text-(--text-primary)'}"
-                >{c.label}{#if c.n !== null}<span
-                    class="ml-1 text-(--text-faint) tabular-nums">{c.n}</span
-                  >{/if}</button
-              >
-            {/each}
-          </div>
-          <!-- A menu, as on the Content tab beside it. -->
-          <div class="ml-auto shrink-0">
-            <Menu
-              label="Set every file shown"
-              items={menu}
-              triggerClass="inline-flex h-7.5 items-center gap-1 rounded-md px-2.5 text-[13px] font-medium text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary) aria-expanded:bg-(--bg-hover)"
-            >
-              {#snippet trigger()}
-                Set all shown <Icon name="chev" class="size-3 rotate-90" />
-              {/snippet}
-            </Menu>
-          </div>
-        {:else}
-          <!-- Links, as in the mods list just above it in the dialog. The filters stay
-               in the Files tab: there's no room for both here. -->
-          <span class="flex items-center gap-1 text-[13px] text-(--text-faint)">
-            Set all shown:
-            {#each [{ label: "Always", to: "always" as const }, { label: "Only me", to: "me" as const }] as s (s.to)}
-              <button
-                type="button"
-                class="h-6 rounded px-1.5 text-(--accent) hover:bg-(--bg-hover)"
-                onclick={() => setAllShown(s.to)}>{s.label}</button
-              >
-            {/each}
-            {#if !isDefault}
-              <button
-                type="button"
-                class="h-6 rounded px-1.5 text-(--accent) hover:bg-(--bg-hover)"
-                title="What Atlas picks for every file"
-                onclick={() => (rules = DEFAULT_RULES)}>Atlas's defaults</button
-              >
-            {/if}
-          </span>
-        {/if}
-      </div>
+        <div class="mt-2">{@render filters()}</div>
+      {/if}
 
       {#if overLimit}
         <p
-          class="mt-2.5 flex items-center gap-2 text-[13px] text-(--warn) {page
-            ? ''
-            : 'px-4'}"
+          class="mt-2.5 flex items-center gap-2 text-[13px] text-(--warn)"
           role="alert"
         >
           <Icon name="warn" class="size-4 shrink-0" />
@@ -408,9 +428,12 @@
         </p>
       {/if}
 
-      <!-- Where you are: a path to go back up, and the open folder's own switch. -->
+      <!-- Where you are: Back (always here, faded at the top), the path, the open
+           folder's own switch. -->
       <div
-        class="mt-3 flex min-h-11 items-center gap-2.5 {page ? 'px-2' : 'px-4'}"
+        class="mt-2.5 flex min-h-10 items-center gap-2 {page
+          ? 'px-2'
+          : 'border-t border-(--line)/60 pt-1'}"
       >
         {#if flat}
           <div class="min-w-0 flex-1">
@@ -418,8 +441,10 @@
               >{query.trim()
                 ? `Matching “${query.trim()}”`
                 : filter === "changed"
-                  ? "Changed from the modpack"
-                  : "Only me"}</b
+                  ? "Differs from pack"
+                  : filter === "sent"
+                    ? "Not sent yet"
+                    : "Only me"}</b
             >
             <small class="block text-[13px] text-(--text-faint)"
               >Every folder, as one list{shown.length === 300
@@ -428,60 +453,59 @@
             >
           </div>
         {:else}
+          <button
+            type="button"
+            disabled={!at}
+            aria-label={at
+              ? `Back to ${crumbs.length > 1 ? crumbs.at(-2) : "Files"}`
+              : "Back"}
+            onclick={() => (at = up(crumbs.length - 1))}
+            class="grid size-6 shrink-0 place-items-center rounded-full transition-colors {at
+              ? 'bg-(--bg-raise-2) text-(--text-primary) hover:bg-(--bg-hover)'
+              : 'border border-(--line) text-(--text-faint)/40'}"
+          >
+            <!-- Pointing left, the chevron's point pulls it off centre. -->
+            <Icon name="chev" class="size-3 translate-x-[0.5px] rotate-180" />
+          </button>
+          <nav
+            aria-label="Folder"
+            class="flex min-w-0 flex-1 items-center gap-1 truncate"
+          >
+            {#if at}
+              <button
+                type="button"
+                class="shrink-0 text-(--accent) hover:underline"
+                onclick={() => (at = "")}>Files</button
+              >
+              {#each crumbs as c, i (i)}
+                <span class="text-(--text-faint)" aria-hidden="true">›</span>
+                {#if i < crumbs.length - 1}
+                  <button
+                    type="button"
+                    class="truncate text-(--accent) hover:underline"
+                    onclick={() => (at = up(i + 1))}>{c}</button
+                  >
+                {:else}
+                  <b class="truncate font-medium" aria-current="location">{c}</b
+                  >
+                {/if}
+              {/each}
+            {:else}
+              <b class="font-medium">Files</b>
+            {/if}
+          </nav>
+          <span
+            class="shrink-0 text-[13px] whitespace-nowrap text-(--text-faint)"
+          >
+            {plural(counts.get(at)?.total ?? 0, "file")}{page &&
+            changedIn.get(at)
+              ? ` · ${changedIn.get(at)} ${changedIn.get(at) === 1 ? "differs" : "differ"} from pack`
+              : ""}{at && folderKeep(at) === "some" ? " · some only you" : ""}
+          </span>
           {#if at}
-            <button
-              type="button"
-              aria-label="Back to {crumbs.length > 1
-                ? crumbs.at(-2)
-                : 'all files'}"
-              onclick={() => (at = up(crumbs.length - 1))}
-              class="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-(--line-2) pr-2.5 pl-1.5 text-[13px] text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
-            >
-              <Icon name="chev" class="size-3.5 rotate-180" />Back
-            </button>
-          {/if}
-          <div class="min-w-0 flex-1">
-            <nav
-              aria-label="Folder"
-              class="flex min-w-0 items-center gap-1 truncate"
-            >
-              {#if at}
-                <button
-                  type="button"
-                  class="shrink-0 text-(--accent) hover:underline"
-                  onclick={() => (at = "")}>All files</button
-                >
-                {#each crumbs as c, i (i)}
-                  <span class="text-(--text-faint)" aria-hidden="true">›</span>
-                  {#if i < crumbs.length - 1}
-                    <button
-                      type="button"
-                      class="truncate text-(--accent) hover:underline"
-                      onclick={() => (at = up(i + 1))}>{c}</button
-                    >
-                  {:else}
-                    <b class="truncate font-medium" aria-current="location"
-                      >{c}</b
-                    >
-                  {/if}
-                {/each}
-              {:else}
-                <b class="font-medium">All files</b>
-              {/if}
-            </nav>
-            <small class="block truncate text-[13px] text-(--text-faint)">
-              {plural(
-                counts.get(at)?.total ?? 0,
-                "file",
-              )}{#if changedIn.get(at)}{" · "}<span class="text-(--accent)"
-                  >{changedIn.get(at)} changed</span
-                >{/if}{at && folderKeep(at) === "some"
-                ? " · some only you"
-                : ""}
-            </small>
-          </div>
-          {#if at}
-            <span class="text-[13px] text-(--text-faint)">Whole folder</span>
+            {#if page}<span class="ml-2 text-[13px] text-(--text-faint)"
+                >Whole folder</span
+              >{/if}
             {@render keepSwitch(
               folderKeep(at),
               ["always", "me"],
@@ -497,14 +521,15 @@
       {#if page}{@render columns()}{/if}
     </div>
 
-    <div role="list" aria-label="Files to share">
+    <div
+      role="list"
+      aria-label="Files to share"
+      class={page ? "" : "flex min-h-0 flex-1 flex-col"}
+    >
       <div
         bind:this={list}
-        class={page ? "pt-1" : "max-h-72 overflow-y-auto px-2 pb-1"}
+        class={page ? "pt-1" : "min-h-0 flex-1 overflow-y-auto px-1.5 pb-1"}
       >
-        <!-- In the dialog the labels scroll with the rows' box, so they line up with the
-             rows whether or not a scrollbar takes some of its width. -->
-        {#if !page}{@render columns()}{/if}
         {#each rowFolders as fo (fo.path)}
           {@const k = folderKeep(fo.path)}
           {@const changed = changedIn.get(fo.path) ?? 0}
@@ -518,14 +543,11 @@
             >
               <span class="block truncate">{fo.name}</span>
               <small class="block truncate text-[13px] text-(--text-faint)">
-                {plural(
-                  counts.get(fo.path)?.total ?? 0,
-                  "file",
-                )}{#if changed}{" · "}<span class="text-(--accent)"
-                    >{changed} changed</span
-                  >{/if}{k === "some" ? " · some only you" : ""}{note
-                  ? ` · ${note}`
-                  : ""}
+                {plural(counts.get(fo.path)?.total ?? 0, "file")}{k === "some"
+                  ? " · some only you"
+                  : ""}{note ? ` · ${note}` : ""}{#if changed}{@render differs(
+                    changed,
+                  )}{/if}
               </small>
             </button>
             {@render dot(notSentIn(fo.path))}
@@ -556,22 +578,18 @@
           <div role="listitem" class={ROW}>
             <Icon name="file" class="size-4 text-(--text-faint)" />
             <span class="min-w-0">
-              <span class="block truncate" title={f.path}
-                >{#if f.path === "servers.dat"}Server list <span
-                    class="text-[13px] text-(--text-faint)">servers.dat</span
-                  >{:else}{name}{/if}</span
+              <span class="flex min-w-0 items-center" title={f.path}
+                ><span class="truncate"
+                  >{#if f.path === "servers.dat"}Server list <span
+                      class="text-[13px] text-(--text-faint)">servers.dat</span
+                    >{:else}{name}{/if}</span
+                >{#if f.changed && k !== "me"}{@render differs(null)}{/if}</span
               >
-              {#if (f.changed && k !== "me") || why || where}
+              {#if why || where}
                 <small class="block truncate text-[13px] text-(--text-faint)">
-                  {#if f.changed && k !== "me"}<span
-                      class="text-(--accent)"
-                      title="Set differently from the modpack's copy, so friends get yours. Mods often change their own settings when the game runs, so not every change is yours."
-                      >Changed from the modpack</span
-                    >{:else if why}<span class={why.warn ? "text-(--warn)" : ""}
+                  {#if why}<span class={why.warn ? "text-(--warn)" : ""}
                       >{why.text}</span
-                    >{/if}{#if where}{(f.changed && k !== "me") || why
-                      ? " · "
-                      : ""}{where}{/if}
+                    >{/if}{#if where}{why ? " · " : ""}{where}{/if}
                 </small>
               {/if}
             </span>
@@ -590,10 +608,12 @@
             {query.trim()
               ? `Nothing matches “${query.trim()}”.`
               : filter === "changed"
-                ? "Nothing is set differently from the modpack."
-                : filter === "me"
-                  ? "Friends get every file."
-                  : "This folder is empty."}
+                ? "No files differ from the modpack."
+                : filter === "sent"
+                  ? "Nothing is waiting to be sent."
+                  : filter === "me"
+                    ? "Friends get every file."
+                    : "This folder is empty."}
           </p>
         {/if}
       </div>
