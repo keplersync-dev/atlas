@@ -31,6 +31,9 @@
   } = $props();
 
   let kind = $state<ContentKind | "all">("all");
+  // What friends get, next to the kinds; Required is most of a pack, so it has no chip.
+  type Mode = "optional" | "private" | "sent";
+  let mode = $state<Mode | null>(null);
   let query = $state("");
 
   // Where a file comes from. `hint` is the tooltip: what the label means for sharing.
@@ -111,7 +114,7 @@
 
   const visible = $derived.by(() => {
     const ofKind = instance.content.filter(
-      (c) => kind === "all" || c.kind === kind,
+      (c) => (kind === "all" || c.kind === kind) && (!mode || isMode(c, mode)),
     );
     // Searching: best match first. Otherwise pending changes first; sort() keeps the
     // original order within each group.
@@ -121,6 +124,22 @@
           (a, b) => Number(first.has(b.id)) - Number(first.has(a.id)),
         );
   });
+
+  const isMode = (c: InstanceContent, m: Mode) =>
+    m === "sent" ? pending(c) : c.installed && c.shareMode === m;
+  const MODES: { id: Mode; label: string }[] = [
+    { id: "optional", label: "Optional" },
+    { id: "private", label: "Only me" },
+    { id: "sent", label: "Not sent yet" },
+  ];
+  const modeChips = $derived(
+    canSetModes
+      ? MODES.map((m) => ({
+          ...m,
+          count: instance.content.filter((c) => isMode(c, m.id)).length,
+        })).filter((m) => m.count || mode === m.id)
+      : [],
+  );
 
   /** An uploaded file from someone else's shared version: it can be reported. Files from
    *  Modrinth or CurseForge are reported on those sites. */
@@ -196,6 +215,27 @@
     />
   </label>
   <KindChips items={instance.content} bind:kind counts />
+  {#if modeChips.length}
+    {#if new Set(instance.content.map((c) => c.kind)).size > 1}
+      <span class="h-4.5 w-px bg-(--line)" aria-hidden="true"></span>
+    {/if}
+    <div class="flex flex-wrap gap-1" role="group" aria-label="Friends get">
+      {#each modeChips as chip (chip.id)}
+        <button
+          type="button"
+          aria-pressed={mode === chip.id}
+          onclick={() => (mode = mode === chip.id ? null : chip.id)}
+          class="h-7 rounded-full px-2.75 text-[13px] font-medium transition-colors
+            {mode === chip.id
+            ? 'bg-(--bg-raise-2) text-(--text-primary)'
+            : 'text-(--text-muted) hover:bg-(--bg-hover)'}"
+        >
+          {chip.label}
+          <span class="ml-0.5 font-normal opacity-70">{chip.count}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
   <!-- While the game runs, the bar above already says so. -->
   {#if lockedReason && !instance.isRunning}
     <span class="min-w-0 truncate text-[13px] text-(--text-faint)"
@@ -347,7 +387,9 @@
     <p class="py-12 text-center text-(--text-muted)">
       {query
         ? `Nothing matches “${query}”`
-        : "No mods or packs in this folder yet."}
+        : mode
+          ? "Nothing here."
+          : "No mods or packs in this folder yet."}
     </p>
   {/each}
 </div>
