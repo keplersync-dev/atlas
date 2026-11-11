@@ -43,6 +43,7 @@ fn sample(command: &str, key: &str) -> Value {
     match (command, key) {
         (_, "role") => json!("viewer"),
         ("create_group", "input") => json!({ "name": "The Boys" }),
+        ("rename_group", "name") => json!("The Crew"),
         ("create_group_invite", "input") => json!({ "maxUses": null, "expiresInHours": 24 }),
         ("share_instance", "input") => json!({
             "description": null, "friendIds": ["u1"], "groupIds": [], "role": "viewer",

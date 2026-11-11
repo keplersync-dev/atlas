@@ -1,15 +1,15 @@
 <script lang="ts">
   import { fuzzyFilter } from "$lib/fuzzy";
-  import { plural } from "$lib/format";
+  import { nameList, plural } from "$lib/format";
   import type { Friend, Group, Id } from "$lib/types";
+  import GroupPicture from "./GroupPicture.svelte";
   import Head from "./Head.svelte";
   import PersonName from "./PersonName.svelte";
-  import Icon from "./Icon.svelte";
   import SearchBox from "./SearchBox.svelte";
 
   // Ticks friends (and groups, when given) out of lists that can run to hundreds: one
-  // search for both, a tab each, a list that scrolls in place, and the picks as chips
-  // so they stay in view whichever tab is open.
+  // search for both, a tab each, a list that scrolls in place, and the picks on one line
+  // under it, with a way to narrow the list to them.
   let {
     friends,
     groups = [],
@@ -32,18 +32,32 @@
 
   let query = $state("");
   let tab = $state<"people" | "groups">("people");
+  // "Show picked": who was picked when it was clicked, so unticking someone there
+  // leaves their row in place to tick again.
+  let only = $state<Id[] | null>(null);
 
-  const shownFriends = $derived(
-    fuzzyFilter(friends, query, (f) => [f.user.displayName, f.user.username]),
+  const listFriends = $derived(
+    only ? friends.filter((f) => only!.includes(f.user.id)) : friends,
   );
-  const shownGroups = $derived(fuzzyFilter(groups, query, (g) => [g.name]));
-  // A search that only finds groups shows them, rather than an empty People tab.
+  const listGroups = $derived(
+    only ? groups.filter((g) => only!.includes(g.id)) : groups,
+  );
+  const shownFriends = $derived(
+    fuzzyFilter(listFriends, query, (f) => [
+      f.user.displayName,
+      f.user.username,
+    ]),
+  );
+  const shownGroups = $derived(fuzzyFilter(listGroups, query, (g) => [g.name]));
+  // A search (or Show picked) that only finds groups shows them, rather than an empty
+  // People tab.
+  const narrowed = $derived(!!query || !!only);
   const showing = $derived(
     !groups.length
       ? "people"
-      : query && !shownFriends.length && shownGroups.length
+      : narrowed && !shownFriends.length && shownGroups.length
         ? "groups"
-        : query && !shownGroups.length && shownFriends.length
+        : narrowed && !shownGroups.length && shownFriends.length
           ? "people"
           : tab,
   );
@@ -53,31 +67,15 @@
   );
   const pickedGroups = $derived(groups.filter((g) => groupIds.includes(g.id)));
 
-  // Picks show as chips up to a couple of rows' worth; the rest are a "+N more".
-  const CHIPS_SHOWN = 8;
-  let allChips = $state(false);
-  const shownGroupChips = $derived(
-    allChips ? pickedGroups : pickedGroups.slice(0, CHIPS_SHOWN),
+  const picks = $derived(pickedGroups.length + pickedFriends.length);
+  const pickedNames = $derived(
+    nameList([
+      ...pickedGroups.map((g) => g.name),
+      ...pickedFriends.map((f) => f.user.displayName),
+    ]),
   );
-  const shownFriendChips = $derived(
-    allChips
-      ? pickedFriends
-      : pickedFriends.slice(0, Math.max(0, CHIPS_SHOWN - pickedGroups.length)),
-  );
-  const hiddenChips = $derived(
-    pickedGroups.length +
-      pickedFriends.length -
-      shownGroupChips.length -
-      shownFriendChips.length,
-  );
-  const pickedSummary = $derived(
-    [
-      pickedFriends.length && plural(pickedFriends.length, "person", "people"),
-      pickedGroups.length && plural(pickedGroups.length, "group"),
-    ]
-      .filter(Boolean)
-      .join(" and "),
-  );
+  // A few pictures are enough to recognise; the names say how many.
+  const PILE = 5;
 
   const TABS = $derived([
     { id: "people" as const, label: "People", count: shownFriends.length },
@@ -120,11 +118,15 @@
     />
   </div>
 
-  <!-- As tall as the longer tab (36px rows), so switching tabs or searching doesn't move the
-       dialog; past 14rem a long list scrolls here instead of stretching it. -->
+  <!-- As tall as the tab's list (36px rows), or the picks under Show picked. A search keeps
+       the height, so the dialog doesn't move while typing. Past five rows it scrolls, with
+       a sliver of the next row showing so it reads as more. -->
   <div
     class="mt-2 overflow-y-auto rounded-lg bg-(--bg-raise) p-1"
-    style="height: min(14rem, {Math.max(friends.length, groups.length, 1) *
+    style="height: min(12.5rem, {Math.max(
+      (showing === 'people' ? listFriends : listGroups).length,
+      1,
+    ) *
       2.25 +
       0.5}rem)"
     role="group"
@@ -188,10 +190,7 @@
               class="size-3.75 shrink-0 accent-(--accent)"
             />
           {/if}
-          <span
-            class="grid size-6 shrink-0 place-items-center rounded-md bg-(--bg-raise-2) text-(--text-muted)"
-            ><Icon name="group" class="size-3.5" /></span
-          >
+          <GroupPicture id={g.id} class="size-6 rounded-md" />
           <b class="min-w-0 truncate font-medium" title={g.name}>{g.name}</b>
           <small
             class="ml-auto shrink-0 pl-2 text-[13px] text-(--text-faint) tabular-nums"
@@ -206,66 +205,36 @@
     {/if}
   </div>
 
-  {#if pickedFriends.length || pickedGroups.length}
-    <div class="mt-2 flex items-center gap-2 text-[13px] text-(--text-faint)">
-      <span class="tabular-nums">Picked: {pickedSummary}</span>
+  {#if picks || only}
+    <div class="mt-2 flex items-center gap-2 text-[13px]">
+      <span class="flex shrink-0 gap-0.5" aria-hidden="true">
+        {#each pickedGroups.slice(0, PILE) as g (g.id)}
+          <GroupPicture id={g.id} class="size-5 rounded-[4px]" />
+        {/each}
+        {#each pickedFriends.slice(0, Math.max(0, PILE - pickedGroups.length)) as f (f.user.id)}
+          <Head user={f.user} size={20} />
+        {/each}
+      </span>
+      <span
+        class="min-w-0 flex-1 truncate text-(--text-muted)"
+        title={pickedNames}>{picks ? pickedNames : "Nobody picked"}</span
+      >
       <button
         type="button"
-        class="h-6 rounded px-1.5 text-(--accent) hover:bg-(--bg-hover)"
+        aria-pressed={!!only}
+        class="h-6 shrink-0 rounded px-1.5 text-(--accent) hover:bg-(--bg-hover)"
+        onclick={() => (only = only ? null : [...groupIds, ...friendIds])}
+        >{only ? "Show all" : "Show picked"}</button
+      >
+      <button
+        type="button"
+        class="h-6 shrink-0 rounded px-1.5 text-(--accent) hover:bg-(--bg-hover)"
         onclick={() => {
           friendIds = [];
           groupIds = [];
+          only = null;
         }}>Clear</button
       >
-    </div>
-    <div class="mt-1.5 flex flex-wrap gap-1.5" aria-label="Picked">
-      {#each shownGroupChips as g (g.id)}
-        <span
-          class="flex max-w-56 items-center gap-1.5 rounded-full bg-(--accent)/14 py-0.5 pr-1 pl-2.5 text-[13px] text-(--accent)"
-        >
-          <Icon name="group" class="size-3" />
-          <span class="truncate">{g.name}</span>
-          <button
-            type="button"
-            aria-label="Remove {g.name}"
-            onclick={() => (groupIds = groupIds.filter((id) => id !== g.id))}
-            class="group/x -m-0.75 grid size-6 shrink-0 place-items-center"
-            ><span
-              class="grid size-4.5 place-items-center rounded-full group-hover/x:bg-(--accent)/20"
-              ><Icon name="close" class="size-2.5" /></span
-            ></button
-          >
-        </span>
-      {/each}
-      {#each shownFriendChips as f (f.user.id)}
-        <span
-          class="flex max-w-56 items-center gap-1.5 rounded-full bg-(--accent)/14 py-0.5 pr-1 pl-1 text-[13px] text-(--accent)"
-        >
-          <Head user={f.user} size={20} />
-          <span class="truncate" title="@{f.user.username}"
-            >{f.user.displayName}</span
-          >
-          <button
-            type="button"
-            aria-label="Remove {f.user.displayName} (@{f.user.username})"
-            onclick={() =>
-              (friendIds = friendIds.filter((id) => id !== f.user.id))}
-            class="group/x -m-0.75 grid size-6 shrink-0 place-items-center"
-            ><span
-              class="grid size-4.5 place-items-center rounded-full group-hover/x:bg-(--accent)/20"
-              ><Icon name="close" class="size-2.5" /></span
-            ></button
-          >
-        </span>
-      {/each}
-      {#if hiddenChips > 0 || allChips}
-        <button
-          type="button"
-          class="h-6 rounded-full px-2.5 text-[13px] text-(--accent) hover:bg-(--bg-hover)"
-          onclick={() => (allChips = !allChips)}
-          >{allChips ? "Show fewer" : `+${hiddenChips} more`}</button
-        >
-      {/if}
     </div>
   {/if}
 {/if}

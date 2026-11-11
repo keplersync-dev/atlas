@@ -115,6 +115,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         commands::groups::list_groups,
         commands::groups::get_group,
         commands::groups::create_group,
+        commands::groups::rename_group,
         commands::groups::delete_group,
         commands::groups::create_group_invite,
         commands::groups::preview_group_invite,

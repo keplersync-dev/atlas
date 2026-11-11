@@ -2,7 +2,7 @@
 //! need the server. After a change the UI hears `groups.changed`; when shared instances
 //! come or go with it, the server sends `shared.changed` too.
 
-use atlas_protocol::api::{CreateGroup, CreateGroupInvite, InviteToGroup, Transfer};
+use atlas_protocol::api::{CreateGroup, CreateGroupInvite, InviteToGroup, Transfer, UpdateGroup};
 use atlas_protocol::codes::{self, GROUP_CODE_LEN};
 use reqwest::Method;
 use tauri::{AppHandle, Runtime};
@@ -69,6 +69,25 @@ pub async fn create<R: Runtime>(
         .call(Method::POST, "/groups", Some(&input))
         .await?;
     changed(app, Some(&group.id));
+    Ok(group)
+}
+
+/// Owner only in Atlas; the server checks the name like it does for a new group.
+pub async fn rename<R: Runtime>(
+    state: &AppState,
+    app: &AppHandle<R>,
+    id: &Id,
+    name: String,
+) -> AppResult<Group> {
+    let body = UpdateGroup {
+        name: Some(name),
+        icon: None,
+    };
+    let group: Group = state
+        .cloud
+        .call(Method::PATCH, &group_path(id)?, Some(&body))
+        .await?;
+    changed(app, Some(id));
     Ok(group)
 }
 

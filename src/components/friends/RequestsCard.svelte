@@ -4,6 +4,7 @@
   import { showDone } from "$lib/toasts.svelte";
   import type { Id } from "$lib/types";
   import Button from "../Button.svelte";
+  import GroupPicture from "../GroupPicture.svelte";
   import Head from "../Head.svelte";
   import Who from "../Who.svelte";
   import PersonName from "../PersonName.svelte";
@@ -30,11 +31,14 @@
     <div class="divide-y divide-(--line)">
       {#each social.groupInvites as g (g.code)}
         <div class="flex flex-wrap items-center gap-x-2.5 gap-y-2 py-2">
-          {#if g.invitedBy}<Head
-              user={g.invitedBy}
-              size={30}
-              ring="var(--bg-raise)"
-            />{/if}
+          <!-- The group's banner, with who invited you in its corner. -->
+          <span class="relative shrink-0">
+            <GroupPicture id={g.groupId} class="size-7.5 rounded-md" />
+            {#if g.invitedBy}<span
+                class="absolute -right-1.5 -bottom-1.5 rounded-[5px] shadow-[0_0_0_2px_var(--bg-raise)]"
+                ><Head user={g.invitedBy} size={16} /></span
+              >{/if}
+          </span>
           <div class="min-w-40 flex-1">
             <span class="block font-medium"
               >{#if g.invitedBy}<Who user={g.invitedBy} />{:else}A friend{/if} invited

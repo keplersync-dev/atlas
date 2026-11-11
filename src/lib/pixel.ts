@@ -101,5 +101,72 @@ export function wallPixels(
 }
 
 /** What an instance's stand-in icon grows from: a shared pack's own id, so the pack looks the same for everyone in it. */
-export const iconSeed = (i: { id: string; sync: { sharedInstanceId: string } | null }) =>
-  i.sync?.sharedInstanceId ?? i.id;
+export const iconSeed = (i: {
+  id: string;
+  sync: { sharedInstanceId: string } | null;
+}) => i.sync?.sharedInstanceId ?? i.id;
+
+// Banner colours: Minecraft's dyes, toned down for the dark UI.
+const DYES = [
+  "#b0413e",
+  "#c8742f",
+  "#c9a33a",
+  "#6a9a3a",
+  "#3e7a4a",
+  "#2f8a8f",
+  "#4c86c4",
+  "#3d4f9a",
+  "#7a4aa0",
+  "#a84a8c",
+  "#d7d9dc",
+  "#2a2e35",
+];
+
+// Banner patterns on the 8×8 grid: true where the pattern colour goes.
+const PATTERNS: ((x: number, y: number) => boolean)[] = [
+  (x) => x > 2 && x < 5, // stripe down
+  (_, y) => y > 2 && y < 5, // stripe across
+  (x, y) => (x > 2 && x < 5) || (y > 2 && y < 5), // cross
+  (x, y) => y >= 1.5 + Math.abs(x - 3.5) && y <= 3.5 + Math.abs(x - 3.5), // chevron
+  (x, y) => !x || !y || x === 7 || y === 7, // border
+  (x, y) => x > y, // half, corner to corner
+  (x, y) => ((x >> 1) + (y >> 1)) % 2 === 0, // checks
+  (x, y) => (x - 3.5) ** 2 + (y - 3.5) ** 2 < 6, // circle
+  (_, y) => y < 3, // top band
+  (x, y) => Math.abs(x - 3.5) + Math.abs(y - 3.5) < 3.6, // diamond
+  (x, y) => Math.abs(x - y) < 2, // diagonal
+];
+
+/** How light a colour looks, 0 to 1. */
+const lightness = (hex: string) => {
+  const n = parseInt(hex.slice(1), 16);
+  return (0.3 * (n >> 16) + 0.59 * ((n >> 8) & 255) + 0.11 * (n & 255)) / 255;
+};
+
+const shade = (hex: string, f: number) => {
+  const n = parseInt(hex.slice(1), 16);
+  const c = [n >> 16, (n >> 8) & 255, n & 255].map((v) =>
+    Math.min(255, Math.round(v * f)),
+  );
+  return `rgb(${c.join(",")})`;
+};
+
+/** A group's banner: a dye colour and a pattern in a second colour that stands out from it. */
+export function bannerPixels(seed: string): Pixel[] {
+  const r = rng(seed);
+  // Black never as the background: on Atlas's dark panels the tile's edges would vanish.
+  const bases = DYES.filter((c) => lightness(c) > 0.2);
+  const base = bases[Math.floor(r() * bases.length)];
+  const others = DYES.filter(
+    (c) => Math.abs(lightness(c) - lightness(base)) > 0.28,
+  );
+  const fg = others[Math.floor(r() * others.length)];
+  const on = PATTERNS[Math.floor(r() * PATTERNS.length)];
+  const px: Pixel[] = [];
+  for (let y = 0; y < 8; y++) {
+    for (let x = 0; x < 8; x++) {
+      px.push({ x, y, fill: shade(on(x, y) ? fg : base, 0.93 + r() * 0.14) });
+    }
+  }
+  return px;
+}

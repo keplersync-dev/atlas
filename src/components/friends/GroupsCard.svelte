@@ -8,6 +8,7 @@
   import { social } from "$lib/stores";
   import type { Group, GroupMember } from "$lib/types";
   import Button from "../Button.svelte";
+  import GroupPicture from "../GroupPicture.svelte";
   import Head from "../Head.svelte";
   import PersonName from "../PersonName.svelte";
   import Icon from "../Icon.svelte";
@@ -23,6 +24,8 @@
   // The group whose "Invite friends" picker is open.
   let open = $state<{ id: string; panel: "invite" } | null>(null);
   let picked = $state<string[]>([]);
+  // The group whose name is being edited, and the name typed so far.
+  let renaming = $state<{ id: string; name: string } | null>(null);
   // Friends with an invite to the open group they haven't answered yet.
   let pending = $state<string[]>([]);
 
@@ -105,6 +108,24 @@
     });
   }
 
+  // A refused name's message goes with the box it was about.
+  function stopRenaming() {
+    renaming = null;
+    if (message && !message.ok) message = null;
+  }
+
+  function rename(e: SubmitEvent, g: Group) {
+    e.preventDefault();
+    const to = renaming?.name.trim();
+    if (!to || to === g.name) return;
+    run(async () => {
+      await api.renameGroup(g.id, to);
+      renaming = null;
+      await social.load();
+      return `Renamed ${g.name} to ${to}.`;
+    });
+  }
+
   async function leave(g: Group) {
     const ok = await confirmAction({
       title: `Leave ${g.name}?`,
@@ -170,6 +191,15 @@
 
   function menu(g: Group): MenuItem[] {
     return [
+      ...(g.myRole === "owner"
+        ? [
+            {
+              label: "Rename",
+              icon: "pencil",
+              onselect: () => (renaming = { id: g.id, name: g.name }),
+            },
+          ]
+        : []),
       ...(manages(g)
         ? [
             {
@@ -233,10 +263,6 @@
   }
   const presenceOf = (m: GroupMember) =>
     social.friends.find((f) => f.user.id === m.user.id)?.presence.state ?? null;
-
-  /** Each group's own colour for its tile, from its id, so groups are told apart. */
-  const hue = (id: string) =>
-    [...id].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
 
   /** Packs shared with the group that this PC knows about, by name. */
   const packsOf = (g: Group) =>
@@ -321,37 +347,64 @@
           class="flex flex-wrap items-center gap-x-3 gap-y-2 px-3.5 pt-3 pb-2"
         >
           <div class="flex min-w-40 flex-1 items-center gap-3">
-            <span
-              aria-hidden="true"
-              class="grid size-9 shrink-0 place-items-center rounded-lg text-[15px] font-semibold text-white"
-              style="background: hsl({hue(g.id)} 42% 34%)"
-              >{g.name.trim().charAt(0).toUpperCase()}</span
-            >
-            <div class="min-w-0 flex-1">
-              <b class="block truncate font-semibold" title={g.name}>{g.name}</b
+            <GroupPicture id={g.id} class="size-9 rounded-lg" />
+            {#if renaming?.id === g.id}
+              <form
+                class="flex min-w-0 flex-1 gap-2"
+                onsubmit={(e) => rename(e, g)}
               >
-              <small class="block truncate text-[13px] text-(--text-faint)">
-                {plural(g.members.length, "member")} · {plural(
-                  g.sharedInstanceIds.length,
-                  "pack",
-                )}{g.myRole === "owner" ? " · You own it" : ""}
-              </small>
-            </div>
-          </div>
-          <div class="ml-auto flex items-center gap-1">
-            {#if manages(g)}
-              <Button
-                size="sm"
-                aria-expanded={open?.id === g.id && open.panel === "invite"}
-                disabled={busy}
-                icon="users"
-                onclick={() => show(g, "invite")}
-              >
-                Invite friends
-              </Button>
+                <!-- svelte-ignore a11y_autofocus (opened on purpose from Rename) -->
+                <input
+                  bind:value={renaming.name}
+                  maxlength="32"
+                  aria-label="Group name"
+                  autofocus
+                  onfocus={(e) => e.currentTarget.select()}
+                  onkeydown={(e) => e.key === "Escape" && stopRenaming()}
+                  class="h-8 min-w-0 flex-1 rounded-md border border-(--line-2) bg-(--bg) px-3 text-[13px] outline-none focus:border-(--accent)"
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  variant="primary"
+                  disabled={busy ||
+                    !renaming.name.trim() ||
+                    renaming.name.trim() === g.name}>Save</Button
+                >
+                <Button size="sm" variant="ghost" onclick={stopRenaming}
+                  >Cancel</Button
+                >
+              </form>
+            {:else}
+              <div class="min-w-0 flex-1">
+                <b class="block truncate font-semibold" title={g.name}
+                  >{g.name}</b
+                >
+                <small class="block truncate text-[13px] text-(--text-faint)">
+                  {plural(g.members.length, "member")} · {plural(
+                    g.sharedInstanceIds.length,
+                    "pack",
+                  )}{g.myRole === "owner" ? " · You own it" : ""}
+                </small>
+              </div>
             {/if}
-            <Menu items={menu(g)} label="More for {g.name}" />
           </div>
+          {#if renaming?.id !== g.id}
+            <div class="ml-auto flex items-center gap-1">
+              {#if manages(g)}
+                <Button
+                  size="sm"
+                  aria-expanded={open?.id === g.id && open.panel === "invite"}
+                  disabled={busy}
+                  icon="users"
+                  onclick={() => show(g, "invite")}
+                >
+                  Invite friends
+                </Button>
+              {/if}
+              <Menu items={menu(g)} label="More for {g.name}" />
+            </div>
+          {/if}
         </div>
 
         <!-- Members as rows, like friends: what you can do is in ⋯ and on right-click. -->

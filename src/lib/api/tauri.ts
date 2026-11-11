@@ -144,6 +144,7 @@ export const tauriApi: AtlasApi = {
   listGroups: () => call("list_groups"),
   getGroup: (id) => call("get_group", { id }),
   createGroup: (input) => call("create_group", { input }),
+  renameGroup: (id, name) => call("rename_group", { id, name }),
   deleteGroup: (id) => call("delete_group", { id }),
   createGroupInvite: (groupId, input) =>
     call("create_group_invite", { groupId, input }),

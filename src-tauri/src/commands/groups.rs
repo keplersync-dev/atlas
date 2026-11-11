@@ -27,6 +27,16 @@ pub async fn create_group<R: Runtime>(
 }
 
 #[tauri::command]
+pub async fn rename_group<R: Runtime>(
+    app: AppHandle<R>,
+    state: State<'_, AppState>,
+    id: Id,
+    name: String,
+) -> AppResult<Group> {
+    groups::rename(&state, &app, &id, name).await
+}
+
+#[tauri::command]
 pub async fn delete_group<R: Runtime>(
     app: AppHandle<R>,
     state: State<'_, AppState>,

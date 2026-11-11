@@ -7,6 +7,7 @@
   import type { OpenedLink } from "$lib/types";
   import Button from "../Button.svelte";
   import Dialog from "../Dialog.svelte";
+  import GroupPicture from "../GroupPicture.svelte";
   import Head from "../Head.svelte";
 
   // Atlas was opened with a friend or group link. Show who or what it leads to; nothing
@@ -102,13 +103,18 @@
       </span>
     </div>
   {:else if group.data}
-    <div class="rounded-lg bg-(--bg-raise) px-3.5 py-3">
-      <b class="block text-[14px] font-semibold">{group.data.groupName}</b>
-      <small class="text-[13px] text-(--text-faint)">
-        {plural(group.data.memberCount, "member")}{group.data.invitedBy
-          ? ` · invite from ${group.data.invitedBy.displayName}`
-          : ""}
-      </small>
+    <div class="flex items-center gap-3 rounded-lg bg-(--bg-raise) px-3 py-3">
+      <GroupPicture id={group.data.groupId} class="size-9 rounded-lg" />
+      <div class="min-w-0 flex-1">
+        <b class="block truncate text-[14px] font-semibold"
+          >{group.data.groupName}</b
+        >
+        <small class="block truncate text-[13px] text-(--text-faint)">
+          {plural(group.data.memberCount, "member")}{group.data.invitedBy
+            ? ` · invite from ${group.data.invitedBy.displayName}`
+            : ""}
+        </small>
+      </div>
     </div>
     <p class="mt-2.5 text-[13px] text-(--text-muted)">
       {group.data.alreadyMember

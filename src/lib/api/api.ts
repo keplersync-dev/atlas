@@ -246,6 +246,8 @@ export interface AtlasApi {
   listGroups(): Promise<Group[]>;
   getGroup(id: Id): Promise<GroupDetail>;
   createGroup(input: { name: string; icon?: string | null }): Promise<Group>;
+  /** Owner only. Everyone in the group sees the new name. */
+  renameGroup(id: Id, name: string): Promise<Group>;
   deleteGroup(id: Id): Promise<void>;
   createGroupInvite(
     groupId: Id,
