@@ -48,7 +48,15 @@
       .catch(() => null)
       .then(() => api.listLaunchers()),
   );
-  const found = $derived(launchers.data ?? []);
+  // Modrinth App, CurseForge, Prism Launcher, then the Minecraft Launcher.
+  const ORDER: LauncherKind[] = ["modrinth", "curseforge", "prism", "official"];
+  const rank = (l: Launcher) => {
+    const i = ORDER.indexOf(l.kind);
+    return i < 0 ? ORDER.length : i;
+  };
+  const found = $derived(
+    [...(launchers.data ?? [])].sort((a, b) => rank(a) - rank(b)),
+  );
   const canMake = (l: Launcher) =>
     !!invite && l.creatableLoaders.includes(invite.loader);
   // Launchers that can make a new instance on the invite's loader.
@@ -220,8 +228,8 @@
   const shownFiles = $derived(
     fuzzyFilter(uploaded, q.files, (f) => [f.name, f.fileName]),
   );
-  // Every launcher, with a new instance and the instances already in it; then folders
-  // added by hand. A launcher that can't take the pack still shows, saying why.
+  // The instances already in each launcher, then folders added by hand. A new instance is
+  // picked from the cards on the main view.
   const groups = $derived.by(() => {
     const has = (i: InstanceSummary, l: { kind: string; name: string }) =>
       i.launcher.kind === l.kind && i.launcher.name === l.name;
@@ -235,10 +243,6 @@
         q.dest,
         (i) => [i.name, l.name],
       ),
-      offerNew:
-        canMake(l) &&
-        (!q.dest ||
-          fuzzyFilter([l], q.dest, (x) => [x.name, "new instance"]).length > 0),
     }));
     const rest = usable.filter((i) => !found.some((l) => has(i, l)));
     if (rest.length)
@@ -248,14 +252,8 @@
         name: "Added by hand",
         launcher: null,
         mine: fuzzyFilter(rest, q.dest, (i) => [i.name]),
-        offerNew: false,
       });
-    return out.filter(
-      (g) =>
-        g.mine.length ||
-        g.offerNew ||
-        (g.launcher && !canMake(g.launcher) && !q.dest),
-    );
+    return out.filter((g) => g.mine.length);
   });
   const otherVersions = $derived(spare.length - usable.length);
 
@@ -317,10 +315,7 @@
       `Files from ${invite?.owner?.displayName ?? "the owner"}'s PC`,
       "They aren't from Modrinth or CurseForge, so nobody has checked them.",
     ],
-    dest: () => [
-      "Install into",
-      `A new instance, or one you already have on ${versions}.`,
-    ],
+    dest: () => ["Install into", `Instances you already have on ${versions}.`],
   };
 </script>
 
@@ -689,43 +684,7 @@
           >
             <LauncherIcon kind={g.kind as LauncherKind} class="size-5" />
             {g.name}
-            {#if g.launcher && !canMake(g.launcher)}<span
-                class="font-normal text-(--text-faint)"
-                >Can't make {loaderName} instances</span
-              >{/if}
           </div>
-          {#if g.offerNew && g.launcher}
-            {@const l = g.launcher}
-            {@const on = picked("launcher", l.id)}
-            <label
-              class="flex min-h-13 cursor-pointer items-center gap-3 px-3 py-1.5 has-focus-visible:outline-2 has-focus-visible:-outline-offset-2 has-focus-visible:outline-(--accent)
-                {on ? 'bg-(--accent)/7' : 'hover:bg-(--bg-hover)'}"
-            >
-              {@render radioRow(
-                on,
-                () => (chosen = { kind: "launcher", id: l.id }),
-                `New ${newWhat(l)} in ${l.name}`,
-              )}
-              <span
-                class="grid size-8 shrink-0 place-items-center rounded-md border-[1.5px] border-dashed border-(--line-2) text-(--text-muted)"
-                ><Icon name="plus" class="size-4" /></span
-              >
-              <span class="min-w-0 flex-1">
-                <b class="block font-medium">New {newWhat(l)}</b>
-                <small class="block text-[13px] text-(--text-faint)"
-                  >Made for this pack</small
-                >
-              </span>
-              <span
-                class="grid size-4.5 shrink-0 place-items-center rounded-full border-[1.5px] {on
-                  ? 'border-(--accent)'
-                  : 'border-(--line-2)'}"
-              >
-                {#if on}<span class="size-2 rounded-full bg-(--accent)"
-                  ></span>{/if}
-              </span>
-            </label>
-          {/if}
           {#each g.mine as i (i.id)}
             {@render instanceRow(
               i,
@@ -1075,14 +1034,14 @@
           ? `${optional.length} ticked, ${fileSize(extrasBytes)}`
           : "None ticked"}</span
       >
-      <Button variant="primary" onclick={back}>Done</Button>
+      <Button variant="primary" onclick={back}>Back</Button>
     {:else if view === "files"}
       <span class="mr-auto text-[13px] text-(--text-muted) tabular-nums"
         >{plural(uploaded.length, "file")}{uploadedBytes
           ? `, ${fileSize(uploadedBytes)} in all`
           : ""}</span
       >
-      <Button variant="primary" onclick={back}>Done</Button>
+      <Button variant="primary" onclick={back}>Back</Button>
     {:else if view === "dest"}
       <span class="mr-auto min-w-0 truncate text-[13px] text-(--text-muted)"
         >Into <b class="font-semibold text-(--text-primary)"
@@ -1091,7 +1050,7 @@
             : (pickedInstance?.name ?? "nothing yet")}</b
         ></span
       >
-      <Button variant="primary" onclick={back}>Done</Button>
+      <Button variant="primary" onclick={back}>Back</Button>
     {:else}
       {#if error}<span class="mr-auto text-[13px] text-(--danger)" role="alert"
           >{error}</span
@@ -1109,7 +1068,10 @@
         >{submitting ? "Close" : "Cancel"}</Button
       >
       <Button type="submit" variant="primary" disabled={!canSubmit}>
-        <span class="block max-w-60 truncate"
+        <!-- Clipped sideways only: the button trims its text box to the letters, so clipping
+             both ways cut off p and g. -->
+        <span
+          class="block max-w-60 overflow-x-clip text-ellipsis whitespace-nowrap"
           >{submitting ? "Working…" : action}</span
         >
       </Button>
