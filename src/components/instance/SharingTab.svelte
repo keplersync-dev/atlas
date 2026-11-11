@@ -11,12 +11,11 @@
     MemberRole,
     SharedMember,
   } from "$lib/types";
-  import { instances } from "$lib/stores";
   import Head from "../Head.svelte";
   import PersonName from "../PersonName.svelte";
   import Icon from "../Icon.svelte";
   import SearchBox from "../SearchBox.svelte";
-  import Switch from "../Switch.svelte";
+  import AutoUpdate from "./AutoUpdate.svelte";
 
   let { instanceId, sync }: { instanceId: Id; sync: InstanceSyncInfo } =
     $props();
@@ -25,32 +24,11 @@
   let query = $state("");
   const SEARCH_FROM = 8;
 
-  let savingAutoUpdate = $state(false);
-  async function setAutoUpdate(on: boolean) {
-    savingAutoUpdate = true;
-    try {
-      await api.updateInstance(instanceId, { autoUpdate: on });
-      await instances.load();
-    } catch (e) {
-      showError((e as Error).message);
-    } finally {
-      savingAutoUpdate = false;
-    }
-  }
-
   // Keyed on the id, not `sync`: that is a new object after every rescan.
   const sharedId = $derived(sync.sharedInstanceId);
   const shared = resource(() => api.getSharedInstance(sharedId));
 
   const isOwner = $derived(sync.role === "owner");
-  // Updates reach the owner's copy only when an editor sends one: with no editors,
-  // there's nothing for the owner to install.
-  const othersSend = $derived(
-    !isOwner ||
-      !!shared.data?.members.some(
-        (m) => m.role === "editor" && m.status === "active",
-      ),
-  );
   const myId = $derived(social.session?.user?.id);
 
   // The owner, then members, then open invites, each by name.
@@ -117,32 +95,7 @@
   {/if}
 </p>
 
-{#if othersSend}
-  <div
-    class="mb-4 flex items-center gap-3 rounded-lg bg-(--bg-raise) px-3.5 py-3"
-  >
-    <div class="min-w-0 flex-1">
-      <b class="block font-medium"
-        >{isOwner
-          ? "Install updates automatically"
-          : "Keep it up to date automatically"}</b
-      >
-      <small class="block text-[13px] text-(--text-muted)">
-        New versions install before you next play. Atlas still asks when one
-        would undo your changes or adds a mod that isn't on Modrinth or
-        CurseForge.
-      </small>
-    </div>
-    <Switch
-      checked={sync.autoUpdate}
-      label={isOwner
-        ? "Install updates automatically"
-        : "Keep it up to date automatically"}
-      disabled={savingAutoUpdate}
-      onchange={setAutoUpdate}
-    />
-  </div>
-{/if}
+<AutoUpdate {instanceId} {sync} members={shared.data?.members} class="mb-4" />
 
 {#if isOwner}
   <!-- What the two roles mean, next to where they're changed. -->
