@@ -75,6 +75,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn files_already_off_become_only_me_except_for_viewers() {
+        let pool = super::open_in_memory().await.unwrap();
+        for (id, role) in [
+            ("mine", None),
+            ("owned", Some("owner")),
+            ("viewed", Some("viewer")),
+        ] {
+            sqlx::query(
+                "INSERT INTO instance (id, launcher_kind, game_dir, name, shared_instance_id, shared_role, tracked_at)
+                 VALUES (?, 'folder', ?, ?, ?, ?, '')",
+            )
+            .bind(id)
+            .bind(format!("C:/{id}"))
+            .bind(id)
+            .bind(role.map(|_| format!("s-{id}")))
+            .bind(role)
+            .execute(&pool)
+            .await
+            .unwrap();
+            for (path, enabled) in [("mods/on.jar", true), ("mods/off.jar", false)] {
+                sqlx::query(
+                    "INSERT INTO instance_content (id, instance_id, kind, path, enabled, size_bytes, sha1, sha256, source, name)
+                     VALUES (?, ?, 'mod', ?, ?, 1, 'a', 'b', 'local', 'x')",
+                )
+                .bind(format!("{id}-{path}"))
+                .bind(id)
+                .bind(path)
+                .bind(enabled)
+                .execute(&pool)
+                .await
+                .unwrap();
+            }
+        }
+        sqlx::raw_sql(include_str!("../../migrations/0011_off_means_only_me.sql"))
+            .execute(&pool)
+            .await
+            .unwrap();
+        let modes: Vec<(String, String)> =
+            sqlx::query_as("SELECT id, share_mode FROM instance_content ORDER BY id")
+                .fetch_all(&pool)
+                .await
+                .unwrap();
+        let private: Vec<&str> = modes
+            .iter()
+            .filter(|(_, m)| m == "private")
+            .map(|(id, _)| id.as_str())
+            .collect();
+        assert_eq!(private, ["mine-mods/off.jar", "owned-mods/off.jar"]);
+    }
+
+    #[tokio::test]
     async fn content_is_indexed_once_by_instance() {
         let pool = super::open_in_memory().await.unwrap();
         let indexes: Vec<(String,)> = sqlx::query_as(

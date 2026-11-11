@@ -8,8 +8,8 @@ use super::configs::plan_configs;
 use super::{file_rules, from_pack, is_upload, live, mode_of, not_checked};
 use crate::db::{self, content::ContentRow, instances::InstanceRow};
 use crate::dto::{
-    ContentSource, ManualDownload, MemberRole, PackInfo, PublishItem, PublishPlan, ShareMode,
-    Storage, WorkStage, from_wire,
+    ContentSource, ManualDownload, MemberRole, PackInfo, PublishItem, PublishPlan, RemovedItem,
+    ShareMode, Storage, WorkStage, from_wire,
 };
 use crate::error::{AppError, AppResult};
 use crate::events::{AtlasEvent, emit};
@@ -168,21 +168,34 @@ pub async fn prepare<R: Runtime>(
                 already_uploaded: stored.contains(&r.sha256),
                 unchecked: not_checked(r),
                 contents_changed: replaced.contains(r.id.as_str()),
+                enabled: r.enabled,
             }
         })
         .collect();
-    let mut removed: Vec<String> = rows
-        .iter()
-        .filter(|r| r.is_managed && r.installed && !r.enabled)
-        .map(|r| r.name.clone())
-        .collect();
-    if let Some(synced) = &synced {
-        for e in &synced.content {
-            if e.required && !rows.iter().any(|r| r.path.eq_ignore_ascii_case(&e.path)) {
-                removed.push(e.name.clone());
-            }
-        }
-    }
+    // Turning a file off only changes the owner's game: only deleted files are removed.
+    let online = state.cloud.is_online();
+    let shared_id = row.shared_instance_id.as_deref();
+    let removed = futures_util::future::join_all(
+        synced
+            .iter()
+            .flat_map(|m| &m.content)
+            .filter(|e| e.required && !rows.iter().any(|r| r.path.eq_ignore_ascii_case(&e.path)))
+            .map(|e| async move {
+                let icon_url = match shared_id {
+                    Some(shared) => {
+                        crate::services::shared::shown_icon(state, shared, e.icon.clone(), online)
+                            .await
+                    }
+                    None => None,
+                };
+                RemovedItem {
+                    name: e.name.clone(),
+                    kind: e.kind,
+                    icon_url,
+                }
+            }),
+    )
+    .await;
     Ok(PublishPlan {
         base_revision: row.synced_revision.map(|r| r.max(0) as u32),
         items,

@@ -133,6 +133,18 @@ pub struct PublishItem {
     /// Shared already, but this file's contents differ from the shared version's (a jar
     /// replaced by a build with the same name).
     pub contents_changed: bool,
+    /// Off in the owner's own game; still shared as `share_mode` says.
+    pub enabled: bool,
+}
+
+/// A shared file deleted from the folder: the next version takes it away from everyone.
+#[cfg_attr(test, derive(ts_rs::TS))]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemovedItem {
+    pub name: String,
+    pub kind: ContentKind,
+    pub icon_url: Option<String>,
 }
 
 #[cfg_attr(test, derive(ts_rs::TS))]
@@ -142,7 +154,7 @@ pub struct PublishPlan {
     /// None on a first share.
     pub base_revision: Option<u32>,
     pub items: Vec<PublishItem>,
-    pub removed: Vec<String>,
+    pub removed: Vec<RemovedItem>,
     pub manual_downloads: Vec<ManualDownload>,
     pub storage: Storage,
     /// Every other file in the folder, for the tree.

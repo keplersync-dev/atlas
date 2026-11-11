@@ -87,9 +87,9 @@ pub async fn export<R: Runtime>(
     let files = db::content::list(&state.db, id)
         .await?
         .into_iter()
-        .filter(|r| r.installed && r.enabled && r.share_mode != "private")
+        .filter(|r| r.installed && r.share_mode != "private")
         .map(|r| PackFile {
-            file: game.join(&r.path),
+            file: game.join(crate::sync::plan::disk_path(&r)),
             size: r.size_bytes.max(0) as u64,
             download: r.download_url.clone().filter(|u| downloadable(u)),
             side: from_wire(&r.side).unwrap_or(Side::Both),

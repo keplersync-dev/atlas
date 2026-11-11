@@ -15,7 +15,7 @@
   import { resource } from "$lib/resource.svelte";
   import { instances, social } from "$lib/stores";
   import { showDone } from "$lib/toasts.svelte";
-  import type { Id, PublishItem, ShareMode } from "$lib/types";
+  import type { Id, PublishItem, RemovedItem, ShareMode } from "$lib/types";
   import { modeOf, publishChanges } from "$lib/publishChanges";
   import Button from "../Button.svelte";
   import ContentIcon from "../ContentIcon.svelte";
@@ -98,7 +98,7 @@
   // ── The list: every change, filtered, searched, each with its choice ──
   type Row =
     | { kind: "item"; item: PublishItem; what: "new" | "updated" | "setting" }
-    | { kind: "removed"; name: string }
+    | { kind: "removed"; item: RemovedItem }
     | { kind: "configs" }
     | { kind: "versions" };
   // Membership is fixed when the plan loads, so a row doesn't vanish when its choice changes.
@@ -116,7 +116,7 @@
       else if (item.shareMode !== was)
         out.push({ kind: "item", item, what: "setting" });
     }
-    for (const name of p.removed) out.push({ kind: "removed", name });
+    for (const item of p.removed) out.push({ kind: "removed", item });
     if (p.filesChanged.length) out.push({ kind: "configs" });
     return out;
   });
@@ -146,7 +146,7 @@
     r.kind === "item"
       ? r.item.name
       : r.kind === "removed"
-        ? r.name
+        ? r.item.name
         : r.kind === "configs"
           ? `configs ${plan.data?.filesChanged.join(" ")}`
           : "Minecraft";
@@ -302,7 +302,8 @@
             ? "CurseForge"
             : item.source === "modrinth"
               ? "Modrinth"
-              : "your PC"}{/if}
+              : "your PC"}{/if}{#if !item.enabled},
+          <span class="font-medium text-(--warn)">off for you</span>{/if}
       </small>
     </span>
     <ShareModeSelect
@@ -569,15 +570,16 @@
             {:else if r.kind === "removed"}
               <li class="flex min-h-12 items-center gap-2.5 px-2.5 py-1.25">
                 <ContentIcon
-                  src={null}
-                  seed={r.name}
+                  src={r.item.iconUrl}
+                  seed={r.item.name}
                   class="size-7 rounded-[5px]"
                 />
                 <span class="min-w-0 flex-1">
-                  <b class="block truncate font-medium">{r.name}</b>
+                  <b class="block truncate font-medium">{r.item.name}</b>
                   <small class="block text-[13px] text-(--text-faint)"
-                    ><span class="text-(--danger)">Removed</span>, turned off in
-                    your launcher</small
+                    ><span class="text-(--danger)">Removed</span>, {KIND[
+                      r.item.kind
+                    ]}</small
                   >
                 </span>
               </li>

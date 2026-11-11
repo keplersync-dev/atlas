@@ -53,8 +53,9 @@ fn mode(s: &str) -> Option<ShareMode> {
 }
 
 /// Owners/editors: their folder is the source of the next version, so anything that would
-/// change it counts. Viewers: only disabling or deleting a *required* file counts; their own
-/// extras are theirs, and skipping or removing optional items is their choice.
+/// change it counts; turning a file off only changes their own game, so it doesn't. Viewers:
+/// only disabling or deleting a *required* file counts; their own extras are theirs, and
+/// skipping or removing optional items is their choice.
 pub fn local_changes<'a>(
     role: MemberRole,
     rows: &'a [ContentRow],
@@ -65,10 +66,10 @@ pub fn local_changes<'a>(
     let viewer = role == MemberRole::Viewer;
     let mut out = LocalChanges::default();
 
-    // Disabled shared files.
+    // Viewers: disabled required files.
     for r in &live {
         let required = mode(&r.share_mode) == Some(ShareMode::Required);
-        if r.is_managed && !r.enabled && (!viewer || required) {
+        if viewer && r.is_managed && !r.enabled && required {
             out.removed.push(r.name.clone());
         }
     }
@@ -94,7 +95,7 @@ pub fn local_changes<'a>(
                 .collect()
         })
         .unwrap_or_default();
-    for r in live.into_iter().filter(|r| r.enabled) {
+    for r in live {
         let now = mode(&r.share_mode);
         let published = r.published_share_mode.as_deref().and_then(mode);
         if r.is_managed && now != published {
@@ -230,15 +231,16 @@ mod tests {
     #[test]
     fn owner_changes() {
         let rows = [
-            row("sodium", true, false, "required", Some("required")), // disabled
+            row("sodium", true, false, "required", Some("required")), // off for me: still shared
             row("iris", true, true, "private", Some("optional")),     // setting changed
             row("new", false, true, "required", None),                // would be shared
             row("mine", false, true, "private", None),                // only me: not a change
-            row("off", false, false, "required", None),               // disabled extra: not shared
+            row("off", false, false, "private", None),                // off and only me
+            row("dh", false, false, "optional", None),                // off, still offered
         ];
         let m = manifest(&[("sodium", true), ("iris", false), ("lithium", true)]); // lithium deleted
         let c = local_changes(MemberRole::Owner, &rows, Some(&m), false);
-        assert_eq!(c.removed, ["sodium", "lithium"]);
+        assert_eq!(c.removed, ["lithium"]);
         assert_eq!(
             c.mode_changed
                 .iter()
@@ -248,7 +250,7 @@ mod tests {
         );
         assert_eq!(
             c.added.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(),
-            ["new"]
+            ["new", "dh"]
         );
         assert_eq!(c.count(), 4);
         // Editors follow the same rules.

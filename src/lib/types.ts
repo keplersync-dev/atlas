@@ -565,7 +565,16 @@ unchecked: boolean,
  * Shared already, but this file's contents differ from the shared version's (a jar
  * replaced by a build with the same name).
  */
-contentsChanged: boolean, };
+contentsChanged: boolean, 
+/**
+ * Off in the owner's own game; still shared as `share_mode` says.
+ */
+enabled: boolean, };
+
+/**
+ * A shared file deleted from the folder: the next version takes it away from everyone.
+ */
+export type RemovedItem = { name: string, kind: ContentKind, iconUrl: string | null, };
 
 /**
  * The modpack a share is based on: its own files come from its download.
@@ -620,7 +629,7 @@ export type PublishPlan = {
 /**
  * None on a first share.
  */
-baseRevision: number | null, items: Array<PublishItem>, removed: Array<string>, manualDownloads: Array<ManualDownload>, storage: Storage, 
+baseRevision: number | null, items: Array<PublishItem>, removed: Array<RemovedItem>, manualDownloads: Array<ManualDownload>, storage: Storage, 
 /**
  * Every other file in the folder, for the tree.
  */

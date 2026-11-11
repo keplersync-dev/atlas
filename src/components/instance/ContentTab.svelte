@@ -85,13 +85,14 @@
 
   /**
    * Differs from the shared version, the same rules as the "local changes" count:
-   * a shared file that's disabled, or (owners/editors) a new or re-set file.
+   * owners/editors, a new or re-set file (on or off: the switch is only their game);
+   * viewers, a required file they turned off.
    */
   function pending(c: InstanceContent) {
     if (!instance.sync || !c.installed) return false;
-    if (c.isManaged && !c.enabled)
-      return canSetModes || c.shareMode === "required";
-    return canSetModes && c.enabled && unpublished(c);
+    if (!canSetModes)
+      return c.isManaged && !c.enabled && c.shareMode === "required";
+    return unpublished(c);
   }
 
   // Pending changes go first. Which ones is decided when the list opens or its files
@@ -245,6 +246,7 @@
   {#each visible as item (item.id)}
     {@const optionalExtra = isOptionalExtra(item)}
     {@const present = item.installed && item.enabled}
+    {@const offForYou = canSetModes && item.installed && !item.enabled}
     <div
       class="grid items-center gap-3.5 rounded-md px-2 py-2.25 hover:bg-(--bg-hover)
         {columns}"
@@ -254,14 +256,20 @@
         seed={item.name}
         class="size-7 rounded-[5px] {present ? '' : 'opacity-40'}"
       />
-      <div class="min-w-0 {present ? '' : 'opacity-60'}">
-        <b class="block truncate font-medium" title={item.name}>{item.name}</b>
+      <!-- Off for you dims the name only, so the note saying so stands out. -->
+      <div class="min-w-0 {present || offForYou ? '' : 'opacity-60'}">
+        <b
+          class="block truncate font-medium {offForYou ? 'opacity-60' : ''}"
+          title={item.name}>{item.name}</b
+        >
         <small class="block truncate text-[13px] text-(--text-faint)">
           {KIND[item.kind]}
           {#if canSetModes}
             · <span title={SOURCES[item.source].hint}
               >{SOURCES[item.source].label}</span
-            >
+            >{#if offForYou}{" · "}<span class="font-medium text-(--warn)"
+                >Off for you</span
+              >{/if}
           {:else if optionalExtra}
             · <span class="text-(--accent)">Optional</span> from {ownerName}{item.installed
               ? ""
@@ -300,11 +308,7 @@
             class="size-1.5 rounded-full {pending(item)
               ? 'bg-(--accent)'
               : 'bg-transparent'}"
-            title={!pending(item)
-              ? undefined
-              : item.enabled
-                ? "Not sent yet"
-                : "Turned off: removed for everyone with your next update"}
+            title={pending(item) ? "Not sent yet" : undefined}
           ></i>
           <ShareModeSelect
             value={item.shareMode}

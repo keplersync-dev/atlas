@@ -59,7 +59,7 @@ pub(super) async fn send_files<R: Runtime>(
         .iter()
         .map(|r| {
             (
-                game.join(&r.path),
+                game.join(crate::sync::plan::disk_path(r)),
                 r.sha256.clone(),
                 r.size_bytes.max(0) as u64,
                 r.name.clone(),

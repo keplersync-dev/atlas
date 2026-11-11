@@ -117,6 +117,7 @@ pub async fn make_plan(
         install_optional,
         config_choices,
         config_on_disk: &lookup,
+        keep_off: row.role() != Some(crate::dto::MemberRole::Viewer),
     });
     Ok((plan, rows, configs))
 }

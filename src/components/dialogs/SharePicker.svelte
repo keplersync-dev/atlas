@@ -146,34 +146,37 @@
   </div>
 {/if}
 
-{#if uploads.length}
-  <!-- The files themselves are listed under "Uploads to Atlas" below; this is the space
-       they take. -->
-  <div class="mb-3 rounded-lg bg-(--bg-raise) px-3.5 py-3">
-    <div class="h-1.5 overflow-hidden rounded-full bg-(--line)">
-      <div
-        class="h-full {overQuota ? 'bg-(--danger)' : 'bg-(--accent)'}"
-        style="width: {Math.min(100, (usedAfter / storage.quotaBytes) * 100)}%"
-      ></div>
-    </div>
-    <div
-      class="mt-1.5 flex justify-between text-[13px] {overQuota
-        ? 'text-(--danger)'
-        : 'text-(--text-faint)'}"
-    >
-      <span
-        >{fileSize(usedAfter)} of {fileSize(storage.quotaBytes)} used after upload</span
-      >
-      {#if overQuota}<span>Not enough space</span>{/if}
-    </div>
-    {#if tooBig.length}
-      <p class="mt-1.5 text-[13px] text-(--danger)">
-        {tooBig.map((i) => i.name).join(", ")}
+{#if overQuota || tooBig.length}
+  <!-- Fits nowhere as it is: say why, with the fix. The space itself is in the uploads
+       header below. -->
+  <div
+    class="mb-3 flex items-start gap-3 rounded-lg border border-(--danger)/40 bg-(--danger)/6 px-3.5 py-3 text-[13px]"
+    role="alert"
+  >
+    <Icon name="warn" class="mt-0.5 size-4 text-(--danger)" />
+    <p class="flex-1 text-(--text-muted)">
+      {#if overQuota}
+        <b class="text-(--text-primary)">Not enough upload space.</b>
+        These uploads need {fileSize(usedAfter - storage.usedBytes)}, and you
+        have
+        {fileSize(Math.max(0, storage.quotaBytes - storage.usedBytes))} left of your
+        {fileSize(storage.quotaBytes)}. Free some up from the Shared page, or
+        keep them to yourself.
+      {:else}
+        <b class="text-(--text-primary)">{names(tooBig)}</b>
         {tooBig.length === 1 ? "is" : "are"} over the {fileSize(
           storage.maxFileBytes,
-        )} per-file limit.
-      </p>
-    {/if}
+        )} limit for one upload.
+      {/if}
+    </p>
+    <div class="shrink-0">
+      <button
+        type="button"
+        onclick={() => keepLocal(overQuota ? uploads : tooBig)}
+        class="h-6 rounded px-2 text-(--text-muted) hover:bg-(--bg-hover) hover:text-(--text-primary)"
+        >Set to Only me</button
+      >
+    </div>
   </div>
 {/if}
 
@@ -250,6 +253,9 @@
             (m) => m.id === was,
           )?.label}{/if}
         {#if upload && mode === "private"}· stays on this PC{/if}
+        {#if !item.enabled}· <span class="font-medium text-(--warn)"
+            >Off for you</span
+          >{/if}
       </small>
       <!-- Its own line, so the warning is never the part that gets cut off. -->
       {#if item.unchecked && mode !== "private"}
@@ -291,10 +297,31 @@
       <span class="min-w-0 truncate text-(--text-faint)"
         >Not on Modrinth or CurseForge</span
       >
-      <span class="ml-auto shrink-0 whitespace-nowrap tabular-nums">
-        {going.length
-          ? `${plural(going.length, "file")} · ${fileSize(going.reduce((n, i) => n + i.sizeBytes, 0))}`
-          : "Nothing"}
+      <span
+        class="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap tabular-nums"
+      >
+        {#if going.length}
+          {fileSize(going.reduce((n, i) => n + i.sizeBytes, 0))}
+          <!-- How full the space will be; at least a sliver, so it reads as a meter. -->
+          <span
+            class="h-1 w-11 overflow-hidden rounded-full bg-(--line)"
+            aria-hidden="true"
+            ><span
+              class="block h-full {overQuota
+                ? 'bg-(--danger)'
+                : 'bg-(--accent)'}"
+              style="width: max(2px, {Math.min(
+                100,
+                (usedAfter / storage.quotaBytes) * 100,
+              )}%)"
+            ></span></span
+          >
+          <span class={overQuota ? "text-(--danger)" : "text-(--text-faint)"}
+            >{fileSize(usedAfter)} of {fileSize(storage.quotaBytes)}</span
+          >
+        {:else}
+          Nothing
+        {/if}
       </span>
     </div>
     {#each shownUploads as item (item.contentId)}

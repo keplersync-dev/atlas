@@ -7,7 +7,8 @@
 //!   except one sitting exactly where the update needs to put a file (backed up first).
 //! - Optional items keep the user's decision (installed or not). New ones are installed
 //!   only if ticked (`install_optional`).
-//! - A shared file the user disabled is enabled again (that's "overwrittenLocalChanges").
+//! - A shared file a viewer disabled is enabled again (that's "overwrittenLocalChanges").
+//!   Owners and editors keep files they turned off, off: their switch is their own game.
 //! - Config overrides merge three ways: synced (base), on disk (mine), target (theirs).
 //!   Only both-changed is a conflict; the user's choice decides, default theirs.
 
@@ -72,6 +73,8 @@ pub struct Input<'a> {
     pub config_choices: &'a HashMap<String, ConfigChoice>,
     /// sha256 of a config file on disk, by relative path (None = no file).
     pub config_on_disk: &'a dyn Fn(&str) -> Option<String>,
+    /// Owners and editors: shared files they turned off stay off.
+    pub keep_off: bool,
 }
 
 /// The file name on disk for a row (disabled files end in ".disabled").
@@ -137,7 +140,7 @@ pub fn plan(input: &Input) -> Plan {
 
         // Already there with the right bytes?
         if let Some(r) = new_row.filter(|r| r.installed && r.sha1 == e.sha1) {
-            if !r.enabled {
+            if !r.enabled && !input.keep_off {
                 // Disabled by the user: enable it again, reusing its own bytes.
                 removes.push(Action::Remove { path: disk_path(r) });
                 places.push(Action::Place {
@@ -155,6 +158,8 @@ pub fn plan(input: &Input) -> Plan {
             removes.push(Action::Remove { path: disk_path(r) });
         }
         // Something else at this exact path: replace it (disabled copies are removed first).
+        // shortcut: a new version of a file an owner turned off arrives on; place it as
+        // ".disabled" if owners ask for it to stay off.
         let replaces = match new_row.filter(|r| r.installed) {
             Some(r) if r.enabled => true,
             Some(r) => {
@@ -375,6 +380,7 @@ mod tests {
             install_optional: &ticked,
             config_choices: choices,
             config_on_disk: disk,
+            keep_off: false,
         })
     }
 
@@ -490,6 +496,22 @@ mod tests {
                 "+ mods/lithium-1.jar"
             ]
         );
+    }
+
+    #[test]
+    fn owners_keep_files_they_turned_off() {
+        let s = entry("sodium", "sodium-1", 'a', true);
+        let m = manifest(vec![s.clone()], vec![]);
+        let p = plan(&Input {
+            synced: Some(&m),
+            target: &m,
+            rows: &[row(&s, true, false, true)],
+            install_optional: &HashSet::new(),
+            config_choices: &HashMap::new(),
+            config_on_disk: &|_| None,
+            keep_off: true,
+        });
+        assert!(p.actions.is_empty(), "{:?}", paths(&p));
     }
 
     #[test]

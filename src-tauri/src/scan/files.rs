@@ -309,7 +309,8 @@ pub async fn scan(
                     .mod_id
                     .as_deref()
                     .and_then(|id| inherited.get(&(kind.as_str(), id)).copied())
-                    .unwrap_or("required");
+                    // A file found already off isn't offered to friends until picked.
+                    .unwrap_or(if f.enabled { "required" } else { "private" });
                 content::insert_file(
                     &mut tx,
                     NewFile {
@@ -484,6 +485,7 @@ mod tests {
         assert_eq!(sodium.name, "sodium-0.6.0");
         assert_eq!(sodium.source, "local");
         assert_eq!(sodium.share_mode, "required");
+        assert_eq!(rows[0].share_mode, "private", "found off: not offered");
         assert!(!sodium.is_managed && sodium.installed);
         assert_eq!(sodium.size_bytes, 6);
         assert_eq!(sodium.sha1.len(), 40);
@@ -507,6 +509,7 @@ mod tests {
         assert_eq!(f.scan().await.updated, 1);
         let row = f.rows().await.remove(0);
         assert_eq!((row.id.as_str(), row.enabled), (before.id.as_str(), false));
+        assert_eq!(row.share_mode, "optional", "turning off keeps it");
 
         // Replaced with different bytes: same row and setting, new hash.
         std::fs::remove_file(f.dir.join("mods/a.jar.disabled")).unwrap();

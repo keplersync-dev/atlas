@@ -41,9 +41,10 @@ fn mode_of(r: &ContentRow) -> ShareMode {
     from_wire(&r.share_mode).unwrap_or(ShareMode::Required)
 }
 
-/// Files that are there and switched on: the ones a publish looks at.
+/// Files that are there, on or off: the ones a publish looks at. Off only changes the
+/// owner's own game; what friends get is each file's share mode.
 fn live(rows: &[ContentRow]) -> impl Iterator<Item = &ContentRow> {
-    rows.iter().filter(|r| r.installed && r.enabled)
+    rows.iter().filter(|r| r.installed)
 }
 
 /// On no mod site: shared means uploaded to Atlas.

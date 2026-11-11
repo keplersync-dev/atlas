@@ -329,7 +329,7 @@ async fn show_icons(state: &AppState, list: &mut [SharedInstance]) {
     futures_util::future::join_all(jobs).await;
 }
 
-async fn shown_icon(
+pub(crate) async fn shown_icon(
     state: &AppState,
     shared: &str,
     icon: Option<String>,
