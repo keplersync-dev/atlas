@@ -103,7 +103,7 @@ export function instanceItems(
       : []),
     {
       label: "Remove from Atlas",
-      hint: `Atlas forgets it. It stays in ${i.launcher.name}.`,
+      hint: `Atlas forgets it. ${staysWhere(i)}.`,
       danger: true,
       onselect: () => removeFromAtlas(i),
     },
@@ -159,10 +159,16 @@ function shareItem(i: InstanceSummary): MenuItem[] {
 
 const stopTracking = { confirmLabel: "Remove", danger: true };
 
+/** "It stays in Prism Launcher", or for a folder added by hand, where it is. */
+const staysWhere = (i: InstanceSummary) =>
+  i.launcher.kind === "folder"
+    ? "Its folder stays on your PC"
+    : `It stays in ${i.launcher.name}`;
+
 /** Remove an instance from Atlas after a confirm that says what happens to its pack. */
 export async function removeFromAtlas(i: InstanceSummary) {
   const sharedId = sharedIdOf(i);
-  const forget = `Atlas forgets it and deletes its backups. It stays in ${i.launcher.name}, untouched.`;
+  const forget = `Atlas forgets it and deletes its backups. ${staysWhere(i)}, untouched.`;
   let choice: Choice | null;
   if (!sharedId) {
     choice = await chooseAction({

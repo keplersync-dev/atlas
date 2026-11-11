@@ -16,9 +16,9 @@ use std::time::UNIX_EPOCH;
 use sqlx::SqlitePool;
 
 use super::hash::{Hashes, IN_MEMORY, hash_bytes, hash_file};
-use super::metadata::{ModInfo, read_jar, read_jar_bytes};
+use super::metadata::{self, ModInfo, read_jar, read_jar_bytes};
 use crate::db::content::{self, ContentRow, FileFacts, NewFile};
-use crate::dto::{ContentKind, ShareMode, from_wire, to_wire};
+use crate::dto::{ContentKind, Loader, ShareMode, from_wire, to_wire};
 use crate::error::{AppError, AppResult};
 
 const FOLDERS: [(&str, ContentKind, &str); 4] = [
@@ -90,6 +90,18 @@ pub fn list_files(game_dir: &Path) -> std::io::Result<Vec<DiskFile>> {
         }
     }
     Ok(by_path.into_values().collect())
+}
+
+/// The Minecraft version and loader a folder's enabled mods point to
+/// (`metadata::guess_game`). Reads only the metadata inside each jar. Blocking.
+pub fn guess_game(game_dir: &Path) -> Option<(String, Loader)> {
+    let mods: Vec<ModInfo> = list_files(game_dir)
+        .ok()?
+        .iter()
+        .filter(|f| f.kind == ContentKind::Mod && f.enabled)
+        .map(|f| read_jar(&f.absolute))
+        .collect();
+    metadata::guess_game(&mods)
 }
 
 fn strip_suffix_ignore_case<'a>(s: &'a str, suffix: &str) -> Option<&'a str> {
@@ -561,15 +573,49 @@ mod tests {
     }
 
     fn write_jar(f: &Fixture, rel: &str, mod_id: &str, name: &str, version: &str) {
-        use std::io::Write;
-        let mut z = zip::ZipWriter::new(std::fs::File::create(f.dir.join(rel)).unwrap());
-        z.start_file("fabric.mod.json", zip::write::SimpleFileOptions::default())
-            .unwrap();
         let json = format!(
             r#"{{"id":"{mod_id}","name":"{name}","version":"{version}","authors":["Someone"]}}"#
         );
-        z.write_all(json.as_bytes()).unwrap();
+        write_zip(f, rel, "fabric.mod.json", &json);
+    }
+
+    fn write_zip(f: &Fixture, rel: &str, inner: &str, text: &str) {
+        use std::io::Write;
+        let mut z = zip::ZipWriter::new(std::fs::File::create(f.dir.join(rel)).unwrap());
+        z.start_file(inner, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        z.write_all(text.as_bytes()).unwrap();
         z.finish().unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_folder_of_mods_says_its_version_and_loader() {
+        let f = Fixture::new().await;
+        assert_eq!(guess_game(&f.dir), None, "no mods");
+        let fabric = |id: &str, minecraft: &str| {
+            format!(r#"{{"id":"{id}","depends":{{"minecraft":"{minecraft}"}}}}"#)
+        };
+        write_zip(
+            &f,
+            "mods/api.jar",
+            "fabric.mod.json",
+            &fabric("fabric-api", "~1.20.1"),
+        );
+        write_zip(
+            &f,
+            "mods/lib.jar",
+            "fabric.mod.json",
+            &fabric("lib", ">=1.20"),
+        );
+        // Off, so the game doesn't load it: it doesn't count.
+        write_zip(
+            &f,
+            "mods/new.jar.disabled",
+            "fabric.mod.json",
+            &fabric("new", "~1.21"),
+        );
+        f.write("mods/broken.jar", b"not a zip");
+        assert_eq!(guess_game(&f.dir), Some(("1.20.1".into(), Loader::Fabric)));
     }
 
     #[tokio::test]

@@ -250,7 +250,7 @@ pub async fn track_folder<R: Runtime>(
             meta: Metadata {
                 name,
                 icon: None,
-                // No launcher metadata to read; versions could be guessed from the mods.
+                // No launcher to read; the first scan guesses them from the mods.
                 minecraft_version: None,
                 loader: None,
                 loader_version: None,
@@ -577,6 +577,28 @@ async fn rescan_listed<R: Runtime>(
         state.watcher.unwatch(id);
         false
     };
+    // A folder has no launcher to say its versions, so its mods do. Not for a copy of
+    // someone else's pack: its versions are the shared ones.
+    if row.kind() == LauncherKind::Folder
+        && row.status() == InstanceStatus::Ready
+        && row.role() != Some(MemberRole::Viewer)
+        && (files_changed || row.minecraft_version.is_none())
+    {
+        let dir = PathBuf::from(&row.game_dir);
+        let guess = tokio::task::spawn_blocking(move || scan::files::guess_game(&dir)).await;
+        if let Ok(Some((version, loader))) = guess
+            && (row.minecraft_version.as_ref() != Some(&version) || row.loader() != Some(loader))
+        {
+            let meta = Metadata {
+                minecraft_version: Some(version),
+                loader: Some(loader),
+                ..Metadata::of(&row)
+            };
+            db::instances::update_scan(&state.db, id, Some(&meta), row.status()).await?;
+            row = db::instances::require(&state.db, id).await?;
+            meta_changed = true;
+        }
+    }
     if meta_changed || files_changed {
         emit(
             app,
