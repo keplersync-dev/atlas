@@ -28,7 +28,10 @@
   let {
     title,
     description,
+    eyebrow,
+    subline,
     wide = false,
+    huge = false,
     onclose,
     onsubmit,
     onescape,
@@ -40,7 +43,13 @@
   }: {
     title: string;
     description?: string;
+    /** A small line over the title, like "Step 1 of 2". */
+    eyebrow?: string;
+    /** Instead of `description`, for one with links in it. */
+    subline?: Snippet;
     wide?: boolean;
+    /** Room for two lists side by side. */
+    huge?: boolean;
     onclose: () => void;
     /** If given, the body and footer are wrapped in a <form>: Enter and type="submit" buttons submit it. */
     onsubmit?: (e: SubmitEvent) => void;
@@ -118,7 +127,11 @@
   }}
   aria-labelledby={titleId}
   class="m-auto max-h-[calc(100vh-80px)] w-full overflow-hidden rounded-xl border border-(--line) bg-(--bg-raise) p-0 text-(--text-primary) shadow-[0_30px_80px_#000a]
-    backdrop:bg-[#05070acc] {wide ? 'max-w-155' : 'max-w-130'}"
+    backdrop:bg-[#05070acc] {huge
+    ? 'max-w-260'
+    : wide
+      ? 'max-w-155'
+      : 'max-w-130'}"
 >
   <div class="flex max-h-[calc(100vh-82px)] flex-col">
     {#if head}
@@ -127,8 +140,15 @@
       <div class="flex items-start gap-3.5 px-5.5 pt-5 pb-1.5">
         {@render header?.()}
         <div class="min-w-0 flex-1">
+          {#if eyebrow}<p class="text-[12px] text-(--text-faint)">
+              {eyebrow}
+            </p>{/if}
           <h2 id={titleId} class="text-base font-semibold">{title}</h2>
-          {#if description}<p class="mt-0.5 text-[13px] text-(--text-muted)">
+          {#if subline}<p class="mt-0.5 text-[13px] text-(--text-muted)">
+              {@render subline()}
+            </p>{:else if description}<p
+              class="mt-0.5 text-[13px] text-(--text-muted)"
+            >
               {description}
             </p>{/if}
         </div>

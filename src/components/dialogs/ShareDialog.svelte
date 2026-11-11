@@ -1,7 +1,7 @@
 <script lang="ts">
   import { iconSeed } from "$lib/pixel";
   import { api } from "$lib/api";
-  import { plural, workLabel } from "$lib/format";
+  import { nameList, plural, workLabel } from "$lib/format";
   import { resource } from "$lib/resource.svelte";
   import { showDone } from "$lib/toasts.svelte";
   import { instances, social } from "$lib/stores";
@@ -55,6 +55,8 @@
   let fileRules = $state<FileRules | null>(null);
   let submitting = $state(false);
   let error = $state<string | null>(null);
+  // Sharing is two steps: who it's for, then what they get. Inviting is only the first.
+  let step = $state<1 | 2>(1);
 
   // People who already have it (invite mode) can't be picked again.
   // People already in, or with an invite they haven't answered. Someone who declined
@@ -97,6 +99,17 @@
         .join(" and ") || null
     );
   });
+  // Every pick by name, for step 2's line under the title.
+  const pickedNames = $derived(
+    nameList([
+      ...(groups.data ?? [])
+        .filter((g) => groupIds.includes(g.id))
+        .map((g) => g.name),
+      ...social.friends
+        .filter((f) => friendIds.includes(f.user.id))
+        .map((f) => f.user.displayName),
+    ]),
+  );
   // Invite mode with everyone already in: nothing to pick.
   const pickable = $derived(
     social.friends.filter((f) => !memberStatus.get(f.user.id)).length +
@@ -105,6 +118,10 @@
 
   async function submit(e: SubmitEvent) {
     e.preventDefault();
+    if (mode === "share" && step === 1) {
+      step = 2;
+      return;
+    }
     if (!canSubmit) return;
     submitting = true;
     error = null;
@@ -144,14 +161,33 @@
   }
 </script>
 
+<!-- Step 2's subtitle: who it goes to, with a way back. -->
+{#snippet whoLine()}
+  {#if picked}For <b class="font-semibold text-(--text-primary)"
+      >{pickedNames}</b
+    >{:else}Nobody picked yet{/if} · {role === "editor"
+    ? "they can send updates too"
+    : "they get updates"} ·
+  <button
+    type="button"
+    class="text-(--accent) hover:underline"
+    onclick={() => (step = 1)}>Change</button
+  >
+{/snippet}
+
 <Dialog
   title={mode === "share"
     ? `Share ${instance?.name ?? "instance"}`
     : `Invite to ${instance?.name ?? "instance"}`}
+  eyebrow={mode === "share"
+    ? `Step ${step} of 2 · ${step === 1 ? "Who it's for" : "What friends get"}`
+    : undefined}
   description={mode === "share"
     ? "They get the same mods and every update you send."
     : "New members get the current version and every update after it."}
+  subline={mode === "share" && step === 2 ? whoLine : undefined}
   wide
+  huge={mode === "share" && step === 2}
   {onclose}
   onsubmit={submit}
 >
@@ -167,12 +203,10 @@
     <p class="py-4 text-[13px] text-(--text-muted)">
       Sign in to share packs with friends.
     </p>
-  {:else}
-    <h3 class="mt-1 mb-1.5 text-[13px] font-semibold text-(--text-muted)">
-      Share with
-    </h3>
+  {:else if step === 1}
     <!-- Those who already have it are ticked and greyed, so there's nothing to pick. -->
     <PeoplePicker
+      title="Share with"
       friends={social.friends}
       groups={groups.data ?? []}
       bind:friendIds
@@ -187,6 +221,7 @@
       }}
       groupTaken={(id) => (linkedGroupIds.has(id) ? "Already shared" : null)}
       empty="No friends yet. Add some on the Friends page, or share with a group."
+      max="min(16.25rem, max(7rem, 100vh - 500px))"
     />
 
     {#if mode === "invite" && social.friends.length && !pickable}
@@ -195,10 +230,8 @@
         page to invite more.
       </p>
     {:else}
-      <!-- What they can do and the description share a row; the description wraps
-           under it when the dialog is narrow. -->
-      <div class="mt-4 flex flex-wrap items-end gap-x-6 gap-y-4">
-        <div class="shrink-0">
+      <div class="mt-4 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-x-5">
+        <div>
           <h3 class="mb-1.5 text-[13px] font-semibold text-(--text-muted)">
             They can
           </h3>
@@ -223,7 +256,7 @@
           </div>
         </div>
         {#if mode === "share"}
-          <div class="min-w-56 flex-1">
+          <div class="min-w-0">
             <h3 class="mb-1.5 text-[13px] font-semibold text-(--text-muted)">
               Description <span class="font-normal text-(--text-faint)"
                 >(optional)</span
@@ -239,62 +272,79 @@
         {/if}
       </div>
     {/if}
-
-    {#if mode === "share"}
-      <h3 class="mt-4 mb-0.5 text-[13px] font-semibold text-(--text-muted)">
-        What friends get
-      </h3>
-      {#if plan.loading}
-        <p class="text-[13px] text-(--text-muted) tabular-nums">
-          {work
-            ? workLabel(work)
-            : "Checking which files friends can download…"}
-        </p>
-      {:else if plan.error}
-        <p class="text-[13px] text-(--danger)">{plan.error}</p>
-      {:else if plan.data}
-        <SharePicker
-          items={plan.data.items}
-          storage={plan.data.storage}
-          firstShare
-          bind:modes
-          onrecheck={plan.reload}
-        />
+  {:else if plan.loading}
+    <p class="py-10 text-center text-[13px] text-(--text-muted) tabular-nums">
+      {work ? workLabel(work) : "Checking which files friends can download…"}
+    </p>
+  {:else if plan.error}
+    <p class="py-10 text-center text-[13px] text-(--danger)">{plan.error}</p>
+  {:else if plan.data}
+    <!-- Side by side, each with its own search, filters and Set all shown; the two
+         lists scroll, not the dialog. -->
+    <div
+      class="grid h-[clamp(300px,calc(100vh-290px),680px)] grid-cols-2 gap-3"
+    >
+      <SharePicker
+        items={plan.data.items}
+        storage={plan.data.storage}
+        firstShare
+        bind:modes
+        onrecheck={plan.reload}
+      />
+      {#if plan.data.files.length}
         <FileTree
           files={plan.data.files}
           saved={plan.data.rules}
           leftOut={plan.data.leftOut}
           bind:rules={fileRules}
         />
+      {:else}
+        <p
+          class="grid place-items-center rounded-[10px] border border-dashed border-(--line) p-6 text-center text-[13px] text-(--text-muted)"
+        >
+          No config or other files in this instance.
+        </p>
       {/if}
-    {/if}
+    </div>
   {/if}
 
   {#snippet footer()}
     {@const sharing = mode === "share" && social.signedIn}
-    <RightsCheck
-      bind:checked={rights}
-      uploads={sharing ? uploads : []}
-      {submitting}
-      {work}
-      {error}
-      hint={sharing && !picked
-        ? "Nobody picked yet. You can invite friends later."
-        : null}
-    />
-    {#if mode === "invite" && social.friends.length && !pickable}
-      <Button onclick={onclose}>Close</Button>
-    {:else}
+    {#if sharing && step === 1}
+      <span class="mr-auto text-[13px] text-(--text-faint)"
+        >{picked
+          ? "Next: the mods and files friends get"
+          : "Nobody picked yet. You can invite friends later."}</span
+      >
       <Button variant="ghost" onclick={onclose}>Cancel</Button>
-      <Button type="submit" variant="primary" disabled={!canSubmit}>
-        {submitting
-          ? "Sharing…"
-          : mode === "invite"
-            ? "Send invites"
-            : picked
-              ? `Share with ${picked}`
-              : "Share"}
-      </Button>
+      <Button type="submit" variant="primary">Next</Button>
+    {:else}
+      <RightsCheck
+        bind:checked={rights}
+        uploads={sharing ? uploads : []}
+        {submitting}
+        {work}
+        {error}
+        hint={null}
+      />
+      {#if mode === "invite" && social.friends.length && !pickable}
+        <Button onclick={onclose}>Close</Button>
+      {:else}
+        {#if sharing}
+          <Button variant="ghost" onclick={() => (step = 1)}>Back</Button>
+        {:else}
+          <Button variant="ghost" onclick={onclose}>Cancel</Button>
+        {/if}
+        <Button type="submit" variant="primary" disabled={!canSubmit}>
+          {submitting
+            ? "Sharing…"
+            : mode === "invite"
+              ? "Send invites"
+              : picked
+                ? `Share with ${picked}`
+                : "Share"}
+        </Button>
+      {/if}
     {/if}
   {/snippet}
 </Dialog>
