@@ -165,9 +165,11 @@ impl Entry {
     }
 
     /// An uploaded mod or resource pack: members approve it before it installs. Shaders
-    /// and datapacks can't reach outside the game, so they install like configs.
+    /// and datapacks can't reach outside the game, so they install like configs. One from
+    /// the modpack comes out of the pack's own download from Modrinth or CurseForge.
     pub fn needs_approval(&self) -> bool {
         self.source == ContentSource::Upload
+            && !self.in_pack
             && matches!(self.kind, ContentKind::Mod | ContentKind::Resourcepack)
     }
 }
@@ -932,7 +934,7 @@ mod tests {
         m.base = Some(pack());
         assert!(validate(&m).is_ok());
         assert!(!m.blobs().contains(&jar.sha256), "and it isn't uploaded");
-        assert!(jar.needs_approval(), "a jar still waits for approval");
+        assert!(!jar.needs_approval(), "nor approved: it comes from the pack's download");
 
         jar.source = ContentSource::Modrinth;
         *m.content.last_mut().unwrap() = jar;
