@@ -15,6 +15,7 @@
     type Keep,
   } from "$lib/fileRules";
   import { plural } from "$lib/format";
+  import { fullText } from "$lib/fullText";
   import { sameRules } from "$lib/publishChanges";
   import type { FileRules, LeftOutFile, ShareFile } from "$lib/types";
   import Button from "../Button.svelte";
@@ -541,8 +542,13 @@
               class="min-w-0 text-left"
               onclick={() => (at = fo.path)}
             >
-              <span class="block truncate">{fo.name}</span>
-              <small class="block truncate text-[13px] text-(--text-faint)">
+              <span class="block w-fit max-w-full truncate" use:fullText
+                >{fo.name}</span
+              >
+              <small
+                class="block w-fit max-w-full truncate text-[13px] text-(--text-faint)"
+                use:fullText
+              >
                 {plural(counts.get(fo.path)?.total ?? 0, "file")}{k === "some"
                   ? " · some only you"
                   : ""}{note ? ` · ${note}` : ""}{#if changed}{@render differs(
@@ -570,6 +576,7 @@
         {#each rowFiles as f (f.path)}
           {@const k = keepOf(current, f)}
           {@const why = line(f, k)}
+          {@const differ = f.changed && k !== "me" && filter !== "changed"}
           {@const name = f.path.split("/").pop()}
           {@const where =
             flat && f.path.includes("/")
@@ -578,18 +585,24 @@
           <div role="listitem" class={ROW}>
             <Icon name="file" class="size-4 text-(--text-faint)" />
             <span class="min-w-0">
-              <span class="flex min-w-0 items-center" title={f.path}
-                ><span class="truncate"
-                  >{#if f.path === "servers.dat"}Server list <span
-                      class="text-[13px] text-(--text-faint)">servers.dat</span
-                    >{:else}{name}{/if}</span
-                >{#if f.changed && k !== "me"}{@render differs(null)}{/if}</span
+              <span class="block w-fit max-w-full truncate" use:fullText
+                >{#if f.path === "servers.dat"}Server list <span
+                    class="text-[13px] text-(--text-faint)">servers.dat</span
+                  >{:else}{name}{/if}</span
               >
-              {#if why || where}
-                <small class="block truncate text-[13px] text-(--text-faint)">
-                  {#if why}<span class={why.warn ? "text-(--warn)" : ""}
-                      >{why.text}</span
-                    >{/if}{#if where}{why ? " · " : ""}{where}{/if}
+              {#if differ || why || where}
+                <small
+                  class="block w-fit max-w-full truncate text-[13px] text-(--text-faint)"
+                  use:fullText
+                >
+                  {#if differ}<span class="text-(--text-muted)"
+                      ><Icon
+                        name="cube"
+                        class="mr-1 inline size-3 align-[-1px]"
+                      />Differs from pack</span
+                    >{/if}{#if why}{differ ? " · " : ""}<span
+                      class={why.warn ? "text-(--warn)" : ""}>{why.text}</span
+                    >{/if}{#if where}{differ || why ? " · " : ""}{where}{/if}
                 </small>
               {/if}
             </span>
