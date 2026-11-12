@@ -676,6 +676,10 @@ pub struct World {
     pub created_at: IsoDate,
     #[serde(default)]
     pub ends_at: Option<IsoDate>,
+    /// The game it was last saved in, as Tandem describes it: loader, pack, what the game
+    /// adds and every mod. None for worlds saved before Tandem sent it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game: Option<serde_json::Value>,
 }
 
 crate::wire_enum!(LeaseState {
@@ -711,6 +715,9 @@ pub struct CreateWorld {
     /// a second one.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
+    /// The game it's made in, as for `World::game`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game: Option<serde_json::Value>,
 }
 
 fn keplersync() -> String {
@@ -803,6 +810,9 @@ pub struct NewSnapshot {
     /// snapshot it already made, so a retry after a lost answer doesn't save it twice.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
+    /// The game it was saved in, as for `World::game`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub game: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
